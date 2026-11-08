@@ -85,3 +85,23 @@ cleanup:
     for id in $(gh issue list -R {{ repo }} --label demo --state all --limit 200 --json id --jq '.[].id'); do
         gh api graphql -f query='mutation($id:ID!){deleteIssue(input:{issueId:$id}){clientMutationId}}' -f id="$id" >/dev/null && echo "Deleted issue $id"
     done
+
+# Turn one flag on or off in one environment, e.g. `just demo flag searchV2 on prod`
+flag name state env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    app=$(aws appconfig list-applications --query "Items[?Name=='orders-demo'].Id" --output text)
+    prof=$(aws appconfig list-configuration-profiles --application-id "$app" --query "Items[?Name=='feature-flags'].Id" --output text)
+    envid=$(aws appconfig list-environments --application-id "$app" --query "Items[?Name=='{{ env }}'].Id" --output text)
+    strategy=$(aws appconfig list-deployment-strategies --query "Items[?Name=='orders-demo-instant'].Id" --output text)
+    latest=$(aws appconfig list-hosted-configuration-versions --application-id "$app" --configuration-profile-id "$prof" --query 'max_by(Items,&VersionNumber).VersionNumber' --output text)
+    cur=$(mktemp); new=$(mktemp)
+    aws appconfig get-hosted-configuration-version --application-id "$app" --configuration-profile-id "$prof" --version-number "$latest" "$cur" >/dev/null
+    enabled=$([ "{{ state }}" = on ] && echo true || echo false)
+    jq --arg f "{{ name }}" --argjson e "$enabled" 'del(.. | ._createdAt?, ._updatedAt?) | .values[$f].enabled = $e' "$cur" > "$new"
+    version=$(aws appconfig create-hosted-configuration-version --application-id "$app" --configuration-profile-id "$prof" \
+        --content-type application/json --content "fileb://$new" /dev/null --query VersionNumber --output text)
+    aws appconfig start-deployment --application-id "$app" --environment-id "$envid" --configuration-profile-id "$prof" \
+        --configuration-version "$version" --deployment-strategy-id "$strategy" --description "{{ name }} {{ state }}" >/dev/null
+    rm -f "$cur" "$new"
+    echo "{{ name }} is {{ state }} in {{ env }} (version $version)."
