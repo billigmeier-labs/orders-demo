@@ -1,0 +1,115 @@
+name: Preview down
+
+# Removes the preview of one PR: ECS service pr-<N>, its listener rule and target group, and every
+# revision of task definition orders-demo-pr-<N>. Database pr_<N> is left on the non-prod instance
+# (it goes with the environment on `just env down`). Called by preview.yml on close and by the reaper.
+on:
+  workflow_call:
+    inputs:
+      pr:
+        description: Pull request number
+        type: number
+        required: true
+
+permissions: {}
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER: orders-demo
+
+jobs:
+  down:
+    name: Remove preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      pull-requests: write
+    env:
+      PR: ${{ inputs.pr }}
+      NAME: pr-${{ inputs.pr }}
+      HOST: pr-${{ inputs.pr }}.demo.joshb.app
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-preview
+          aws-region: us-east-1
+
+      - name: Is the environment up?
+        id: env
+        run: |
+          if out=$(aws ssm get-parameter --name /orders-demo/https-listener-arn --query Parameter.Value --output text 2>&1); then
+            echo "up=true" >>"$GITHUB_OUTPUT"; echo "listener=$out" >>"$GITHUB_OUTPUT"
+          elif grep -q ParameterNotFound <<<"$out"; then
+            echo "up=false" >>"$GITHUB_OUTPUT"
+            echo "environment is down: service, rule and target group went with it"
+          else
+            echo "::error::Could not read SSM: $out"; exit 1
+          fi
+
+      - name: Delete service ${{ env.NAME }}
+        if: steps.env.outputs.up == 'true'
+        run: |
+          status=$(aws ecs describe-services --cluster "$CLUSTER" --services "$NAME" --query 'services[0].status' --output text)
+          if [ "$status" = ACTIVE ]; then
+            aws ecs delete-service --cluster "$CLUSTER" --service "$NAME" --force >/dev/null
+            echo "Deleting service $NAME"
+          fi
+          if [ "$status" = ACTIVE ] || [ "$status" = DRAINING ]; then
+            aws ecs wait services-inactive --cluster "$CLUSTER" --services "$NAME"
+          fi
+          echo "Service $NAME is gone"
+
+      - name: Delete listener rule and target group
+        if: steps.env.outputs.up == 'true'
+        env:
+          LISTENER: ${{ steps.env.outputs.listener }}
+        run: |
+          rules=$(aws elbv2 describe-rules --listener-arn "$LISTENER" --query Rules)
+          for rule in $(jq -r --arg h "$HOST" '.[] | select(any(.Conditions[]?; (.HostHeaderConfig.Values // .Values // []) | index($h))) | .RuleArn' <<<"$rules"); do
+            aws elbv2 delete-rule --rule-arn "$rule"
+            echo "Deleted rule $rule"
+          done
+          tg=$(aws elbv2 describe-target-groups --names "$NAME" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
+          if [ -n "$tg" ] && [ "$tg" != None ]; then
+            aws elbv2 delete-target-group --target-group-arn "$tg"
+            echo "Deleted target group $tg"
+          fi
+
+      - name: Deregister task definitions
+        run: |
+          # --family-prefix orders-demo-pr-1 also matches pr-12, so keep the exact family only.
+          for td in $(aws ecs list-task-definitions --family-prefix "orders-demo-$NAME" --status ACTIVE \
+              --query 'taskDefinitionArns[]' --output text | tr '\t' '\n' | grep -E "/orders-demo-$NAME:[0-9]+$"); do
+            aws ecs deregister-task-definition --task-definition "$td" >/dev/null
+            echo "Deregistered $td"
+          done
+
+      - name: Update the PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          marker='<!-- orders-demo-preview -->'
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
+          if [ -n "$id" ]; then
+            body="$marker
+          Preview: removed (PR closed). Database \`pr_$PR\` was left on the non-prod instance."
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          fi
+
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+          UP: ${{ steps.env.outputs.up }}
+        run: |
+          {
+            echo "### Preview pr-$PR: $([ "$STATUS" = success ] && echo down || echo "teardown failed")"
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Environment | preview \`$NAME\` |"
+            echo "| Removed | $([ "$UP" = true ] && echo "service, listener rule, target group, " || echo "(environment down) ")task definitions |"
+            echo "| Database | \`pr_$PR\` left on the non-prod instance |"
+            echo "| Result | $STATUS |"
+          } >>"$GITHUB_STEP_SUMMARY"

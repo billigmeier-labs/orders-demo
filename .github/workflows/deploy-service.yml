@@ -1,0 +1,236 @@
+name: Deploy service
+
+# One ECS service, one image: optional migration task, new task definition revision, UpdateService,
+# watch the rollout (circuit breaker and alarm rollbacks fail the job), smoke test. Called by deploy.yml.
+on:
+  workflow_call:
+    inputs:
+      label:
+        description: Name for messages and the summary (Staging, Production, Console)
+        type: string
+        required: true
+      service:
+        description: ECS service; its task definition family is orders-demo-<service>, its container <service>
+        type: string
+        required: true
+      repository:
+        description: ECR repository of the image
+        type: string
+        required: true
+      sha:
+        description: Full commit SHA (the image tag)
+        type: string
+        required: true
+      migrate-family:
+        description: One-off migration task definition family; empty for none
+        type: string
+        default: ""
+      url:
+        description: Base URL for the smoke test
+        type: string
+        required: true
+      health-path:
+        type: string
+        default: /health/ready
+      check-version:
+        description: Check that /api/version reports this commit
+        type: boolean
+        default: true
+    outputs:
+      result:
+        description: succeeded, rolled-back or failed
+        value: ${{ jobs.deploy.outputs.result }}
+
+permissions: {}
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER: orders-demo
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    permissions:
+      id-token: write
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+    env:
+      LABEL: ${{ inputs.label }}
+      SERVICE: ${{ inputs.service }}
+      SHA: ${{ inputs.sha }}
+      MIGRATE_FAMILY: ${{ inputs.migrate-family }}
+      URL: ${{ inputs.url }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-deploy
+          aws-region: us-east-1
+
+      - name: Read deploy settings
+        id: cfg
+        run: |
+          get() { aws ssm get-parameter --name "/orders-demo/$1" --query Parameter.Value --output text; }
+          registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com"
+          {
+            echo "subnets=$(get subnets)"
+            echo "sg=$(get task-security-group)"
+            echo "desired=$(get "services/$SERVICE/desired-count")"
+            echo "image=$registry/${{ inputs.repository }}:$SHA"
+            echo "short=${SHA::7}"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Run the database migration
+        id: migrate
+        if: inputs.migrate-family != ''
+        env:
+          IMAGE: ${{ steps.cfg.outputs.image }}
+          SUBNETS: ${{ steps.cfg.outputs.subnets }}
+          SG: ${{ steps.cfg.outputs.sg }}
+        run: |
+          current=$(aws ecs describe-task-definition --task-definition "$MIGRATE_FAMILY" --include TAGS)
+          input=$(jq --arg img "$IMAGE" '
+            (if (.tags // []) | length > 0 then {tags} else {} end) + (.taskDefinition
+              | .containerDefinitions |= map(if .name == "migrate" then .image = $img else . end)
+              | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes,
+                 requiresCompatibilities, cpu, memory, runtimePlatform}
+              | with_entries(select(.value != null)))' <<<"$current")
+          td=$(aws ecs register-task-definition --cli-input-json "$input" --query taskDefinition.taskDefinitionArn --output text)
+          echo "Registered $td"
+
+          run=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$td" --launch-type FARGATE \
+            --started-by "deploy-$GITHUB_RUN_ID" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}")
+          task=$(jq -r '.tasks[0].taskArn // empty' <<<"$run")
+          if [ -z "$task" ]; then echo "::error::RunTask failed: $(jq -c .failures <<<"$run")"; exit 1; fi
+          echo "Migration task $task"
+
+          for _ in $(seq 1 120); do
+            status=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --query 'tasks[0].lastStatus' --output text)
+            [ "$status" = STOPPED ] && break
+            sleep 10
+          done
+          desc=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task")
+          exit_code=$(jq -r '.tasks[0].containers[] | select(.name == "migrate") | .exitCode // "none"' <<<"$desc")
+          reason=$(jq -r '.tasks[0].stoppedReason // ""' <<<"$desc")
+
+          group=$(jq -r '.taskDefinition.containerDefinitions[] | select(.name == "migrate") | .logConfiguration.options["awslogs-group"]' <<<"$current")
+          prefix=$(jq -r '.taskDefinition.containerDefinitions[] | select(.name == "migrate") | .logConfiguration.options["awslogs-stream-prefix"]' <<<"$current")
+          echo "::group::Migration log"
+          aws logs get-log-events --log-group-name "$group" --log-stream-name "$prefix/migrate/${task##*/}" \
+            --start-from-head --query 'events[].message' --output text | tr '\t' '\n' || true
+          echo "::endgroup::"
+
+          echo "exit_code=$exit_code" >>"$GITHUB_OUTPUT"
+          if [ "$exit_code" != 0 ]; then
+            echo "::error::$LABEL migration failed (exit code $exit_code${reason:+, $reason})"; exit 1
+          fi
+
+      - name: Register the new task definition revision
+        id: td
+        env:
+          IMAGE: ${{ steps.cfg.outputs.image }}
+          SHORT: ${{ steps.cfg.outputs.short }}
+        run: |
+          current=$(aws ecs describe-task-definition --task-definition "orders-demo-$SERVICE" --include TAGS)
+          input=$(jq --arg c "$SERVICE" --arg img "$IMAGE" --arg v "$SHORT" '
+            (if (.tags // []) | length > 0 then {tags} else {} end) + (.taskDefinition
+              | .containerDefinitions |= map(if .name == $c then
+                  .image = $img
+                  | .environment = ([(.environment // [])[] | select(.name != "APP_VERSION" and .name != "APP_COMMIT")]
+                      + [{name: "APP_VERSION", value: $v}, {name: "APP_COMMIT", value: $v}])
+                else . end)
+              | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes,
+                 requiresCompatibilities, cpu, memory, runtimePlatform}
+              | with_entries(select(.value != null)))' <<<"$current")
+          td=$(aws ecs register-task-definition --cli-input-json "$input" --query taskDefinition.taskDefinitionArn --output text)
+          echo "Registered $td"
+          echo "arn=$td" >>"$GITHUB_OUTPUT"
+
+      - name: Update the service and watch the rollout
+        id: rollout
+        env:
+          TD: ${{ steps.td.outputs.arn }}
+          DESIRED: ${{ steps.cfg.outputs.desired }}
+        run: |
+          # shellcheck disable=SC2016 # JMESPath literal, not shell
+          deployment=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$TD" --desired-count "$DESIRED" \
+            --query 'service.deployments[?status==`PRIMARY`].id | [0]' --output text)
+          echo "Deployment $deployment of $TD (desired $DESIRED)"
+
+          # Success: our deployment is PRIMARY and COMPLETED (after the alarm bake time).
+          # Rollback: our deployment FAILED, or another task definition became PRIMARY.
+          for _ in $(seq 1 180); do
+            svc=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
+            ours=$(jq -c --arg id "$deployment" '.deployments[] | select(.id == $id)' <<<"$svc")
+            [ -n "$ours" ] || ours='{}'
+            primary_td=$(jq -r '.deployments[] | select(.status == "PRIMARY") | .taskDefinition' <<<"$svc")
+            state=$(jq -r '.rolloutState // "UNKNOWN"' <<<"$ours")
+            reason=$(jq -r '.rolloutStateReason // ""' <<<"$ours")
+            echo "$(date -u +%H:%M:%S) rollout=$state running=$(jq .runningCount <<<"$svc")/$DESIRED $reason"
+            if [ "$state" = COMPLETED ] && [ "$primary_td" = "$TD" ]; then
+              echo "state=succeeded" >>"$GITHUB_OUTPUT"; exit 0
+            fi
+            if [ "$state" = FAILED ] || [ "$primary_td" != "$TD" ]; then
+              latest=$(aws ecs list-service-deployments --cluster "$CLUSTER" --service "$SERVICE" \
+                --query 'serviceDeployments[0].status' --output text 2>/dev/null || true)
+              echo "Service deployment status: ${latest:-unknown}; ECS: $reason"
+              echo "state=rolled-back" >>"$GITHUB_OUTPUT"
+              echo "::error::$LABEL rolled back to the previous version"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "::error::$LABEL deployment did not finish in 30 minutes"; exit 1
+
+      - name: Smoke test
+        env:
+          HEALTH: ${{ inputs.health-path }}
+          CHECK_VERSION: ${{ inputs.check-version }}
+          SHORT: ${{ steps.cfg.outputs.short }}
+        run: |
+          curl -fsS --retry 12 --retry-delay 5 --retry-all-errors --max-time 10 "$URL$HEALTH"; echo
+          if [ "$CHECK_VERSION" = true ]; then
+            for _ in $(seq 1 12); do
+              version=$(curl -fsS --max-time 10 "$URL/api/version" || true)
+              echo "$version"
+              [ "$(jq -r '.commit // empty' <<<"$version" 2>/dev/null)" = "$SHORT" ] && exit 0
+              sleep 5
+            done
+            echo "::error::$URL/api/version does not report commit $SHORT"; exit 1
+          fi
+
+      - name: Result
+        id: result
+        if: always()
+        env:
+          IMAGE: ${{ steps.cfg.outputs.image }}
+          TD: ${{ steps.td.outputs.arn }}
+          MIGRATION: ${{ steps.migrate.outcome }}
+          MIGRATE_EXIT: ${{ steps.migrate.outputs.exit_code }}
+          ROLLOUT: ${{ steps.rollout.outputs.state }}
+          STATUS: ${{ job.status }}
+        run: |
+          if [ "$STATUS" = success ]; then result=succeeded
+          elif [ "$ROLLOUT" = rolled-back ]; then result=rolled-back
+          else result=failed; fi
+          echo "result=$result" >>"$GITHUB_OUTPUT"
+          case "$result" in
+            succeeded) icon="deployed" ;;
+            rolled-back) icon="rolled back to the previous version" ;;
+            *) icon="failed" ;;
+          esac
+          {
+            echo "### $LABEL: $icon"
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Environment | $LABEL (\`$SERVICE\`) |"
+            echo "| Image | \`${IMAGE:-n/a}\` |"
+            echo "| Commit | \`${SHA::7}\` |"
+            [ -n "$MIGRATE_FAMILY" ] && echo "| Migration | $MIGRATION${MIGRATE_EXIT:+ (exit $MIGRATE_EXIT)} |"
+            echo "| Task definition | \`${TD##*/}\` |"
+            echo "| URL | $URL |"
+            echo "| Result | $result |"
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,137 @@
+name: Deploy
+
+# Every commit on main goes to staging, then production, using the image the merge queue built
+# (orders-api:<sha>, and orders-console:<sha> for the console). The demo console reads these runs:
+# each job writes its environment, image and result to the step summary.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA to deploy (default the head of the branch)
+        type: string
+        required: false
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      up: ${{ steps.env.outputs.up }}
+      sha: ${{ steps.sha.outputs.sha }}
+      console: ${{ steps.images.outputs.console }}
+    steps:
+      - name: Resolve the commit
+        id: sha
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          sha="${INPUT_SHA:-$GITHUB_SHA}"
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::sha must be a full 40-character commit SHA"; exit 1; fi
+          echo "sha=$sha" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-deploy
+          aws-region: us-east-1
+
+      - name: Is the environment up?
+        id: env
+        run: |
+          if out=$(aws ssm get-parameter --name /orders-demo/cluster --query Parameter.Value --output text 2>&1); then
+            echo "up=true" >>"$GITHUB_OUTPUT"; echo "Cluster: $out"
+          elif grep -q ParameterNotFound <<<"$out"; then
+            echo "up=false" >>"$GITHUB_OUTPUT"
+            echo "environment is down, nothing to deploy"
+            { echo "### Environment is down"; echo "environment is down, nothing to deploy"; } >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Could not read /orders-demo/cluster: $out"; exit 1
+          fi
+
+      - name: Wait for the release images
+        id: images
+        if: steps.env.outputs.up == 'true'
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          wanted=(orders-api)
+          if [ -f src/Orders.Console/Dockerfile ]; then wanted+=(orders-console); echo "console=true" >>"$GITHUB_OUTPUT"; fi
+          deadline=$(( $(date +%s) + 20 * 60 ))
+          for repo in "${wanted[@]}"; do
+            until aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$SHA" >/dev/null 2>&1; do
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "::error::Image $repo:$SHA did not appear within 20 minutes (did the merge queue's Release image job run?)"
+                exit 1
+              fi
+              echo "Waiting for $repo:$SHA ..."; sleep 20
+            done
+            echo "Found $repo:$SHA"
+          done
+          {
+            echo "### Release \`${SHA::7}\`"
+            for repo in "${wanted[@]}"; do echo "- \`$repo:$SHA\`"; done
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  staging:
+    name: Staging
+    needs: prepare
+    if: needs.prepare.outputs.up == 'true'
+    uses: ./.github/workflows/deploy-service.yml
+    permissions:
+      id-token: write
+    with:
+      label: Staging
+      service: api-staging
+      repository: orders-api
+      sha: ${{ needs.prepare.outputs.sha }}
+      migrate-family: orders-demo-migrate-staging
+      url: https://staging.demo.joshb.app
+
+  prod:
+    name: Production
+    needs: [prepare, staging]
+    if: needs.prepare.outputs.up == 'true'
+    uses: ./.github/workflows/deploy-service.yml
+    permissions:
+      id-token: write
+    with:
+      label: Production
+      service: api-prod
+      repository: orders-api
+      sha: ${{ needs.prepare.outputs.sha }}
+      migrate-family: orders-demo-migrate-prod
+      url: https://demo.joshb.app
+
+  console:
+    name: Console
+    needs: prepare
+    if: needs.prepare.outputs.up == 'true' && needs.prepare.outputs.console == 'true'
+    uses: ./.github/workflows/deploy-service.yml
+    permissions:
+      id-token: write
+    with:
+      label: Console
+      service: console
+      repository: orders-console
+      sha: ${{ needs.prepare.outputs.sha }}
+      url: https://console.demo.joshb.app
+      health-path: /health/live
+      check-version: false

@@ -60,14 +60,38 @@ locals {
       s.db == null ? [] : concat(
         [{ name = "ConnectionStrings__Orders", value = local.connection_strings[s.db] }],
         local.appconfig_env[s.env],
-        k == "api-staging" ? [{ name = "SEED_DATA", value = "true" }] : [],
+        # A demo: every environment seeds an empty database, prod included.
+        [{ name = "SEED_DATA", value = "true" }],
       ),
-      k == "console" ? [
-        { name = "ECS_CLUSTER", value = local.name },
-        { name = "GITHUB_REPOSITORY", value = var.github_repo },
-      ] : [],
+      k == "console" ? local.console_env : [],
     )
   }
+
+  # Console settings whose names differ from its defaults (src/Orders.Console/README.md).
+  # Single task, so DATAPROTECTION_KEYS_PATH stays unset: sign-ins reset on each deploy.
+  console_env = concat(local.appconfig_env["prod"], [
+    { name = "APPCONFIG_DEPLOYMENT_STRATEGY", value = local.base.appconfig_deployment_strategy_id },
+    { name = "ECS_CLUSTER", value = local.name },
+    { name = "ECS_PROD_SERVICE", value = "api-prod" },
+    { name = "ECS_STAGING_SERVICE", value = "api-staging" },
+    { name = "ALARM_PREFIX", value = "${local.name}-" },
+    { name = "PROD_LOG_GROUP", value = aws_cloudwatch_log_group.this["api-prod"].name },
+    { name = "GITHUB_REPOSITORY", value = var.github_repo },
+    { name = "PROD_URL", value = "https://${local.domain}" },
+    { name = "STAGING_URL", value = "https://staging.${local.domain}" },
+    { name = "LOADGEN_TASK_DEFINITION", value = aws_ecs_task_definition.loadgen.family },
+    { name = "LOADGEN_CONTAINER", value = "loadgen" },
+    { name = "LOADGEN_SUBNETS", value = join(",", local.subnet_ids) },
+    { name = "LOADGEN_SECURITY_GROUPS", value = aws_security_group.tasks.id },
+    # Default-VPC public subnets without NAT: the task needs a public IP to pull its image.
+    { name = "LOADGEN_ASSIGN_PUBLIC_IP", value = "true" },
+  ])
+
+  # One Secrets Manager secret (base layer), one JSON key per variable.
+  console_secrets = [
+    for key in ["GITHUB_TOKEN", "CONSOLE_VERIFICATION_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] :
+    { name = key, valueFrom = "${local.base.console_secret_arn}:${key}::" }
+  ]
 }
 
 resource "aws_ecs_task_definition" "svc" {
@@ -93,7 +117,7 @@ resource "aws_ecs_task_definition" "svc" {
       essential    = true
       portMappings = [{ containerPort = 8080, protocol = "tcp" }]
       environment  = local.service_env[each.key]
-      secrets = each.value.db == null ? [] : [
+      secrets = each.key == "console" ? local.console_secrets : each.value.db == null ? [] : [
         { name = "PGPASSWORD", valueFrom = local.db_password_secret[each.value.db] }
       ]
       logConfiguration = local.log_config[each.key]

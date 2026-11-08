@@ -31,8 +31,11 @@ resource "aws_iam_role_policy_attachment" "execution" {
 
 data "aws_iam_policy_document" "execution_secrets" {
   statement {
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [for db in aws_db_instance.this : db.master_user_secret[0].secret_arn]
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = concat(
+      [for db in aws_db_instance.this : db.master_user_secret[0].secret_arn],
+      [local.base.console_secret_arn],
+    )
   }
 }
 
@@ -84,9 +87,16 @@ resource "aws_iam_role_policy" "task_appconfig" {
   policy   = each.value.json
 }
 
-# The console shows what is happening in AWS: alarms, metrics, deployments.
-data "aws_iam_policy_document" "console_read" {
+# The console shows what is happening in AWS (alarms, logs, deployments, cost)
+# and drives the demo: starts/stops the load generator and toggles flags.
+# Permissions follow src/Orders.Console/README.md ("In ECS").
+locals {
+  appconfig_app_arn = local.appconfig.application_arn
+}
+
+data "aws_iam_policy_document" "console" {
   statement {
+    sid = "Observe"
     actions = [
       "cloudwatch:DescribeAlarmHistory",
       "cloudwatch:DescribeAlarms",
@@ -101,18 +111,66 @@ data "aws_iam_policy_document" "console_read" {
       "ecs:ListTasks",
       "logs:FilterLogEvents",
       "logs:GetLogEvents",
-      "appconfig:GetConfigurationProfile",
-      "appconfig:ListDeployments",
-      "appconfig:GetDeployment",
-      "appconfig:GetLatestConfiguration",
-      "appconfig:StartConfigurationSession",
+      "ce:GetCostAndUsage",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid       = "RunLoadGenerator"
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:aws:ecs:${var.region}:${local.account_id}:task-definition/${aws_ecs_task_definition.loadgen.family}:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.this.arn]
+    }
+  }
+
+  statement {
+    sid       = "StopTasks"
+    actions   = ["ecs:StopTask"]
+    resources = ["arn:aws:ecs:${var.region}:${local.account_id}:task/${aws_ecs_cluster.this.name}/*"]
+  }
+
+  statement {
+    sid       = "PassLoadGeneratorRoles"
+    actions   = ["iam:PassRole"]
+    resources = [aws_iam_role.execution.arn, aws_iam_role.task["task-nonprod"].arn]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid       = "AppConfigList"
+    actions   = ["appconfig:List*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "AppConfigFlags"
+    actions = [
+      "appconfig:CreateHostedConfigurationVersion",
+      "appconfig:GetConfigurationProfile",
+      "appconfig:GetDeployment",
+      "appconfig:GetHostedConfigurationVersion",
+      "appconfig:GetLatestConfiguration",
+      "appconfig:StartConfigurationSession",
+      "appconfig:StartDeployment",
+    ]
+    resources = [
+      local.appconfig_app_arn,
+      "${local.appconfig_app_arn}/*",
+      "arn:aws:appconfig:${var.region}:${local.account_id}:deploymentstrategy/*",
+    ]
   }
 }
 
 resource "aws_iam_role_policy" "console_read" {
   name   = "observe"
   role   = aws_iam_role.task["console"].id
-  policy = data.aws_iam_policy_document.console_read.json
+  policy = data.aws_iam_policy_document.console.json
 }

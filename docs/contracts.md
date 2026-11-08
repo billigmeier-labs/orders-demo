@@ -34,7 +34,7 @@ Base path `/api`. JSON, camelCase. Errors are RFC 7807 problem details. IDs are 
 
 Order status: `Pending → Paid → Shipped → Delivered`; `Pending` or `Paid → Cancelled` (restocks).
 
-Seed data (development, staging, preview): 20 customers, 50 products, 200 orders, deterministic.
+Seed data (development, staging, preview, and prod since this is a demo): 20 customers, 50 products, 200 orders, deterministic.
 
 ## Configuration
 
