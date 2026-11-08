@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+.cache/
+.git
+.worktrees/
+.devcontainer/
+tests/
+**/TestResults/
