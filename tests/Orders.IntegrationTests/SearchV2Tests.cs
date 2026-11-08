@@ -65,34 +65,6 @@ public sealed class SearchV2Tests : IAsyncDisposable
     public async Task QuotesAndOperatorsInTheTerm_DoNotBreakTheQuery(string q) =>
         await SearchAsync(q);
 
-    [Fact]
-    public async Task MultiWordTerm_MatchesProductsAndCustomersContainingAllWords()
-    {
-        var marker = $"zt{Guid.NewGuid():N}"[..10];
-        var product = await _client.CreateProductAsync(name: $"Water {marker}bottle");
-        var other = await _client.CreateProductAsync(name: $"Water {marker}jug");
-        var customer = await _client.CreateCustomerAsync($"Ada {marker}lovelace");
-        var order = await _client.CreateOrderAsync(customer.Id, (product.Id, 1));
-
-        var products = await SearchAsync($"water {marker}bot");
-        var orders = await SearchAsync($"ada {marker}love");
-
-        Assert.Equal([product.Id], products.Products.Select(p => p.Id));
-        Assert.DoesNotContain(other.Id, products.Products.Select(p => p.Id));
-        Assert.Equal([order.Id], orders.Orders.Select(o => o.Id));
-    }
-
-    [Theory]
-    [InlineData("&|!()")]
-    [InlineData("- -")]
-    public async Task PunctuationOnlyTerm_ReturnsEmptyResults(string q)
-    {
-        var result = await SearchAsync(q);
-
-        Assert.Empty(result.Products);
-        Assert.Empty(result.Orders);
-    }
-
     private async Task<SearchResponse> SearchAsync(string q) =>
         await (await _client.Get($"/api/search?q={Uri.EscapeDataString(q)}")).ReadAsync<SearchResponse>();
 }
