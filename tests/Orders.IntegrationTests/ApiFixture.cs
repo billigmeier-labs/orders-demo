@@ -21,6 +21,10 @@ public sealed class ApiFixture : IAsyncLifetime
     {
         await _postgres.StartAsync();
         Factory = CreateFactory("orders_tests");
+
+        // Start the API (and migrate its database) now, before any test derives another API from it with
+        // WithWebHostBuilder: two hosts migrating the same empty database at once would race.
+        _ = Factory.Server;
     }
 
     /// <summary>An API on a fresh database of its own.</summary>

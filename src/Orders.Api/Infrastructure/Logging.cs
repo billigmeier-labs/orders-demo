@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Console;
@@ -48,7 +49,7 @@ internal sealed class AppJsonFormatter : ConsoleFormatter, IDisposable
 
         var options = _options;
         var buffer = new ArrayBufferWriter<byte>(1024);
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false }))
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
             writer.WriteStartObject();
             writer.WriteString("Timestamp", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
