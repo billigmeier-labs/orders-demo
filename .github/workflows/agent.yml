@@ -66,7 +66,8 @@ jobs:
 
   fix-review:
     name: Address AI review
-    if: github.event_name == 'pull_request' && github.event.label.name == 'ai-review:blocked' && github.event.pull_request.head.repo.full_name == github.repository
+    # Only the agent's own PRs: a person's PR that gets blocked is theirs to fix.
+    if: github.event_name == 'pull_request' && github.event.label.name == 'ai-review:blocked' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'claude[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
