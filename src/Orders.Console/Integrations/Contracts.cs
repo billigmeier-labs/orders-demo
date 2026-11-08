@@ -26,6 +26,8 @@ public interface IGitHubService
 
     Task ClosePullRequestAsync(int number, CancellationToken ct);
 
+    Task CommentOnPullRequestAsync(int number, string body, CancellationToken ct);
+
     Task<GitHubActivity> GetActivityAsync(CancellationToken ct);
 
     /// <summary>Open issues with the label, each with the open or merged PRs that reference it.</summary>
@@ -79,7 +81,7 @@ public sealed record NewIssue(string Title, string Body, IReadOnlyList<string> L
 
 public sealed record IssueRef(int Number, string Url);
 
-public sealed record NewPullRequest(string Head, string Base, string Title, string Body);
+public sealed record NewPullRequest(string Head, string Base, string Title, string Body, IReadOnlyList<string>? Labels = null);
 
 public sealed record PullRequestRef(int Number, string Url);
 

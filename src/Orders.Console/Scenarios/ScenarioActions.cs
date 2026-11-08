@@ -18,6 +18,7 @@ public sealed class ScenarioActions(
         "github.closeIssue",
         "github.openPullRequest",
         "github.closePullRequest",
+        "github.commentOnPullRequest",
         "github.listIssues",
         "github.listAwaitingReview",
         "load.start",
@@ -54,7 +55,8 @@ public sealed class ScenarioActions(
 
             case "github.openPullRequest":
                 {
-                    var pr = await github.OpenPullRequestAsync(new NewPullRequest(Arg("head"), ArgOr("base", "main"), Arg("title"), ArgOr("body", "")), ct);
+                    var prLabels = ArgOr("labels", "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var pr = await github.OpenPullRequestAsync(new NewPullRequest(Arg("head"), ArgOr("base", "main"), Arg("title"), ArgOr("body", ""), prLabels), ct);
                     status.Invalidate(StatusService.GitHubPanel);
                     return new ActionOutcome(
                         new Dictionary<string, string> { ["pr"] = pr.Number.ToString(CultureInfo.InvariantCulture), ["prUrl"] = pr.Url },
@@ -64,6 +66,10 @@ public sealed class ScenarioActions(
             case "github.closePullRequest":
                 await github.ClosePullRequestAsync(Number("number"), ct);
                 return ActionOutcome.Of(new ActionLine($"Closed pull request #{Arg("number")}"));
+
+            case "github.commentOnPullRequest":
+                await github.CommentOnPullRequestAsync(Number("number"), Arg("body"), ct);
+                return ActionOutcome.Of(new ActionLine($"Commented on pull request #{Arg("number")}"));
 
             case "github.listIssues":
                 {

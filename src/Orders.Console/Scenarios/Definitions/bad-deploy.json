@@ -9,12 +9,19 @@
       "title": "Put normal traffic on production",
       "narration": "A load generator in AWS plays the part of customers browsing and ordering, so there is real traffic when the bad version arrives.",
       "explain": "load-generator",
-      "action": { "label": "Start normal load", "kind": "load.start", "args": { "scenario": "normal", "durationMinutes": "20" } }
+      "action": {
+        "label": "Start normal load",
+        "kind": "load.start",
+        "args": {
+          "scenario": "normal",
+          "durationMinutes": "20"
+        }
+      }
     },
     {
       "id": "pr",
       "title": "Open a change with a hidden bug",
-      "narration": "This pull request looks fine and passes every check. The bug only shows up under real traffic.",
+      "narration": "This pull request looks fine and CI passes. The bug only shows up under real traffic.",
       "explain": "pull-request",
       "action": {
         "label": "Open the canned bug PR",
@@ -23,7 +30,41 @@
           "head": "demo/canned-bug",
           "base": "main",
           "title": "perf: cache product prices",
-          "body": "Demo scenario `bad-deploy`: this change passes CI but fails under load. Opened by the demo console."
+          "body": "Demo scenario `bad-deploy`: this change passes CI but fails under load. Opened by the demo console.",
+          "labels": "demo"
+        }
+      }
+    },
+    {
+      "id": "review",
+      "stage": "checks",
+      "title": "The AI reviewer reads it",
+      "narration": "Every PR gets an AI code review that blocks real bugs. This one is subtle, a database connection that is never returned, and the reviewer usually catches it.",
+      "explain": "ai-review",
+      "wait": [
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "ai-review"
+          ],
+          "description": "The AI review finishes"
+        }
+      ],
+      "timeoutSeconds": 900
+    },
+    {
+      "id": "override",
+      "stage": "checks",
+      "title": "A person overrides the review",
+      "narration": "To show what happens when a bug gets past every check, an admin overrides the AI review on purpose. Only admins can, and the override is on the PR for everyone to see.",
+      "explain": "ai-review",
+      "action": {
+        "label": "Override the AI review",
+        "kind": "github.commentOnPullRequest",
+        "args": {
+          "number": "{pr}",
+          "body": "/override-ai-review Demo: letting the canned bug through on purpose to show the automatic rollback."
         }
       }
     },
@@ -33,10 +74,21 @@
       "title": "Checks pass and the queue merges it",
       "narration": "Tests cannot catch everything. Every check is green, so the merge queue merges it like any other change.",
       "wait": [
-        { "kind": "pr.merged", "subject": "pr#{pr}", "description": "The merge queue merges the PR" }
+        {
+          "kind": "pr.merged",
+          "subject": "pr#{pr}",
+          "description": "The merge queue merges the PR"
+        }
       ],
       "failOn": [
-        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: failure"], "description": "CI caught it before merge" }
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "ci-ok: failure"
+          ],
+          "description": "CI caught it before merge"
+        }
       ],
       "timeoutSeconds": 1800
     },
@@ -46,7 +98,11 @@
       "title": "The deploy starts",
       "narration": "Merging is deploying. The new image goes to staging, then production.",
       "wait": [
-        { "kind": "deploy.started", "subject": "prod", "description": "A deploy to production starts" }
+        {
+          "kind": "deploy.started",
+          "subject": "prod",
+          "description": "A deploy to production starts"
+        }
       ],
       "timeoutSeconds": 1200
     },
@@ -57,7 +113,10 @@
       "narration": "Under real traffic the new version starts failing requests. CloudWatch notices within a minute.",
       "explain": "alarm",
       "wait": [
-        { "kind": "alarm.alarm", "description": "A production alarm goes into ALARM" }
+        {
+          "kind": "alarm.alarm",
+          "description": "A production alarm goes into ALARM"
+        }
       ],
       "timeoutSeconds": 900
     },
@@ -68,7 +127,11 @@
       "narration": "The deployment is unhealthy, so ECS puts the previous version back on its own. Nobody was paged to do it.",
       "explain": "rollback",
       "wait": [
-        { "kind": "deploy.rolledback", "subject": "prod", "description": "Production rolls back to the previous version" }
+        {
+          "kind": "deploy.rolledback",
+          "subject": "prod",
+          "description": "Production rolls back to the previous version"
+        }
       ],
       "timeoutSeconds": 900
     },
@@ -78,13 +141,25 @@
       "title": "Production is healthy again",
       "narration": "The alarm clears once the old version is serving every request.",
       "wait": [
-        { "condition": "alarms-ok", "description": "Every production alarm is OK" }
+        {
+          "condition": "alarms-ok",
+          "description": "Every production alarm is OK"
+        }
       ],
       "timeoutSeconds": 900
     }
   ],
   "reset": [
-    { "label": "Stop the load generator", "kind": "load.stop" },
-    { "label": "Close the canned bug PR", "kind": "github.closePullRequest", "args": { "number": "{pr}" } }
+    {
+      "label": "Stop the load generator",
+      "kind": "load.stop"
+    },
+    {
+      "label": "Close the canned bug PR",
+      "kind": "github.closePullRequest",
+      "args": {
+        "number": "{pr}"
+      }
+    }
   ]
 }

@@ -45,6 +45,11 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
         var json = await SendAsync(HttpMethod.Post, $"{_repo}/pulls", new { title = pr.Title, head = pr.Head, @base = pr.Base, body = pr.Body }, ct);
         var number = json.GetProperty("number").GetInt32();
         var nodeId = json.GetProperty("node_id").GetString();
+        if (pr.Labels is { Count: > 0 })
+        {
+            await SendAsync(HttpMethod.Post, $"{_repo}/issues/{number}/labels", new { labels = pr.Labels }, ct);
+        }
+
         try
         {
             // Auto-merge puts the PR into the merge queue as soon as its required checks pass.
@@ -64,6 +69,9 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
 
     public Task ClosePullRequestAsync(int number, CancellationToken ct) =>
         SendAsync(HttpMethod.Patch, $"{_repo}/pulls/{number}", new { state = "closed" }, ct);
+
+    public Task CommentOnPullRequestAsync(int number, string body, CancellationToken ct) =>
+        SendAsync(HttpMethod.Post, $"{_repo}/issues/{number}/comments", new { body }, ct);
 
     public async Task<GitHubActivity> GetActivityAsync(CancellationToken ct)
     {

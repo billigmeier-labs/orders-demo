@@ -107,6 +107,10 @@ public sealed class FakeWorld :
         return true;
     });
 
+    // The fake AI review always passes, so an override comment changes nothing here.
+    public Task CommentOnPullRequestAsync(int number, string body, CancellationToken ct) => Locked(() =>
+        _pulls.Any(p => p.Number == number) ? true : throw new InvalidOperationException($"No pull request #{number}."));
+
     public Task<GitHubActivity> GetActivityAsync(CancellationToken ct) => Locked(() =>
     {
         var open = _issues.Where(i => i.Open).ToList();

@@ -76,7 +76,9 @@ incident:
 cleanup:
     #!/usr/bin/env bash
     set -euo pipefail
-    gh pr list -R {{ repo }} --label demo --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"' |
+    # Demo PRs: labelled `demo`, or opened from the canned-bug branch.
+    { gh pr list -R {{ repo }} --label demo --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"'
+      gh pr list -R {{ repo }} --head demo/canned-bug --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"'; } | sort -u |
     while read -r pr branch; do
         # The canned-bug branch is reused by every bad-deploy demo; keep it.
         if [ "$branch" = demo/canned-bug ]; then flag=""; else flag="--delete-branch"; fi
