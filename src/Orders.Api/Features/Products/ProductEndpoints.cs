@@ -25,6 +25,7 @@ internal static class ProductEndpoints
         var products = api.MapGroup("/products").WithTags("Products");
         products.MapGet("/", List);
         products.MapGet("/low-stock", LowStock);
+        products.MapGet("/count", Count);
         products.MapGet("/{id:guid}", Get);
         products.MapPost("/", Create);
     }
@@ -70,4 +71,7 @@ internal static class ProductEndpoints
         await db.SaveChangesAsync(ct);
         return TypedResults.Created($"/api/products/{product.Id}", ProductResponse.From(product));
     }
+
+    private static async Task<Ok<int>> Count(OrdersDbContext db, CancellationToken ct) =>
+        TypedResults.Ok(await db.Products.CountAsync(ct));
 }
