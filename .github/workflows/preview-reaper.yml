@@ -1,0 +1,85 @@
+name: Preview reaper
+
+# Safety net for previews whose close event was missed (workflow failed, environment was down then up):
+# finds pr-<N> services, listener rules, target groups and task definitions whose PR is no longer open
+# and removes them with the same steps as closing the PR.
+on:
+  schedule:
+    - cron: "17 9 * * *" # 3:17 AM Central (CST), every night
+  workflow_dispatch:
+
+concurrency:
+  group: preview-reaper
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER: orders-demo
+
+jobs:
+  find:
+    name: Find stale previews
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.stale.outputs.prs }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-preview
+          aws-region: us-east-1
+
+      - name: List preview resources and check their PRs
+        id: stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          found=$(mktemp)
+          if listener=$(aws ssm get-parameter --name /orders-demo/https-listener-arn --query Parameter.Value --output text 2>/dev/null); then
+            {
+            aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text | tr '\t' '\n' \
+              | sed -nE 's#.*/(pr-[0-9]+)$#\1#p'
+            aws elbv2 describe-target-groups --query 'TargetGroups[].TargetGroupName' --output text | tr '\t' '\n' \
+              | sed -nE 's#^(pr-[0-9]+)$#\1#p'
+            aws elbv2 describe-rules --listener-arn "$listener" \
+              --query 'Rules[].Conditions[].Values[]' --output text | tr '\t' '\n' \
+              | sed -nE 's#^(pr-[0-9]+)\.demo\.joshb\.app$#\1#p'
+            } >>"$found"
+          else
+            echo "Environment is down; checking task definitions only"
+          fi
+          aws ecs list-task-definitions --family-prefix orders-demo-pr- --status ACTIVE \
+            --query 'taskDefinitionArns[]' --output text | tr '\t' '\n' \
+            | sed -nE 's#.*/orders-demo-(pr-[0-9]+):[0-9]+$#\1#p' >>"$found"
+
+          stale=()
+          while read -r n; do
+            state=$(gh pr view "$n" --repo "$GITHUB_REPOSITORY" --json state --jq .state 2>/dev/null || echo MISSING)
+            echo "pr-$n: PR is $state"
+            [ "$state" = OPEN ] || stale+=("$n")
+          done < <(sed 's/^pr-//' "$found" | sort -un)
+          prs=$(printf '%s\n' "${stale[@]}" | jq -cRs 'split("\n") | map(select(length > 0) | tonumber)')
+          echo "prs=$prs" | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "### Preview reaper"
+            echo "Previews found: $(sort -u "$found" | grep -c . || true); stale: \`$prs\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  reap:
+    name: Reap
+    needs: find
+    if: needs.find.outputs.prs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.find.outputs.prs) }}
+    uses: ./.github/workflows/preview-down.yml
+    permissions:
+      id-token: write
+      pull-requests: write
+    with:
+      pr: ${{ matrix.pr }}
