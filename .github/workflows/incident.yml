@@ -42,12 +42,15 @@ jobs:
           echo "issue=$n" >> "$GITHUB_OUTPUT"
           echo "Alarm $ALARM is $STATE; open issue: ${n:-none}"
 
+      # The fix often closes the issue before the alarm clears, so recovery goes to the latest incident for this
+      # alarm whether it's open or closed, unless it already says it recovered.
       - name: Recovery
         if: env.STATE == 'OK'
-        env:
-          ISSUE: ${{ steps.find.outputs.issue }}
         run: |
-          if [ -z "$ISSUE" ]; then echo "No open incident for $ALARM; nothing to do."; exit 0; fi
+          ISSUE=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --label incident --search "\"$ALARM\" in:title sort:created-desc" --json number --jq '.[0].number // empty')
+          if [ -z "$ISSUE" ]; then echo "No incident for $ALARM; nothing to do."; exit 0; fi
+          last=$(gh issue view "$ISSUE" -R "$GITHUB_REPOSITORY" --json comments --jq '.comments[-1].body // ""')
+          if [[ "$last" == "**Recovered**"* ]]; then echo "#$ISSUE already marked recovered."; exit 0; fi
           gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body "**Recovered** at $AT: \`$ALARM\` is back to OK."
 
       - name: Repeat alarm on an open incident
