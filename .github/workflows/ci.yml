@@ -1,0 +1,143 @@
+name: CI
+
+# Runs on every PR, in the merge queue, and on main.
+# The single required check is `ci-ok`, which passes only if every job it needs passed (or was skipped on purpose).
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
+
+  lint:
+    name: Format and lint
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: extractions/setup-just@v2
+      - run: just lint
+
+  unit:
+    name: Build and unit tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: extractions/setup-just@v2
+      - run: just build
+      - run: just test
+
+  integration:
+    name: Integration tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: extractions/setup-just@v2
+      - run: just test-all
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (gitleaks)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.3 git /repo --redact --no-banner
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Vulnerable packages (high or critical fail)
+        run: |
+          dotnet restore Orders.slnx >/dev/null
+          dotnet list Orders.slnx package --vulnerable --include-transitive | tee vuln.txt
+          if grep -Eq '\b(High|Critical)\b' vuln.txt; then echo "::error::High or critical vulnerable package found"; exit 1; fi
+
+  pr-rules:
+    name: PR rules
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the PR follows the rules in AGENTS.md
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          fail=0
+          if ! grep -Eq '^(feat|fix|test|chore|docs|refactor|perf|ci|build)(\([a-z0-9-]+\))?!?: .+' <<<"$TITLE"; then
+            echo "::error::PR title must be a Conventional Commit, e.g. 'feat: add order search'"; fail=1
+          fi
+          case "$AUTHOR" in
+            claude*|*claude\[bot\]*)
+              if ! grep -Eiq '(closes|fixes|resolves) #[0-9]+' <<<"$BODY"; then
+                echo "::error::Agent PRs must link the issue they work on ('Closes #123')"; fail=1
+              fi ;;
+          esac
+          added_skips=$(git diff "$BASE" "$HEAD" -- '*.cs' | grep -E '^\+.*(Skip *=|\[Fact\(Skip|\[Theory\(Skip)' || true)
+          if [ -n "$added_skips" ]; then
+            echo "::error::This PR adds skipped tests:"; echo "$added_skips"; fail=1
+          fi
+          exit $fail
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [changes, lint, unit, integration, security, pr-rules]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed or were skipped on purpose
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$RESULTS" | jq -e 'to_entries | any(.value.result == "failure" or .value.result == "cancelled")' >/dev/null; then
+            echo "::error::A required job failed or was cancelled"; exit 1
+          fi

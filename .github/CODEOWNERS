@@ -1,0 +1,9 @@
+# Paths that always need a human's approval (see AGENTS.md).
+# Everything not listed here can merge on green checks alone.
+/.github/                                   @jbilligmeier
+/AGENTS.md                                  @jbilligmeier
+/infra/                                     @jbilligmeier
+/src/Orders.Api/Data/Migrations/            @jbilligmeier
+/Directory.Build.props                      @jbilligmeier
+/stryker-config.json                        @jbilligmeier
+/tests/**/coverage.runsettings              @jbilligmeier

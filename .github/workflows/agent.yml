@@ -1,0 +1,94 @@
+name: Agent
+
+# When an issue gets the `agent` label (from triage, or a person), Claude implements it and opens a PR
+# with auto-merge on. When the AI review blocks that PR, Claude reads the findings and pushes a fix.
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: agent-${{ github.event.issue.number || github.event.pull_request.number }}
+
+jobs:
+  implement:
+    name: Implement issue
+    if: github.event_name == 'issues' && github.event.label.name == 'agent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: extractions/setup-just@v2
+
+      - name: Claude works the issue
+        id: work
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the coding agent for this repository. Read AGENTS.md and docs/contracts.md first and follow them exactly.
+            Your task is issue #${{ env.ISSUE }}: read it and its comments with `gh issue view ${{ env.ISSUE }} --comments`.
+
+            1. Create a branch named `agent/${{ env.ISSUE }}-<short-slug>` from main.
+            2. Implement the change with tests. Keep it small and focused on the issue.
+            3. Run `just ci` and fix everything until it passes. Never skip or weaken tests.
+            4. Commit with a Conventional Commit message and push the branch.
+            5. Open a PR with `gh pr create` whose title is a Conventional Commit and whose body starts with
+               `Closes #${{ env.ISSUE }}` and then follows .github/pull_request_template.md.
+            If the issue needs files AGENTS.md says you must not touch, don't change them: comment on the issue explaining
+            what a human needs to do, and stop without opening a PR.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 80
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just:*),Bash(dotnet:*),Bash(git:*),Bash(gh pr create:*),Bash(gh issue view:*),Bash(gh issue comment:*)"
+            --json-schema '{"type":"object","required":["opened_pr"],"properties":{"opened_pr":{"type":"boolean"},"pr_number":{"type":"integer"},"summary":{"type":"string"}}}'
+
+      - name: Turn on auto-merge
+        if: fromJSON(steps.work.outputs.structured_output).opened_pr
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          PR: ${{ fromJSON(steps.work.outputs.structured_output).pr_number }}
+        run: |
+          gh pr edit "$PR" --add-label agent
+          gh pr merge "$PR" --auto --squash
+
+  fix-review:
+    name: Address AI review
+    if: github.event_name == 'pull_request' && github.event.label.name == 'ai-review:blocked' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: extractions/setup-just@v2
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the coding agent for this repository. Read AGENTS.md first.
+            The AI review blocked PR #${{ env.PR }}. Read its findings with `gh pr view ${{ env.PR }} --comments`
+            (the latest "AI review" comment), fix every blocking finding on this branch, run `just ci` until it passes,
+            then commit and push. Don't argue with findings in code comments; if you believe a finding is wrong,
+            explain why in a PR comment and still make the smallest change that addresses it.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 60
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just:*),Bash(dotnet:*),Bash(git:*),Bash(gh pr view:*),Bash(gh pr comment:*)"

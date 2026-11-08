@@ -75,3 +75,6 @@ dev:
     fi
     export ConnectionStrings__Orders="Host=$db_host;Port={{ db_port }};Database=orders;Username=orders;Password=orders"
     {{ dotnet }} run --project src/Orders.Api --no-launch-profile
+
+# AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`
+mod env "infra/infra.just"

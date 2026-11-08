@@ -1,0 +1,35 @@
+name: AI review override
+
+# An admin comments `/override-ai-review` on a PR to let it through after their own review.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: write
+
+jobs:
+  override:
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/override-ai-review')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.issue.number }}
+      WHO: ${{ github.event.comment.user.login }}
+    steps:
+      - name: Only admins may override
+        run: |
+          level=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$WHO/permission" --jq .permission)
+          if [ "$level" != admin ]; then
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "@$WHO only repository admins can override the AI review."
+            exit 1
+          fi
+      - name: Mark the override and re-run the review
+        run: |
+          gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label ai-review:override --remove-label needs-human || true
+          sha=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ai-review.yml --commit "$sha" --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run rerun "$run" -R "$GITHUB_REPOSITORY"
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "AI review overridden by @$WHO."
