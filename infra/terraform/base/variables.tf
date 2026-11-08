@@ -20,3 +20,9 @@ variable "domain" {
   type        = string
   default     = "demo.joshb.app"
 }
+
+variable "github_repo_immutable" {
+  description = "The repo in GitHub's immutable OIDC subject form (owner@id/repo@id); see repos/<repo>/actions/oidc/customization/sub"
+  type        = string
+  default     = "billigmeier-labs@354132701/orders-demo@1450435209"
+}

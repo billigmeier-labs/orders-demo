@@ -7,7 +7,9 @@ data "aws_iam_openid_connect_provider" "github" {
 locals {
   github_oidc_host         = "token.actions.githubusercontent.com"
   github_oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
-  repo_sub                 = "repo:${var.github_repo}"
+  # GitHub issues this org's OIDC tokens with the immutable subject format (owner and repo IDs),
+  # e.g. repo:billigmeier-labs@354132701/orders-demo@1450435209:ref:refs/heads/main.
+  repo_sub = "repo:${var.github_repo_immutable}"
 }
 
 data "aws_iam_policy_document" "trust" {

@@ -30,6 +30,12 @@ resource "aws_appconfig_hosted_configuration_version" "flags" {
   content_type             = "application/json"
   description              = "Initial flags (all off)"
 
+  # AppConfig adds its own metadata to feature-flag content, so Terraform would see a diff (and replace
+  # the flags, resetting them) on every apply. The console owns flag values after creation.
+  lifecycle {
+    ignore_changes = [content]
+  }
+
   content = jsonencode({
     version = "1"
     flags = {
@@ -55,8 +61,12 @@ resource "aws_appconfig_deployment" "initial" {
   environment_id           = each.value.environment_id
   configuration_profile_id = aws_appconfig_configuration_profile.flags.configuration_profile_id
   configuration_version    = aws_appconfig_hosted_configuration_version.flags.version_number
-  deployment_strategy_id   = "AppConfig.AllAtOnce"
+  deployment_strategy_id   = aws_appconfig_deployment_strategy.instant.id
   description              = "Initial flags"
+
+  lifecycle {
+    ignore_changes = all
+  }
 }
 
 # Flag toggles from the console deploy a new version each time, and AppConfig
