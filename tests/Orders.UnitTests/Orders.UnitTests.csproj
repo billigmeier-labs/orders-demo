@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../src/Orders.Api/Orders.Api.csproj" />
+    <ProjectReference Include="../../src/Orders.LoadGenerator/Orders.LoadGenerator.csproj" />
   </ItemGroup>
 </Project>

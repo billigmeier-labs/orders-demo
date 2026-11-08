@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Orders.Api/Orders.Api.csproj" />
     <Project Path="src/Orders.Console/Orders.Console.csproj" />
+    <Project Path="src/Orders.LoadGenerator/Orders.LoadGenerator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Orders.Console.Tests/Orders.Console.Tests.csproj" />

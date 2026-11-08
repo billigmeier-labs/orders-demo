@@ -9,7 +9,7 @@ The names and shapes every part of this repo agrees on. Change them here first, 
 | `Orders.slnx` | The solution |
 | `src/Orders.Api` | ASP.NET Core (.NET 10) orders API |
 | `src/Orders.Console` | Demo console (ASP.NET Core), later phase |
-| `src/Orders.LoadGenerator` | NBomber load scenarios, later phase |
+| `src/Orders.LoadGenerator` | NBomber load scenarios (`just load <scenario> <minutes>`) |
 | `tests/Orders.UnitTests` | xUnit, no I/O |
 | `tests/Orders.IntegrationTests` | xUnit + Testcontainers PostgreSQL |
 | `tests/Orders.E2E` | Playwright suite for the console, later phase |
@@ -44,6 +44,16 @@ Seed data (development, staging, preview, and prod since this is a demo): 20 cus
 | `ConnectionStrings__Orders` | PostgreSQL connection string |
 | `APP_VERSION`, `APP_COMMIT`, `APP_ENVIRONMENT` | Shown by `/api/version`, attached to every log line |
 | `SEED_DATA` | `true` to seed on startup when empty |
+| `APPCONFIG_APPLICATION`, `APPCONFIG_ENVIRONMENT`, `APPCONFIG_PROFILE` | Feature flags from AppConfig (polled every 15 s); unset means flags come from `FeatureFlags__<name>` (or `FeatureFlags__<name>__enabled` plus `FeatureFlags__<name>__percent`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Turns on OpenTelemetry traces and metrics over OTLP; unset means off |
+
+Feature flags: `searchV2` (ranked full-text search), `faultSlowSearch` (adds 2 s to `percent`% of searches), `faultFailOrders` (`percent`% of order creates return 500). A fault that fires logs a `FaultInjected` warning with the flag and percent.
+
+Logs outside Development are JSON, one object per line, with `AppVersion`, `AppCommit`, `AppEnvironment` (and `TraceId` during a request) on every line.
+
+## Load generator
+
+Env `TARGET_BASE_URL`, `SCENARIO` (`normal` ≈ 5 req/s, `peak` ≈ 25, `spike` = normal with a 60 s burst to 60, `soak` = normal, default 30 min), `DURATION_MINUTES` (default 5). Journeys: browse products, search, view orders, create orders, advance order status. 5xx and no-response count as failures; 4xx (409 out of stock or a lost race) are expected. Ends with a summary per endpoint on stdout.
 
 ## GitHub
 

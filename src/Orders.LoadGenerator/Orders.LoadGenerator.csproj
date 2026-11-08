@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Orders.LoadGenerator</RootNamespace>
+    <!-- Lock files also cover the container targets, so the Dockerfile can restore per architecture in locked mode. -->
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NBomber" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orders.UnitTests" />
+  </ItemGroup>
+</Project>

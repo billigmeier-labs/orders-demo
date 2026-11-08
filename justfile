@@ -47,12 +47,17 @@ format:
 # Everything CI runs
 ci: lint build test-all
 
+# Mutation testing of the API with Stryker.NET (slow; report in StrykerOutput/<date>/reports)
+mutation *args:
+    {{ dotnet }} tool restore
+    {{ dotnet }} tool run dotnet-stryker --config-file stryker-config.json {{ args }}
+
 # Add an EF Core migration, e.g. `just migration AddOrderNotes`
 migration name:
     {{ dotnet }} tool restore
     {{ dotnet }} tool run dotnet-ef migrations add {{ name }} --project src/Orders.Api --output-dir Data/Migrations
 
-# Run the API on :8080 against a seeded Postgres container (Ctrl-C stops both)
+# Run the API on :8080 against a seeded Postgres container (Ctrl-C stops both); FeatureFlags__* env vars pass through
 dev:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -74,9 +79,24 @@ dev:
         db_host=host.docker.internal
         export ASPNETCORE_URLS=http://+:8080
         export DOTNET_DOCKER_ARGS="--name orders-dev-api -p {{ api_port }}:8080 -e ASPNETCORE_URLS -e ASPNETCORE_ENVIRONMENT -e MIGRATE_ON_STARTUP -e SEED_DATA -e APP_VERSION -e APP_COMMIT -e APP_ENVIRONMENT -e ConnectionStrings__Orders"
+        # Feature flags set in the calling shell, e.g. `FeatureFlags__searchV2=true just dev`
+        for flag in $(compgen -e | grep '^FeatureFlags__' || true); do DOTNET_DOCKER_ARGS+=" -e $flag"; done
     fi
     export ConnectionStrings__Orders="Host=$db_host;Port={{ db_port }};Database=orders;Username=orders;Password=orders"
     {{ dotnet }} run --project src/Orders.Api --no-launch-profile
+
+# Load generator against TARGET_BASE_URL (default the `just dev` API), e.g. `just load spike 5`
+load scenario="normal" minutes="1":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export SCENARIO={{ scenario }} DURATION_MINUTES={{ minutes }}
+    export TARGET_BASE_URL="${TARGET_BASE_URL:-http://localhost:{{ api_port }}}"
+    if ! command -v dotnet >/dev/null 2>&1; then
+        # In the SDK container, localhost is the container: reach the host's port instead.
+        TARGET_BASE_URL=$(sed -E 's#^(https?://)(localhost|127\.0\.0\.1)([:/]|$)#\1host.docker.internal\3#' <<<"$TARGET_BASE_URL")
+        export DOTNET_DOCKER_ARGS="-e TARGET_BASE_URL -e SCENARIO -e DURATION_MINUTES"
+    fi
+    {{ dotnet }} run --project src/Orders.LoadGenerator -c {{ configuration }}
 
 # Playwright suite against the console in fake mode, auth on (extra args go to `playwright test`)
 e2e *args:
