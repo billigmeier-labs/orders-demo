@@ -54,9 +54,12 @@ jobs:
             with `gh issue view ${{ env.ISSUE }} --comments`. Look at the code it would touch.
 
             Score it:
-            - risk: "low" if it only touches application code and tests in normal ways; "medium" if it changes data
-              shape, public API contracts or performance-sensitive paths; "high" if it touches anything AGENTS.md says
-              needs a human (.github, infra, migrations of existing data, auth, AGENTS.md, test thresholds) or could lose data.
+            - risk: "low" if it only touches application code and tests in normal ways — this includes ADDING a new
+              endpoint or field, and fixing a bug in application code that has clear evidence (e.g. an incident issue
+              with logs); "medium" if it CHANGES or removes existing API behaviour clients rely on, changes the shape of
+              stored data, or touches concurrency/connection handling; "high" if it touches anything AGENTS.md says
+              needs a human (.github, infra, migrations, auth, AGENTS.md, test thresholds) or could lose data.
+              Be consistent: the same kind of change always gets the same score.
             - difficulty: "low" (a focused change in one place), "medium" (a few files, clear approach), "high" (unclear
               approach, design decisions, or large).
             Write short, plain reasons a programmer new to this repo would follow. If the issue lacks clear acceptance
