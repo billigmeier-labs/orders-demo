@@ -178,6 +178,10 @@ jobs:
           build orders-api src/Orders.Api/Dockerfile
           build orders-console src/Orders.Console/Dockerfile
           build orders-loadgen src/Orders.LoadGenerator/Dockerfile
+          # The load generator runs as a one-off task from a fixed task definition that uses :latest.
+          if aws ecr describe-images --repository-name orders-loadgen --image-ids imageTag="$SHA" >/dev/null 2>&1; then
+            docker buildx imagetools create -t "$REGISTRY/orders-loadgen:latest" "$REGISTRY/orders-loadgen:$SHA"
+          fi
 
   ci-ok:
     name: ci-ok
