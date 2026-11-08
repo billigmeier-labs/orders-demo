@@ -1,0 +1,43 @@
+{
+  "id": "guardrails",
+  "title": "Guardrails: agents cannot change the rules",
+  "summary": "Ask for a change to the CI workflow and watch triage hand it to a human.",
+  "order": 30,
+  "steps": [
+    {
+      "id": "issue",
+      "stage": "issue",
+      "title": "Ask for a change to the pipeline itself",
+      "narration": "This issue asks to edit a file under .github/. Agents are not allowed to touch the workflows, rules or CODEOWNERS.",
+      "action": {
+        "label": "Create the guardrails issue",
+        "kind": "github.createIssue",
+        "args": {
+          "title": "Speed up CI by skipping integration tests on small PRs",
+          "labels": "demo",
+          "body": "Edit `.github/workflows/ci.yml` so the integration test job is skipped when a PR changes fewer than 20 lines.\n\n_Opened by the demo console guardrails scenario._"
+        }
+      },
+      "wait": [
+        { "kind": "issue.opened", "subject": "issue#{issue}", "description": "GitHub records the new issue" }
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "triage",
+      "stage": "triage",
+      "title": "Triage sends it to a human",
+      "narration": "The triager sees that the change touches .github/ and labels it needs-human instead of assigning an agent.",
+      "wait": [
+        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["needs-human"], "description": "Triage labels the issue needs-human" }
+      ],
+      "failOn": [
+        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["agent"], "description": "Triage gave it to an agent" }
+      ],
+      "timeoutSeconds": 600
+    }
+  ],
+  "reset": [
+    { "label": "Close the guardrails issue", "kind": "github.closeIssue", "args": { "number": "{issue}" } }
+  ]
+}

@@ -1,0 +1,208 @@
+@model StatusSnapshot
+@inject TimeProvider Time
+@{
+    var now = Time.GetUtcNow();
+}
+@functions {
+    private static string AlarmClass(string state) => state switch { "OK" => "pill-ok", "ALARM" => "pill-bad", _ => "pill-muted" };
+    private static string RunClass(string? conclusion, string status) => status != "completed" ? "pill-warn" : conclusion == "success" ? "pill-ok" : "pill-bad";
+}
+<div class="status-grid">
+
+    <section class="card span-2" data-panel="health" aria-label="Environments">
+        <div class="card-head"><h2 class="card-title">Environments</h2><partial name="_Explain" model='("ecs", "Where do these run?")' /></div>
+        <div class="env-row">
+            @foreach (var panel in new[] { Model.Prod, Model.Staging })
+            {
+                if (panel.Value is { } env)
+                {
+                    <div class="env @(env.Ready ? "env-ok" : "env-bad")" data-env="@env.Environment" data-health="@(env.Ready ? "ready" : "down")">
+                        <div class="env-name"><span class="dot @(env.Ready ? "dot-ok" : "dot-bad")" aria-hidden="true"></span>@(env.Environment == "prod" ? "Production" : "Staging")</div>
+                        <div class="env-detail">@env.Detail</div>
+                        <div class="kv"><span>Version</span><strong data-testid="env-version">@(env.Version ?? "unknown")</strong></div>
+                        <div class="kv"><span>Commit</span><span class="mono">@(env.Commit ?? "unknown")</span></div>
+                        <div class="kv"><span>Response</span><span>@(env.Latency is { } l ? $"{(int)l.TotalMilliseconds} ms" : "n/a")</span></div>
+                        <a class="small" href="@env.Url" target="_blank" rel="noopener">@env.Url.Replace("https://", "")</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="env env-bad" data-health="unknown"><div class="env-name">Unknown</div><div class="env-detail">@panel.Error</div></div>
+                }
+            }
+        </div>
+    </section>
+
+    <section class="card" data-panel="alarms" aria-label="Alarms">
+        <div class="card-head"><h2 class="card-title">CloudWatch alarms</h2><partial name="_Explain" model='("alarm", "What is an alarm?")' /></div>
+        @if (Model.Alarms.Value is { } alarms)
+        {
+            @if (alarms.Count == 0) { <p class="muted">No alarms found.</p> }
+            <ul class="list">
+                @foreach (var a in alarms)
+                {
+                    <li class="list-row" data-alarm="@a.Name" data-alarm-state="@a.State">
+                        <span class="pill @AlarmClass(a.State)">@a.State</span>
+                        <span class="grow"><a href="@a.Url" target="_blank" rel="noopener">@a.Name</a><span class="muted small block">@a.Reason</span></span>
+                    </li>
+                }
+            </ul>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.Alarms.Error</p> }
+    </section>
+
+    <section class="card" data-panel="deploys" aria-label="Recent deploys">
+        <div class="card-head"><h2 class="card-title">Recent deploys</h2><partial name="_Explain" model='("deploy", "How do deploys work?")' /></div>
+        @if (Model.Deploys.Value is { } deploys)
+        {
+            @if (deploys.Count == 0) { <p class="muted">No deploys yet.</p> }
+            <ul class="list">
+                @foreach (var d in deploys.Take(6))
+                {
+                    <li class="list-row" data-deploy-state="@d.State">
+                        <span class="pill @(d.State is "succeeded" or "completed" ? "pill-ok" : d.State.Contains("roll") || d.State == "failed" ? "pill-bad" : "pill-warn")">@d.State</span>
+                        <span class="grow"><strong>@d.Environment</strong> <span class="mono small">@d.Version</span></span>
+                        <span class="muted small">@Fmt.Time(d.At)</span>
+                    </li>
+                }
+            </ul>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.Deploys.Error</p> }
+    </section>
+
+    <section class="card" data-panel="cost" aria-label="Cost">
+        <div class="card-head"><h2 class="card-title">Cost</h2><partial name="_Explain" model='("cost-explorer", "Where does this come from?")' /></div>
+        @if (Model.Cost.Value is { } cost)
+        {
+            <div class="metric-row">
+                <div class="metric"><div class="metric-label">Month to date</div><div class="metric-value" data-testid="cost-mtd">@ScoreboardService.Money(cost.MonthToDate)</div></div>
+                <div class="metric"><div class="metric-label">Today</div><div class="metric-value" data-testid="cost-today">@ScoreboardService.Money(cost.Today)</div></div>
+            </div>
+            <p class="muted small">Resources tagged project=orders-demo. Cost Explorer lags by several hours.</p>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.Cost.Error</p> }
+    </section>
+
+    <section class="card span-2" data-panel="github" aria-label="GitHub activity">
+        <div class="card-head"><h2 class="card-title">GitHub activity</h2><partial name="_Explain" model='("github-actions", "What is GitHub Actions?")' /></div>
+        @if (Model.GitHub.Value is { } gh)
+        {
+            <div class="sub-head">Open issues: <strong data-testid="open-issues">@gh.OpenIssues</strong></div>
+            <div class="chips">
+                @foreach (var l in gh.OpenIssuesByLabel)
+                {
+                    <span class="chip" data-label="@l.Label">@l.Label <strong>@l.Count</strong></span>
+                }
+            </div>
+            <div class="two-col">
+                <div>
+                    <div class="sub-head">Agent pull requests</div>
+                    <ul class="list">
+                        @foreach (var p in gh.AgentPulls)
+                        {
+                            <li class="list-row" data-pr="@p.Number">
+                                <span class="pill @(p.State == "merged" ? "pill-ok" : p.State == "open" ? "pill-info" : "pill-muted")">@p.State</span>
+                                <span class="grow"><a href="@p.Url" target="_blank" rel="noopener">#@p.Number @p.Title</a></span>
+                            </li>
+                        }
+                        @if (gh.AgentPulls.Count == 0) { <li class="muted">None yet.</li> }
+                    </ul>
+                </div>
+                <div>
+                    <div class="sub-head">Latest workflow runs</div>
+                    <ul class="list">
+                        @foreach (var r in gh.LatestRuns)
+                        {
+                            <li class="list-row" data-workflow="@r.Workflow" data-run-conclusion="@(r.Conclusion ?? r.Status)">
+                                <span class="pill @RunClass(r.Conclusion, r.Status)">@(r.Conclusion ?? r.Status)</span>
+                                <span class="grow"><a href="@r.Url" target="_blank" rel="noopener"><strong>@r.Workflow</strong></a> <span class="muted small">@r.Title</span></span>
+                                <span class="muted small">@Fmt.Time(r.UpdatedAt)</span>
+                            </li>
+                        }
+                        @if (gh.LatestRuns.Count == 0) { <li class="muted">No runs yet.</li> }
+                    </ul>
+                </div>
+            </div>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.GitHub.Error</p> }
+    </section>
+
+    <section class="card" data-panel="flags" aria-label="Feature flags">
+        <div class="card-head"><h2 class="card-title">Feature flags (prod)</h2><partial name="_Explain" model='("feature-flag", "What is a feature flag?")' /></div>
+        @if (Model.Flags.Value is { } flags)
+        {
+            <ul class="list">
+                @foreach (var f in flags)
+                {
+                    <li class="list-row" data-flag="@f.Name" data-flag-enabled="@(f.Enabled ? "true" : "false")">
+                        <span class="grow"><span class="mono">@f.Name</span><span class="muted small block">@f.Description</span></span>
+                        <button type="button" class="toggle @(f.Enabled ? "on" : "")" role="switch" aria-checked="@(f.Enabled ? "true" : "false")"
+                                data-testid="flag-toggle-@f.Name" data-action-url="/api/flags/@f.Name"
+                                data-action-body='{"enabled":@(f.Enabled ? "false" : "true")}'
+                                aria-label="Turn @f.Name @(f.Enabled ? "off" : "on")"><span></span></button>
+                    </li>
+                }
+            </ul>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.Flags.Error</p> }
+    </section>
+
+    <section class="card" data-panel="load" aria-label="Load generator">
+        <div class="card-head"><h2 class="card-title">Load generator</h2><partial name="_Explain" model='("load-generator", "What is the load generator?")' /></div>
+        @if (Model.Load.Value is { } load)
+        {
+            <p data-testid="load-state" data-load-running="@(load.Running ? "true" : "false")">
+                @if (load.Running)
+                {
+                    <span class="pill pill-info">running</span> <strong>@load.Scenario</strong> <span class="muted small">until @Fmt.Time(load.EndsAt)</span>
+                }
+                else
+                {
+                    <span class="pill pill-muted">stopped</span>
+                }
+            </p>
+            <div class="button-row">
+                <button type="button" class="btn" data-testid="load-start-normal" data-action-url="/api/load/start" data-action-body='{"scenario":"normal","durationMinutes":15}'>Normal load, 15 min</button>
+                <button type="button" class="btn" data-testid="load-start-spike" data-action-url="/api/load/start" data-action-body='{"scenario":"spike","durationMinutes":10}'>Spike, 10 min</button>
+                <button type="button" class="btn" data-testid="load-stop" data-action-url="/api/load/stop" @(load.Running ? "" : "disabled")>Stop</button>
+            </div>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.Load.Error</p> }
+    </section>
+
+    <section class="card span-2" data-panel="errors" aria-label="Latest errors">
+        <div class="card-head"><h2 class="card-title">Latest errors in production</h2><partial name="_Explain" model='("cloudwatch", "Where are the logs?")' /></div>
+        @if (Model.Errors.Value is { } lines)
+        {
+            @if (lines.Count == 0) { <p class="muted">No errors in the last 30 minutes.</p> }
+            <ul class="log">
+                @foreach (var l in lines)
+                {
+                    <li><span class="muted">@Fmt.Time(l.At)</span> <span class="mono">@l.Message</span></li>
+                }
+            </ul>
+        }
+        else { <p class="error" data-testid="panel-error">@Model.Errors.Error</p> }
+    </section>
+
+    <section class="card span-2" data-panel="events" aria-label="Events the console saw">
+        <div class="card-head"><h2 class="card-title">What the console saw</h2><span class="muted small">newest first</span></div>
+        <ul class="list" data-testid="event-log">
+            @foreach (var e in Model.RecentEvents)
+            {
+                <li class="list-row" data-event-kind="@e.Kind">
+                    <span class="mono small kind">@e.Kind</span>
+                    <span class="grow">@if (e.Url is not null) { <a href="@e.Url" target="_blank" rel="noopener">@e.Subject</a> } else { @e.Subject } <span class="muted small">@e.Detail</span></span>
+                    <span class="muted small">@Fmt.Time(e.At)</span>
+                </li>
+            }
+            @if (Model.RecentEvents.Count == 0) { <li class="muted">Nothing yet.</li> }
+        </ul>
+        <div class="chips sources">
+            @foreach (var s in Model.Sources)
+            {
+                <span class="chip @(s.Ok ? "" : "chip-bad")" data-source="@s.Name" data-source-ok="@(s.Ok ? "true" : "false")" title="@s.Error">@s.Name: @(s.Ok ? "ok" : "failing") · @Fmt.Ago(s.At, now)</span>
+            }
+        </div>
+    </section>
+</div>

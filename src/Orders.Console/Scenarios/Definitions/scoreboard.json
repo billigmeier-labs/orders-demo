@@ -1,0 +1,15 @@
+{
+  "id": "scoreboard",
+  "title": "Scoreboard",
+  "summary": "How fast and how safely changes ship, from real CI, PR and deploy data.",
+  "order": 60,
+  "steps": [
+    {
+      "id": "show",
+      "title": "The numbers",
+      "narration": "CI duration, time from PR to merge, agent PRs merged without changes, rollbacks, and what the demo costs.",
+      "explain": "scoreboard",
+      "action": { "label": "Show the scoreboard", "kind": "scoreboard.show" }
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "id": "tour",
+  "title": "The Tour: idea to production",
+  "summary": "One small change, from a new issue to production, driven by real events.",
+  "tour": true,
+  "order": 0,
+  "steps": [
+    {
+      "id": "issue",
+      "stage": "issue",
+      "title": "An idea becomes an issue",
+      "narration": "Every change starts as a GitHub issue that says what done looks like. This one is typed by a person, right now. It could just as easily have come from a monitoring alert.",
+      "action": {
+        "label": "Create the demo issue",
+        "kind": "github.createIssue",
+        "args": {
+          "title": "Add a low-stock products endpoint",
+          "labels": "demo",
+          "body": "Store staff want to see which products are about to run out.\n\n## Acceptance criteria\n\n- [ ] `GET /api/products/low-stock?threshold=` returns products with `stock` below the threshold (default 5), lowest stock first\n- [ ] A threshold below 0 returns 400 with a problem details body\n- [ ] Covered by unit and integration tests\n\n_Opened by the demo console Tour._"
+        }
+      },
+      "wait": [
+        { "kind": "issue.opened", "subject": "issue#{issue}", "description": "GitHub records the new issue" }
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "triage",
+      "stage": "triage",
+      "title": "An AI triager decides who should do it",
+      "narration": "Within seconds, a triage job scores the issue for risk and difficulty. Low-risk work goes straight to an agent. Anything risky waits for a human.",
+      "wait": [
+        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["agent"], "description": "Triage labels the issue agent" }
+      ],
+      "failOn": [
+        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["needs-human"], "description": "Triage sent it to a human instead" }
+      ],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "agent",
+      "stage": "agent",
+      "title": "An agent writes the code and the tests",
+      "narration": "The agent works in a fresh machine in GitHub Actions. It reads the repo rules, writes the change and its tests, and runs the same checks you would run locally.",
+      "wait": [
+        { "kind": "pr.opened", "detailContains": ["{agent}", "#{issue}"], "capture": "pr", "description": "The agent opens a pull request that closes the issue" }
+      ],
+      "timeoutSeconds": 2400
+    },
+    {
+      "id": "checks",
+      "stage": "checks",
+      "title": "Every check runs on every PR, in parallel",
+      "narration": "Build, tests, security scans and an AI review all run at once. A preview copy of the app is live for this PR alone. Nothing merges unless everything is green.",
+      "wait": [
+        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: success"], "description": "Required check ci-ok passes" },
+        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ai-review: success"], "description": "Required check ai-review passes" }
+      ],
+      "failOn": [
+        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: failure"], "description": "ci-ok failed" },
+        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ai-review: failure"], "description": "AI review blocked the PR" }
+      ],
+      "timeoutSeconds": 1800
+    },
+    {
+      "id": "queue",
+      "stage": "queue",
+      "title": "The merge queue keeps main working",
+      "narration": "Before merging, the queue re-tests the PR on top of the latest main, so two good changes cannot break each other, and builds the image that will ship. Then it merges, with no button pressed.",
+      "wait": [
+        { "kind": "pr.merged", "subject": "pr#{pr}", "description": "The merge queue merges the PR into main" }
+      ],
+      "timeoutSeconds": 1800
+    },
+    {
+      "id": "deploy",
+      "stage": "deploy",
+      "title": "Merging is deploying",
+      "narration": "The image CI already built goes to staging, passes smoke tests, then rolls out to production. If the new version is unhealthy, AWS rolls it back on its own.",
+      "wait": [
+        { "kind": "deploy.succeeded", "subject": "prod", "description": "The new version is live in production" }
+      ],
+      "failOn": [
+        { "kind": "deploy.rolledback", "subject": "prod", "description": "Production rolled the release back" }
+      ],
+      "timeoutSeconds": 1800
+    },
+    {
+      "id": "monitor",
+      "stage": "monitor",
+      "title": "Production watches itself",
+      "narration": "Logs, metrics and alarms track every request. When something breaks, an agent investigates and opens an issue, and the loop starts again.",
+      "wait": [
+        { "condition": "alarms-ok", "description": "Every production alarm is OK" }
+      ],
+      "timeoutSeconds": 600
+    }
+  ],
+  "reset": [
+    { "label": "Close the demo issue", "kind": "github.closeIssue", "args": { "number": "{issue}" } }
+  ]
+}

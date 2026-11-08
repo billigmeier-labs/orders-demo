@@ -1,0 +1,229 @@
+@model RunView
+@{
+    var v = Model;
+    var step = v.FocusStep;
+    var snap = step.Snap;
+    var scenarioId = v.Scenario.Id;
+    var isActive = v.Run is null ? step.Index == 0 : step.Index == v.ActiveIndex;
+    var stageName = step.Def.Stage is not null ? v.StageName(step.Def.Stage) : $"Step {step.Index + 1}";
+    var explain = step.ExplainId is { } ex && Explainers.Find(ex) is { } exp ? exp : null;
+    string ViewUrl(int i) => $"/present?scenario={scenarioId}&view={v.Steps[i].Def.Id}";
+}
+<div class="run" data-testid="run" data-run-state="@v.RunState" data-run-id="@(v.Run?.Id ?? "")" data-active-step="@(v.Run?.ActiveStepId ?? "")" data-focus-step="@step.Def.Id">
+
+    <div class="run-bar">
+        <div class="run-state">
+            <span class="pill @(v.RunState switch { "running" => "pill-info", "completed" => "pill-ok", "failed" => "pill-bad", _ => "pill-muted" })" data-testid="run-state" data-run-state="@v.RunState">@v.RunState</span>
+            @if (v.LockedBy is not null)
+            {
+                <span class="warn-text" data-testid="run-locked">“@v.LockedBy” is running. Reset it before starting this one.</span>
+            }
+            else if (v.Run is null)
+            {
+                <span class="muted small">Not started. The first step's button starts it.</span>
+            }
+            else
+            {
+                <span class="muted small">Started @Fmt.Time(v.Run.StartedAt)@(v.Run.EndedAt is { } end ? " · ended " : "")@Fmt.Time(v.Run.EndedAt)</span>
+            }
+        </div>
+        @if (v.LockedBy is null)
+        {
+            <button type="button" class="btn" data-testid="scenario-reset" data-action-url="/api/scenarios/@scenarioId/reset"
+                    data-confirm="Reset @v.Scenario.Title? This runs its clean-up actions.">Reset scenario</button>
+        }
+    </div>
+
+    @if (v.Scenario.Tour)
+    {
+        <nav aria-label="Lifecycle" class="card lifecycle">
+            <div class="row-between">
+                <div class="eyebrow">The whole loop</div>
+                <div class="muted small">Click any stage to see what it is</div>
+            </div>
+            <div class="stages">
+                @for (var i = 0; i < TourContent.Stages.Count; i++)
+                {
+                    var s = TourContent.Stages[i];
+                    var sv = v.Steps.FirstOrDefault(x => x.Def.Stage == s.Id);
+                    var state = sv?.State ?? StepStates.Pending;
+                    var cls = sv is not null && sv.Index == step.Index ? "stage active" : state == StepStates.Done ? "stage done" : "stage";
+                    <div class="stage-wrap">
+                        <button type="button" class="@cls" data-explain="@s.Id" data-stage="@s.Id" data-stage-state="@state">
+                            @if (state == StepStates.Done)
+                            {
+                                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg>
+                            }
+                            <span>@s.Name</span>
+                        </button>
+                        @if (i < TourContent.Stages.Count - 1)
+                        {
+                            <svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" fill="none" stroke="#A9ACA4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h15M11 1.5L16 6l-5 4.5"></path></svg>
+                        }
+                    </div>
+                }
+            </div>
+        </nav>
+    }
+
+    <div class="present-main">
+        <section aria-label="Narration" class="card narration" data-testid="narration" data-step="@step.Def.Id" data-step-state="@step.State">
+            <div class="eyebrow accent">@stageName</div>
+            <h1 class="narration-title" data-testid="step-title">@step.Def.Title</h1>
+            <p class="narration-text">@step.Def.Narration</p>
+            @if (explain is not null)
+            {
+                <button type="button" class="explain-link" data-explain="@explain.Id" data-testid="explain-current">
+                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"></circle><path d="M10 9v5M10 6.2v.1" stroke-linecap="round"></path></svg>
+                    <span>What is @explain.Name?</span>
+                </button>
+            }
+
+            <div class="narration-foot">
+                <div class="step-status" data-testid="step-status" data-step-state="@step.State">
+                    @switch (step.State)
+                    {
+                        case StepStates.Waiting when snap is not null:
+                            var elapsed = v.Now - (snap.WaitStartedAt ?? v.Now);
+                            <div class="status-box waiting">
+                                <span class="spinner" aria-hidden="true"></span>
+                                <div>
+                                    <strong>Still waiting</strong> <span class="muted small" data-testid="wait-elapsed">@Fmt.Seconds(elapsed) of @snap.TimeoutSeconds s</span>
+                                    <ul class="waits">
+                                        @foreach (var w in snap.Waits)
+                                        {
+                                            <li data-wait-satisfied="@(w.Satisfied ? "true" : "false")">@(w.Satisfied ? "✓" : "…") @w.Description</li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                            break;
+                        case StepStates.Running:
+                            <div class="status-box waiting"><span class="spinner" aria-hidden="true"></span><strong>Working…</strong></div>
+                            break;
+                        case StepStates.Done:
+                            <div class="status-box ok"><strong>Done</strong> @Fmt.Time(snap?.CompletedAt)</div>
+                            break;
+                        case StepStates.Failed:
+                        case StepStates.TimedOut:
+                            <div class="status-box bad" data-testid="step-message">
+                                <strong>@(step.State == StepStates.TimedOut ? "Timed out" : "Failed")</strong>
+                                <div>@snap?.Message</div>
+                            </div>
+                            break;
+                        case StepStates.Locked:
+                            <div class="status-box bad">Another scenario is running.</div>
+                            break;
+                        case StepStates.Pending:
+                            <div class="status-box muted-box">Waits for the steps before it.</div>
+                            break;
+                    }
+                </div>
+
+                @if (step.CanAct && isActive && v.LockedBy is null)
+                {
+                    <button type="button" class="btn-primary" id="action-@scenarioId-@step.Def.Id" data-testid="step-action" data-step-action="@step.Def.Id"
+                            data-action-url="/api/scenarios/@scenarioId/steps/@step.Def.Id/action">
+                        <span>@(step.State == StepStates.Failed ? "Try again: " : "")@step.Def.Action!.Label</span>
+                        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h12M10 4l5 5-5 5"></path></svg>
+                    </button>
+                }
+                @if (step.CanExtend)
+                {
+                    <button type="button" class="btn" data-testid="step-extend" data-step-extend="@step.Def.Id"
+                            data-action-url="/api/scenarios/@scenarioId/steps/@step.Def.Id/extend">Keep waiting another @step.Def.TimeoutSeconds s</button>
+                }
+                <div class="row-between">
+                    @if (step.Index > 0)
+                    {
+                        <a class="btn" href="@ViewUrl(step.Index - 1)" data-testid="view-back">Back</a>
+                    }
+                    else
+                    {
+                        <span class="btn disabled" aria-disabled="true">Back</span>
+                    }
+                    @if (Context.Request.Query.ContainsKey("view"))
+                    {
+                        <a class="btn" href="/present?scenario=@scenarioId" data-testid="view-follow">Follow the run</a>
+                    }
+                    @if (step.Index < v.Steps.Count - 1)
+                    {
+                        <a class="btn" href="@ViewUrl(step.Index + 1)" data-testid="view-next">Next</a>
+                    }
+                    else
+                    {
+                        <span class="btn disabled" aria-disabled="true">Next</span>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section aria-label="Live view" class="card live" data-testid="live-view">
+            <div class="row-between">
+                <div class="live-badge"><span class="dot dot-ok" aria-hidden="true"></span><span>Live view</span></div>
+                <div class="muted small">Real events, polled every few seconds</div>
+            </div>
+
+            @if (v.Vars is { } vars && (vars.ContainsKey("issue") || vars.ContainsKey("pr")))
+            {
+                <div class="links-row" data-testid="run-links">
+                    @if (vars.TryGetValue("issue", out var issue))
+                    {
+                        <a class="chip" data-testid="run-issue" href="@(vars.GetValueOrDefault("issueUrl") ?? "#")" target="_blank" rel="noopener">Issue #@issue</a>
+                    }
+                    @if (vars.TryGetValue("pr", out var pr))
+                    {
+                        <a class="chip" data-testid="run-pr" href="@(vars.GetValueOrDefault("prUrl") ?? "#")" target="_blank" rel="noopener">PR #@pr</a>
+                        <a class="chip" href="https://pr-@(pr).demo.joshb.app" target="_blank" rel="noopener">Preview pr-@pr</a>
+                    }
+                </div>
+            }
+
+            <ol class="steps" data-testid="steps">
+                @foreach (var s in v.Steps)
+                {
+                    <li class="step-row state-@s.State @(s.Index == step.Index ? "focus" : "")" data-step="@s.Def.Id" data-step-state="@s.State" data-testid="step-@s.Def.Id">
+                        <a class="step-link" href="@ViewUrl(s.Index)">
+                            <span class="step-num">@(s.State == StepStates.Done ? "✓" : (s.Index + 1).ToString())</span>
+                            <span class="grow">@s.Def.Title</span>
+                            <span class="pill small state-pill">@Fmt.StateLabel(s.State)</span>
+                        </a>
+                        @if (s.Snap is { } sn && (sn.Output.Count > 0 || sn.Message is not null))
+                        {
+                            <ul class="step-output" data-testid="step-output-@s.Def.Id">
+                                @foreach (var line in sn.Output)
+                                {
+                                    <li class="@(line.Text.StartsWith("    ", StringComparison.Ordinal) ? "indent" : "")">@if (line.Url is not null) { <a href="@line.Url" target="_blank" rel="noopener">@line.Text.Trim()</a> } else { @line.Text.Trim() }</li>
+                                }
+                                @if (sn.Message is not null && s.State is StepStates.Failed or StepStates.TimedOut)
+                                {
+                                    <li class="error">@sn.Message</li>
+                                }
+                            </ul>
+                        }
+                    </li>
+                }
+            </ol>
+
+            <div class="sub-head">What happened</div>
+            <ul class="log" data-testid="run-log">
+                @if (v.Run is null)
+                {
+                    <li class="muted">Nothing yet. Press “@(v.Steps[0].Def.Action?.Label ?? "Start")” to begin.</li>
+                }
+                else
+                {
+                    foreach (var entry in v.Run.Log.AsEnumerable().Reverse().Take(12))
+                    {
+                        <li><span class="muted">@Fmt.Time(entry.At)</span> @if (entry.Url is not null) { <a href="@entry.Url" target="_blank" rel="noopener">@entry.Text</a> } else { @entry.Text }</li>
+                    }
+                }
+            </ul>
+        </section>
+    </div>
+
+    @if (v.Scenario.Tour && step.Def.Stage is { } stage && TourContent.Where.TryGetValue(stage, out var where))
+    {
+        <partial name="_WhereRunning" model="(where, v.Vars)" />
+    }
+</div>

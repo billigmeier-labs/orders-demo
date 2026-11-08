@@ -1,0 +1,15 @@
+@model (string Id, string Text)
+@{
+    var known = Explainers.Find(Model.Id) is not null;
+}
+@if (known)
+{
+    <button type="button" class="explain-link" data-explain="@Model.Id" aria-label="What is @Model.Text?">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"></circle><path d="M10 9v5M10 6.2v.1" stroke-linecap="round"></path></svg>
+        <span>@Model.Text</span>
+    </button>
+}
+else
+{
+    <span>@Model.Text</span>
+}

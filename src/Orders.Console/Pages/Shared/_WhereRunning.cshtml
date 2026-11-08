@@ -1,0 +1,52 @@
+@model (WhereRunning Where, IReadOnlyDictionary<string, string>? Vars)
+@{
+    var here = Model.Where;
+}
+<section aria-label="Where this is running" class="card where" data-testid="where-running">
+    <div class="row-between">
+        <div class="eyebrow">Where this is running</div>
+        <div class="muted small">Highlighted: the parts working in this step</div>
+    </div>
+    <div class="flow">
+        @for (var i = 0; i < here.Flow.Count; i++)
+        {
+            <span class="flow-item">@here.Flow[i]</span>
+            @if (i < here.Flow.Count - 1)
+            {
+                <svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" fill="none" stroke="#1F4FC4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h15M11 1.5L16 6l-5 4.5"></path></svg>
+            }
+        }
+    </div>
+    <div class="zones">
+        @foreach (var (title, sub, nodes, cls) in new[]
+        {
+            ("GitHub", "github.com, in our org", TourContent.GitHubNodes, "zone zone-github"),
+            ("AWS", "our account, defined in Terraform", TourContent.AwsNodes, "zone zone-aws"),
+            ("AI service", "called over the internet", TourContent.AiNodes, "zone zone-ai"),
+        })
+        {
+            <div class="@cls">
+                <div class="row-between"><span class="strong">@title</span><span class="muted small">@sub</span></div>
+                <div class="@(title == "AWS" ? "zone-grid" : "zone-list")">
+                    @foreach (var n in nodes)
+                    {
+                        var on = here.On.Contains(n.Id);
+                        <div class="node @(on ? "on" : "")" data-node="@n.Id" data-node-on="@(on ? "true" : "false")">
+                            <button type="button" class="node-name" data-explain="@n.Explain">@n.Name</button>
+                            <div class="node-desc">@n.Desc</div>
+                            @if (on && here.Detail.TryGetValue(n.Id, out var details))
+                            {
+                                <div class="node-detail">
+                                    @foreach (var d in details)
+                                    {
+                                        <div class="detail"><div class="mono detail-k">@TourContent.Fill(d.K, Model.Vars)</div><div class="detail-v">@TourContent.Fill(d.V, Model.Vars)</div></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>

@@ -1,0 +1,101 @@
+{
+  "id": "risky-change",
+  "title": "A risky change waits for a person",
+  "summary": "A database migration is routed to a human, and its PR waits for a review.",
+  "order": 40,
+  "steps": [
+    {
+      "id": "issue",
+      "stage": "issue",
+      "title": "Ask for a database change",
+      "narration": "Schema changes are risky: they touch production data and must work with the old and new code at the same time.",
+      "action": {
+        "label": "Create the migration issue",
+        "kind": "github.createIssue",
+        "args": {
+          "title": "Add an index on orders.customer_id",
+          "labels": "demo",
+          "body": "Listing a customer's orders is slow. Add an EF Core migration that creates an index on `orders.customer_id`.\n\n_Opened by the demo console risky-change scenario._"
+        }
+      },
+      "wait": [
+        {
+          "kind": "issue.opened",
+          "subject": "issue#{issue}",
+          "description": "GitHub records the new issue"
+        }
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "triage",
+      "stage": "triage",
+      "title": "Triage routes it to a human",
+      "narration": "The triager scores it high risk because it adds a migration, and labels it needs-human.",
+      "wait": [
+        {
+          "kind": "issue.labeled",
+          "subject": "issue#{issue}",
+          "detailContains": [
+            "needs-human"
+          ],
+          "description": "Triage labels the issue needs-human"
+        }
+      ],
+      "failOn": [
+        {
+          "kind": "issue.labeled",
+          "subject": "issue#{issue}",
+          "detailContains": [
+            "agent"
+          ],
+          "description": "Triage gave it to an agent"
+        }
+      ],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "agent",
+      "stage": "agent",
+      "title": "A person hands it to the agent anyway",
+      "narration": "The presenter assigns the issue to the agent in GitHub. The agent writes the migration and opens a PR, but it cannot merge it on its own.",
+      "wait": [
+        {
+          "kind": "pr.opened",
+          "detailContains": [
+            "#{issue}"
+          ],
+          "capture": "pr",
+          "description": "A PR for the migration issue is opened"
+        }
+      ],
+      "timeoutSeconds": 2400
+    },
+    {
+      "id": "review",
+      "stage": "checks",
+      "title": "The PR waits for a review",
+      "narration": "CODEOWNERS covers migrations, so a person has to approve the PR before the merge queue will take it. Here it is, waiting.",
+      "action": {
+        "label": "Show PRs waiting for review",
+        "kind": "github.listAwaitingReview"
+      }
+    }
+  ],
+  "reset": [
+    {
+      "label": "Close the migration issue",
+      "kind": "github.closeIssue",
+      "args": {
+        "number": "{issue}"
+      }
+    },
+    {
+      "label": "Close the migration PR",
+      "kind": "github.closePullRequest",
+      "args": {
+        "number": "{pr}"
+      }
+    }
+  ]
+}

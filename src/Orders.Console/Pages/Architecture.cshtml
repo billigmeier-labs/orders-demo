@@ -1,0 +1,205 @@
+@page "/architecture"
+@{
+    ViewData["Title"] = "Architecture";
+    ViewData["Mode"] = "architecture";
+}
+@section HeaderRight {
+    <span class="strong">Everything in the demo, and where it runs</span>
+}
+<section aria-label="Architecture" class="arch" data-testid="architecture">
+    <p class="lead">Every component in the demo and what runs inside it. The code and its history live in GitHub; the running app lives in AWS; the AI and sign-in come from outside services.</p>
+
+    <figure class="card arch-figure">
+<svg viewBox="0 0 1210 790" role="img" aria-label="One loop: work starts in GitHub, runs in AWS, and comes back as new work" class="arch-svg" data-testid="architecture-diagram">
+<defs>
+<marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7B818B"></path></marker>
+<marker id="arch-arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F4FC4"></path></marker>
+<marker id="arch-arrow-alert" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#C2410C"></path></marker>
+</defs>
+
+<text x="24" y="32" font-size="18" font-weight="600" fill="#16181D">One loop: work starts in GitHub, runs in AWS, and comes back as new work</text>
+
+<rect x="190" y="56" width="1000" height="234" rx="14" fill="#F4F7FC" stroke="#C9D6F5" stroke-width="1.25"></rect>
+<text x="206" y="82" font-size="15" font-weight="600" fill="#183E99">GitHub</text>
+<text x="268" y="82" font-size="12" fill="#4A4F59">code, issues, and the jobs that do the work</text>
+<text x="918" y="192" font-size="12" fill="#4A4F59">Jobs run on throwaway runners</text>
+
+<rect x="190" y="380" width="1000" height="390" rx="14" fill="#FBF8F2" stroke="#E2D5BC" stroke-width="1.25"></rect>
+<text x="206" y="402" font-size="15" font-weight="600" fill="#7A4F0E">AWS</text>
+<text x="246" y="402" font-size="12" fill="#4A4F59">the running app, all defined in Terraform</text>
+
+<g fill="none" stroke="#7B818B" stroke-width="1.4">
+<path d="M164 128H208" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M350 128H374" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M516 128H540" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M682 128H706" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M848 128H872" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M1014 128H1038" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M820 156V418" marker-end="url(#arch-arrow)"></path>
+<path d="M890 156V418" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M1110 156V418" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M1110 476V640H762" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M790 445H762" marker-end="url(#arch-arrow)"></path>
+<path d="M760 518H788" marker-end="url(#arch-arrow)"></path>
+<path d="M790 589H762" marker-end="url(#arch-arrow)"></path>
+<path d="M340 473H363" marker-end="url(#arch-arrow)"></path>
+<path d="M430 655V688" marker-end="url(#arch-arrow)"></path>
+<path d="M500 690V657" marker-end="url(#arch-arrow-alert)" stroke="#C2410C" stroke-dasharray="5 4"></path>
+<path d="M365 715H342" marker-end="url(#arch-arrow-alert)" stroke="#C2410C"></path>
+<path d="M210 715H178V236H208" marker-end="url(#arch-arrow-alert)" stroke="#C2410C"></path>
+<path d="M280 210V158" marker-end="url(#arch-arrow-alert)" stroke="#C2410C"></path>
+</g>
+<g fill="none" stroke="#8E7CC3" stroke-width="1.3" stroke-dasharray="3 3">
+<path d="M280 308V262"></path>
+<path d="M446 308V156"></path>
+<path d="M612 308V156"></path>
+<path d="M690 333H730V156"></path>
+</g>
+
+<text x="812" y="300" font-size="12" fill="#4A4F59" text-anchor="end">preview image</text>
+<text x="898" y="300" font-size="12" fill="#183E99">release image</text>
+<text x="1102" y="342" font-size="12" fill="#183E99" text-anchor="end">signs in, no stored keys</text>
+<text x="935" y="630" font-size="12" fill="#183E99" text-anchor="middle">deploys previews, staging, prod</text>
+<text x="738" y="250" font-size="12" fill="#5B4A99">AI calls</text>
+<text x="422" y="677" font-size="12" fill="#4A4F59" text-anchor="end">logs, metrics</text>
+<text x="508" y="677" font-size="12" fill="#C2410C">rollback if unhealthy</text>
+<text x="288" y="188" font-size="12" fill="#C2410C">opens an issue</text>
+<text x="24" y="466" font-size="12" fill="#C2410C">an alarm starts</text>
+<text x="24" y="482" font-size="12" fill="#C2410C">the incident job</text>
+
+<rect x="24" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#7B818B" stroke-width="1.25"></rect>
+<text x="94" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">You and the team</text>
+<text x="94" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">ask for changes</text>
+
+<rect x="210" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="280" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Issue</text>
+<text x="280" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">the unit of work</text>
+<rect x="376" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="446" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Triage job</text>
+<text x="446" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">scores and assigns</text>
+<rect x="542" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="612" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Agent job</text>
+<text x="612" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">writes code, tests</text>
+<rect x="708" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="778" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">PR checks</text>
+<text x="778" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">build, test, review</text>
+<rect x="874" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="944" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Merge queue</text>
+<text x="944" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">re-test, build, merge</text>
+<rect x="1040" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="1110" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Deploy job</text>
+<text x="1110" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">staging, then prod</text>
+
+<rect x="210" y="210" width="140" height="52" rx="8" fill="#FFFFFF" stroke="#C2410C" stroke-width="1.5"></rect>
+<text x="280" y="232" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Incident job</text>
+<text x="280" y="249" font-size="11.5" fill="#4A4F59" text-anchor="middle">on an alarm</text>
+
+<rect x="210" y="308" width="480" height="50" rx="8" fill="#F4F1FB" stroke="#8E7CC3" stroke-width="1.5"></rect>
+<text x="450" y="329" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Claude, the AI model (outside service)</text>
+<text x="450" y="346" font-size="11.5" fill="#4A4F59" text-anchor="middle">called by triage, the agent, AI review and the incident job</text>
+
+<rect x="210" y="445" width="130" height="56" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="275" y="469" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Load balancer</text>
+<text x="275" y="486" font-size="11.5" fill="#4A4F59" text-anchor="middle">routes by hostname</text>
+
+<rect x="365" y="405" width="395" height="250" rx="12" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.5"></rect>
+<text x="389" y="429" font-size="13" font-weight="600" fill="#16181D">ECS cluster: demo</text>
+<text x="522" y="429" font-size="11.5" fill="#4A4F59">containers, no servers to manage</text>
+<rect x="380" y="445" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="467" y="464" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service prod</text>
+<text x="467" y="480" font-size="11.5" fill="#4A4F59" text-anchor="middle">2 tasks</text>
+<rect x="380" y="500" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="467" y="519" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service staging</text>
+<text x="467" y="535" font-size="11.5" fill="#4A4F59" text-anchor="middle">1 task</text>
+<rect x="380" y="555" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="467" y="574" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service pr-N</text>
+<text x="467" y="590" font-size="11.5" fill="#4A4F59" text-anchor="middle">1 task per open PR</text>
+<rect x="570" y="445" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="657" y="464" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service console</text>
+<text x="657" y="480" font-size="11.5" fill="#4A4F59" text-anchor="middle">this demo console</text>
+<rect x="570" y="500" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="657" y="519" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">task load-generator</text>
+<text x="657" y="535" font-size="11.5" fill="#4A4F59" text-anchor="middle">simulated users</text>
+<rect x="570" y="555" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="657" y="574" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">task migrate</text>
+<text x="657" y="590" font-size="11.5" fill="#4A4F59" text-anchor="middle">runs once, then exits</text>
+<text x="380" y="626" font-size="11.5" fill="#4A4F59">A task is one running copy of a container.</text>
+
+<rect x="790" y="420" width="120" height="50" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="850" y="441" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">ECR</text>
+<text x="850" y="457" font-size="11.5" fill="#4A4F59" text-anchor="middle">app images</text>
+<rect x="790" y="490" width="120" height="56" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="850" y="513" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">RDS Postgres</text>
+<text x="850" y="530" font-size="11.5" fill="#4A4F59" text-anchor="middle">prod + non-prod</text>
+<rect x="790" y="566" width="120" height="46" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="850" y="585" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">AppConfig</text>
+<text x="850" y="601" font-size="11.5" fill="#4A4F59" text-anchor="middle">feature flags</text>
+
+<rect x="1050" y="420" width="120" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="1110" y="443" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">IAM role</text>
+<text x="1110" y="460" font-size="11.5" fill="#4A4F59" text-anchor="middle">only what it needs</text>
+
+<rect x="365" y="690" width="190" height="50" rx="8" fill="#FFFFFF" stroke="#C2410C" stroke-width="1.5"></rect>
+<text x="460" y="711" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">CloudWatch</text>
+<text x="460" y="727" font-size="11.5" fill="#4A4F59" text-anchor="middle">logs, metrics, alarms</text>
+<rect x="210" y="690" width="130" height="50" rx="8" fill="#FFFFFF" stroke="#C2410C" stroke-width="1.5"></rect>
+<text x="275" y="711" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">EventBridge</text>
+<text x="275" y="727" font-size="11.5" fill="#4A4F59" text-anchor="middle">routes the alarm</text>
+
+<g font-size="11" font-weight="700" text-anchor="middle" fill="#FFFFFF">
+<circle cx="210" cy="100" r="11" fill="#1F4FC4"></circle><text x="210" y="104">1</text>
+<circle cx="376" cy="100" r="11" fill="#1F4FC4"></circle><text x="376" y="104">2</text>
+<circle cx="542" cy="100" r="11" fill="#1F4FC4"></circle><text x="542" y="104">3</text>
+<circle cx="708" cy="100" r="11" fill="#1F4FC4"></circle><text x="708" y="104">4</text>
+<circle cx="874" cy="100" r="11" fill="#1F4FC4"></circle><text x="874" y="104">5</text>
+<circle cx="1040" cy="100" r="11" fill="#1F4FC4"></circle><text x="1040" y="104">6</text>
+<circle cx="365" cy="405" r="11" fill="#9C6A12"></circle><text x="365" y="409">7</text>
+<circle cx="365" cy="690" r="11" fill="#C2410C"></circle><text x="365" y="694">8</text>
+<circle cx="210" cy="210" r="11" fill="#C2410C"></circle><text x="210" y="214">9</text>
+</g>
+</svg>
+        <figcaption class="arch-caption">
+            <span><strong class="c-accent">1 to 6</strong> every change, from request to production</span>
+            <span><strong class="c-amber">7</strong> the running app and what it uses</span>
+            <span><strong class="c-alert">8 and 9</strong> how a problem in production becomes new work</span>
+            <span><span class="c-ai strong">Dotted</span> calls to the AI model</span>
+        </figcaption>
+    </figure>
+
+    <div class="section-title">Every component, in detail</div>
+    <div class="arch-zones">
+        @foreach (var z in ArchitectureContent.Zones)
+        {
+            <div class="card arch-zone" style="flex: @z.Flex" data-zone="@z.Name">
+                <div class="row-between wrap">
+                    <span class="zone-title">@z.Name</span>
+                    <span class="muted small">@z.Where</span>
+                </div>
+                <div class="arch-grid">
+                    @foreach (var c in z.Items)
+                    {
+                        <div class="component" data-component="@c.Name">
+                            <div class="row-between">
+                                @if (c.Explain is not null)
+                                {
+                                    <button type="button" class="component-name" data-explain="@c.Explain">@c.Name</button>
+                                }
+                                else
+                                {
+                                    <span class="component-name">@c.Name</span>
+                                }
+                            </div>
+                            <div class="component-desc">@c.Desc</div>
+                            <div class="subs">
+                                @foreach (var s in c.Subs)
+                                {
+                                    <div class="detail plain"><div class="mono detail-k">@s.K</div><div class="detail-v">@s.V</div></div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>

@@ -1,0 +1,90 @@
+{
+  "id": "bad-deploy",
+  "title": "A bad deploy rolls itself back",
+  "summary": "Merge a change with a hidden bug while users are on the site, and watch AWS undo it.",
+  "order": 10,
+  "steps": [
+    {
+      "id": "load",
+      "title": "Put normal traffic on production",
+      "narration": "A load generator in AWS plays the part of customers browsing and ordering, so there is real traffic when the bad version arrives.",
+      "explain": "load-generator",
+      "action": { "label": "Start normal load", "kind": "load.start", "args": { "scenario": "normal", "durationMinutes": "20" } }
+    },
+    {
+      "id": "pr",
+      "title": "Open a change with a hidden bug",
+      "narration": "This pull request looks fine and passes every check. The bug only shows up under real traffic.",
+      "explain": "pull-request",
+      "action": {
+        "label": "Open the canned bug PR",
+        "kind": "github.openPullRequest",
+        "args": {
+          "head": "demo/canned-bug",
+          "base": "main",
+          "title": "perf: cache product prices",
+          "body": "Demo scenario `bad-deploy`: this change passes CI but fails under load. Opened by the demo console."
+        }
+      }
+    },
+    {
+      "id": "merge",
+      "stage": "queue",
+      "title": "Checks pass and the queue merges it",
+      "narration": "Tests cannot catch everything. Every check is green, so the merge queue merges it like any other change.",
+      "wait": [
+        { "kind": "pr.merged", "subject": "pr#{pr}", "description": "The merge queue merges the PR" }
+      ],
+      "failOn": [
+        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: failure"], "description": "CI caught it before merge" }
+      ],
+      "timeoutSeconds": 1800
+    },
+    {
+      "id": "deploy",
+      "stage": "deploy",
+      "title": "The deploy starts",
+      "narration": "Merging is deploying. The new image goes to staging, then production.",
+      "wait": [
+        { "kind": "deploy.started", "subject": "prod", "description": "A deploy to production starts" }
+      ],
+      "timeoutSeconds": 1200
+    },
+    {
+      "id": "alarm",
+      "stage": "monitor",
+      "title": "An alarm fires",
+      "narration": "Under real traffic the new version starts failing requests. CloudWatch notices within a minute.",
+      "explain": "alarm",
+      "wait": [
+        { "kind": "alarm.alarm", "description": "A production alarm goes into ALARM" }
+      ],
+      "timeoutSeconds": 900
+    },
+    {
+      "id": "rollback",
+      "stage": "deploy",
+      "title": "AWS rolls it back",
+      "narration": "The deployment is unhealthy, so ECS puts the previous version back on its own. Nobody was paged to do it.",
+      "explain": "rollback",
+      "wait": [
+        { "kind": "deploy.rolledback", "subject": "prod", "description": "Production rolls back to the previous version" }
+      ],
+      "timeoutSeconds": 900
+    },
+    {
+      "id": "recovered",
+      "stage": "monitor",
+      "title": "Production is healthy again",
+      "narration": "The alarm clears once the old version is serving every request.",
+      "wait": [
+        { "condition": "alarms-ok", "description": "Every production alarm is OK" }
+      ],
+      "timeoutSeconds": 900
+    }
+  ],
+  "reset": [
+    { "label": "Stop the load generator", "kind": "load.stop" },
+    { "label": "Close the canned bug PR", "kind": "github.closePullRequest", "args": { "number": "{pr}" } }
+  ]
+}

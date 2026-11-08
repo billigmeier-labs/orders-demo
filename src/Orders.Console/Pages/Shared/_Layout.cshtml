@@ -1,0 +1,45 @@
+@inject ConsoleOptions Options
+@{
+    var mode = ViewData["Mode"] as string ?? "status";
+    string Current(string m) => m == mode ? "page" : "false";
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@ViewData["Title"] · Demo Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true">
+</head>
+<body data-mode="@mode" data-fakes="@(Options.Fakes ? "true" : "false")">
+<div class="page">
+    <header class="top">
+        <div class="top-left">
+            <div class="brand">Demo Console</div>
+            <nav class="tabs" aria-label="Mode">
+                <a href="/" class="tab" aria-current="@Current("status")" data-testid="nav-status">Status</a>
+                <a href="/present" class="tab" aria-current="@Current("present")" data-testid="nav-present">Present</a>
+                <a href="/architecture" class="tab" aria-current="@Current("architecture")" data-testid="nav-architecture">Architecture</a>
+            </nav>
+            @if (Options.Fakes)
+            {
+                <span class="pill pill-warn" data-testid="fake-mode" title="CONSOLE_FAKES=true: GitHub and AWS are simulated">Fake data</span>
+            }
+        </div>
+        <div class="top-right">
+            @RenderSection("HeaderRight", required: false)
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <span class="muted small" data-testid="identity">@User.Identity.Name</span>
+            }
+        </div>
+    </header>
+    @RenderBody()
+</div>
+<partial name="_Explainers" />
+<div id="toast" class="toast" role="status" aria-live="polite" data-testid="toast" hidden></div>
+<script src="~/js/console.js" asp-append-version="true"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+@inject ConsoleOptions Options
+<div id="explainer" class="drawer-backdrop" data-testid="explainer-drawer" data-open="false" data-explain-id="" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="explainer-title">
+        <div class="drawer-head">
+            <div>
+                <div class="eyebrow accent">Explainer</div>
+                <h2 id="explainer-title" class="drawer-title" data-testid="explainer-title"></h2>
+            </div>
+            <button type="button" class="icon-button" data-explain-close aria-label="Close explainer" data-testid="explainer-close">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#33373F" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"></path></svg>
+            </button>
+        </div>
+        <div id="explainer-body" class="drawer-body"></div>
+    </aside>
+</div>
+@foreach (var e in Explainers.All)
+{
+    var link = Explainers.ResolveLink(e, Options);
+    <template id="explain-@e.Id" data-name="@e.Name">
+        <section class="ex-section"><div class="ex-label">What it is</div><p class="ex-text" data-testid="explainer-what">@e.What</p></section>
+        <section class="ex-section"><div class="ex-label">Built with</div><p class="ex-text">@e.Tech</p></section>
+        <section class="ex-azure"><div class="ex-label dark">If you know Azure</div><p data-testid="explainer-azure">@e.Azure</p></section>
+        <section class="ex-section">
+            <div class="ex-label">See the real thing</div>
+            @if (link is not null)
+            {
+                <p class="mono accent"><a href="@link" target="_blank" rel="noopener" data-testid="explainer-link">@e.Where</a></p>
+            }
+            else
+            {
+                <p class="mono accent">@e.Where</p>
+            }
+        </section>
+    </template>
+}

@@ -1,0 +1,32 @@
+@page "/present"
+@model PresentModel
+@{
+    ViewData["Title"] = Model.View.Scenario.Title;
+    ViewData["Mode"] = "present";
+    var v = Model.View;
+}
+@section HeaderRight {
+    <div class="header-run">
+        <span class="strong">@v.Scenario.Title</span>
+        <span>Step @(v.ActiveIndex + 1) of @v.Steps.Count</span>
+    </div>
+}
+<div class="present">
+    <nav class="scenario-nav" aria-label="Scenarios" data-testid="scenario-library">
+        <a class="scenario-chip @(v.Scenario.Tour ? "active" : "")" href="/present" data-scenario="tour" aria-current="@(v.Scenario.Tour ? "page" : "false")">The Tour</a>
+        <span class="muted small">Scenario library:</span>
+        @foreach (var s in v.Library)
+        {
+            var running = v.AnyRun?.ScenarioId == s.Id ? v.AnyRun.State : null;
+            <a class="scenario-chip @(s.Id == v.Scenario.Id ? "active" : "")" href="/present?scenario=@s.Id" data-scenario="@s.Id"
+               aria-current="@(s.Id == v.Scenario.Id ? "page" : "false")" title="@s.Summary">
+                @s.Title
+                @if (running is not null) { <span class="pill pill-info small">@running</span> }
+            </a>
+        }
+    </nav>
+
+    <div id="run-live" data-testid="run-live" data-scenario-id="@v.Scenario.Id" data-poll-url="@Model.PollUrl" data-poll-seconds="3">
+        <partial name="_RunLive" model="v" />
+    </div>
+</div>

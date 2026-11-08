@@ -1,0 +1,12 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Status";
+    ViewData["Mode"] = "status";
+}
+@section HeaderRight {
+    <span class="muted small">Live status, refreshes every @Model.RefreshSeconds s</span>
+}
+<div id="status-live" data-testid="status-live" data-poll-url="/?handler=Live" data-poll-seconds="@Model.RefreshSeconds">
+    <partial name="_StatusLive" model="Model.Snapshot" />
+</div>
