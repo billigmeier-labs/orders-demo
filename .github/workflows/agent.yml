@@ -26,11 +26,11 @@ jobs:
     env:
       ISSUE: ${{ github.event.issue.number }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Claude works the issue
         id: work
@@ -72,13 +72,13 @@ jobs:
     env:
       PR: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

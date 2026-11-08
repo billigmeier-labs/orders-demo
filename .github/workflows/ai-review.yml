@@ -57,7 +57,7 @@ jobs:
           echo "::error::The AI review blocked this PR twice. A human needs to review it (or comment '/override-ai-review')."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: github.event_name == 'pull_request' && steps.override.outcome == 'skipped'
         with:
           fetch-depth: 0
