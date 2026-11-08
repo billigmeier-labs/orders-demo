@@ -103,6 +103,7 @@ public class OrderTests(ApiFixture fixture)
         Assert.Equal((1, 2, 3), (page1.Page, page1.PageSize, page1.TotalCount));
         Assert.Equal([third.Id, second.Id], page1.Items.Select(o => o.Id));
         Assert.Equal(30m, page1.Items[0].Total);
+        Assert.Equal(2, page1.Items[0].Total.Scale);
 
         var page2 = await ListAsync($"?customerId={customer.Id}&pageSize=2&page=2");
         Assert.Equal([first.Id], page2.Items.Select(o => o.Id));

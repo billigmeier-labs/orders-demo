@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Orders.Api.Domain;
 
 namespace Orders.Api.Data;
@@ -8,6 +9,21 @@ internal sealed class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
+
+    /// <summary>
+    /// ConnectionStrings__Orders. It may leave out the password: Npgsql then reads PGPASSWORD.
+    /// GSS (Kerberos) is off unless the string asks for it; the runtime image has no libgssapi.
+    /// </summary>
+    public static string ConnectionString(IConfiguration configuration)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(configuration.GetConnectionString("Orders"));
+        if (builder.GssEncryptionMode == GssEncryptionMode.Prefer) // Npgsql's default
+        {
+            builder.GssEncryptionMode = GssEncryptionMode.Disable;
+        }
+
+        return builder.ConnectionString;
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,6 +56,7 @@ internal sealed class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
 
         modelBuilder.Entity<OrderLine>(line =>
         {
+            line.ToTable("OrderLines");
             line.Property(l => l.UnitPrice).HasPrecision(12, 2);
             line.HasIndex("OrderId", nameof(OrderLine.Number)).IsUnique();
             line.HasOne(l => l.Product).WithMany().HasForeignKey(l => l.ProductId).OnDelete(DeleteBehavior.Restrict);

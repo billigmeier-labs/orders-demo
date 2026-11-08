@@ -40,7 +40,7 @@ internal static class SearchEndpoints
             .OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id)
             .Take(MaxResults)
             .Select(o => new OrderSummaryResponse(
-                o.Id, o.CustomerId, o.Customer.Name, o.Status, o.Lines.Sum(l => l.UnitPrice * l.Quantity), o.Lines.Count, o.CreatedAt))
+                o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
             .ToListAsync(ct);
 
         return TypedResults.Ok(new SearchResponse(products, orders));

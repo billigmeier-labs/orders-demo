@@ -112,7 +112,7 @@ namespace Orders.Api.Data.Migrations
                     b.HasIndex("OrderId", "Number")
                         .IsUnique();
 
-                    b.ToTable("OrderLine");
+                    b.ToTable("OrderLines", (string)null);
                 });
 
             modelBuilder.Entity("Orders.Api.Domain.Product", b =>

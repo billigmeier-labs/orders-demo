@@ -63,7 +63,7 @@ namespace Orders.Api.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "OrderLine",
+                name: "OrderLines",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -75,15 +75,15 @@ namespace Orders.Api.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_OrderLine", x => x.Id);
+                    table.PrimaryKey("PK_OrderLines", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_OrderLine_Orders_OrderId",
+                        name: "FK_OrderLines_Orders_OrderId",
                         column: x => x.OrderId,
                         principalTable: "Orders",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_OrderLine_Products_ProductId",
+                        name: "FK_OrderLines_Products_ProductId",
                         column: x => x.ProductId,
                         principalTable: "Products",
                         principalColumn: "Id",
@@ -97,14 +97,14 @@ namespace Orders.Api.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_OrderLine_OrderId_Number",
-                table: "OrderLine",
+                name: "IX_OrderLines_OrderId_Number",
+                table: "OrderLines",
                 columns: new[] { "OrderId", "Number" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_OrderLine_ProductId",
-                table: "OrderLine",
+                name: "IX_OrderLines_ProductId",
+                table: "OrderLines",
                 column: "ProductId");
 
             migrationBuilder.CreateIndex(
@@ -133,7 +133,7 @@ namespace Orders.Api.Data.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "OrderLine");
+                name: "OrderLines");
 
             migrationBuilder.DropTable(
                 name: "Orders");

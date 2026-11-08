@@ -42,7 +42,7 @@ internal static class OrderEndpoints
             .OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(o => new OrderSummaryResponse(
-                o.Id, o.CustomerId, o.Customer.Name, o.Status, o.Lines.Sum(l => l.UnitPrice * l.Quantity), o.Lines.Count, o.CreatedAt))
+                o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
             .ToListAsync(ct);
 
         return TypedResults.Ok(new PagedResponse<OrderSummaryResponse>(items, page, pageSize, totalCount));

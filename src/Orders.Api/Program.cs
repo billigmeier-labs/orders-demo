@@ -16,7 +16,7 @@ if (!builder.Environment.IsDevelopment())
 }
 
 builder.Services.AddDbContext<OrdersDbContext>((services, options) =>
-    options.UseNpgsql(services.GetRequiredService<IConfiguration>().GetConnectionString("Orders")));
+    options.UseNpgsql(OrdersDbContext.ConnectionString(services.GetRequiredService<IConfiguration>())));
 builder.Services.AddHealthChecks().AddDbContextCheck<OrdersDbContext>(tags: [PlatformEndpoints.ReadyTag]);
 
 builder.Services.AddProblemDetails();
@@ -27,6 +27,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IFeatureFlags, ConfigurationFeatureFlags>();
 builder.Services.AddSingleton(services => AppInfo.From(services.GetRequiredService<IConfiguration>()));
 
 var app = builder.Build();

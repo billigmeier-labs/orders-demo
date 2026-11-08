@@ -12,7 +12,7 @@ using Orders.Api.Data;
 namespace Orders.Api.Data.Migrations
 {
     [DbContext(typeof(OrdersDbContext))]
-    [Migration("20261108163913_InitialCreate")]
+    [Migration("20261108164516_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -115,7 +115,7 @@ namespace Orders.Api.Data.Migrations
                     b.HasIndex("OrderId", "Number")
                         .IsUnique();
 
-                    b.ToTable("OrderLine");
+                    b.ToTable("OrderLines", (string)null);
                 });
 
             modelBuilder.Entity("Orders.Api.Domain.Product", b =>
