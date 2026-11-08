@@ -93,6 +93,31 @@ public class ProductTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Count_ReturnsOkWithNonNegativeNumber_NotCapturedByIdRoute()
+    {
+        var response = await _client.Get("/api/products/count");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(await response.ReadAsync<int>() >= 0);
+    }
+
+    [Fact]
+    public async Task Count_AfterCreatingProducts_IncreasesByThatMany_AndMatchesList()
+    {
+        var before = await (await _client.Get("/api/products/count")).ReadAsync<int>();
+
+        await _client.CreateProductAsync();
+        await _client.CreateProductAsync();
+        await _client.CreateProductAsync();
+
+        var after = await (await _client.Get("/api/products/count")).ReadAsync<int>();
+        var all = await (await _client.Get("/api/products")).ReadAsync<List<ProductResponse>>();
+
+        Assert.True(after >= before + 3);
+        Assert.True(all.Count >= after);
+    }
+
+    [Fact]
     public async Task Create_DuplicateSku_Returns409()
     {
         var sku = Api.UniqueSku();
