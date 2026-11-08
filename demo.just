@@ -34,19 +34,25 @@ flags-off:
 bad-deploy:
     #!/usr/bin/env bash
     set -euo pipefail
-    git fetch -q origin main demo/canned-bug
-    git checkout -q main && git reset -q --hard origin/main
-    bug_title="perf(search): run the product and order lookups in parallel"
-    merged=$(git log --format='%H %s' origin/main | grep -F "$bug_title" | head -1 | cut -d' ' -f1 || true)
-    if [ -n "$merged" ] && ! git log --format=%s origin/main | grep -qF "Revert \"$bug_title"; then
-        git revert --no-edit "$merged"
+    if [ -n "$(git status --porcelain)" ]; then echo "Commit your changes first; demo resets need a clean checkout."; exit 1; fi
+    git checkout -q main
+    git fetch -q origin main
+    git merge -q --ff-only origin/main
+    # The original bug commit: the first commit whose subject starts with the bug's title (never a Revert/Reapply).
+    bug=$(git log --reverse --format='%H%x09%s' origin/main | awk -F'\t' 'index($2, "perf(search): run the product and order lookups in parallel") == 1 {print $1; exit}')
+    if [ -z "$bug" ]; then bug=$(git rev-parse -q --verify origin/demo/canned-bug 2>/dev/null || true); fi
+    if [ -z "$bug" ]; then echo "Can't find the canned bug commit."; exit 1; fi
+    # Is the bug on main right now? Decide from the code, not from commit titles.
+    if grep -q 'new NpgsqlConnection' src/Orders.Api/Features/Search/SearchEndpoints.cs; then
+        git diff "$bug^" "$bug" | git apply -R
+        git commit -qam "revert(demo): remove the canned bug after a bad-deploy demo"
         git push -q origin main
-        echo "Reverted the canned bug on main ($merged)."
+        echo "Removed the canned bug from main."
     fi
-    # Rebuild the branch as main + the bug commit, so the demo PR shows just the bug.
-    bug=$(git log --format=%H -1 origin/demo/canned-bug)
+    # Rebuild the branch as main + the bug, so the demo PR shows just the bug.
     git checkout -q -B demo/canned-bug origin/main
-    git cherry-pick -q "$bug" || { git cherry-pick --abort; echo "Cherry-pick conflicted; fix demo/canned-bug by hand."; exit 1; }
+    git diff "$bug^" "$bug" | git apply
+    git commit -qam "perf(search): run the product and order lookups in parallel"
     git push -q -f origin demo/canned-bug
     git checkout -q main
     echo "demo/canned-bug is main + the bug."
@@ -55,7 +61,8 @@ bad-deploy:
 incident:
     #!/usr/bin/env bash
     set -euo pipefail
-    git checkout -q main && git fetch -q origin main && git reset -q --hard origin/main
+    if [ -n "$(git status --porcelain)" ]; then echo "Commit your changes first; demo resets need a clean checkout."; exit 1; fi
+    git checkout -q main && git fetch -q origin main && git merge -q --ff-only origin/main
     if grep -q 'TsQuerySyntax().Replace(term, string.Empty)}:\*' {{ search_v2 }}; then
         echo "SearchV2 bug already present."; exit 0
     fi
