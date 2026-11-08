@@ -1,0 +1,28 @@
+name: Dependabot auto-merge
+
+# Patch and minor package updates from Dependabot merge on their own once every check is green,
+# through the same queue as everything else. Major updates, and anything touching .github/, wait for a human.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v2
+      - name: Turn on auto-merge for patch and minor package updates
+        if: >-
+          steps.meta.outputs.package-ecosystem == 'nuget' &&
+          (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+           steps.meta.outputs.update-type == 'version-update:semver-minor')
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto --squash

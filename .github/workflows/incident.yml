@@ -1,0 +1,119 @@
+name: Incident
+
+# AWS sends every orders-demo CloudWatch alarm change here (EventBridge → repository_dispatch).
+# ALARM: Claude investigates with a read-only AWS role and opens ONE issue per alarm (or updates the open one).
+# OK: the open issue gets a recovery comment. The new issue goes through triage like any other.
+on:
+  repository_dispatch:
+    types: [alarm]
+  workflow_dispatch:
+    inputs:
+      alarmName:
+        description: Alarm name to investigate (for testing)
+        required: true
+      state:
+        description: ALARM or OK
+        default: ALARM
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: incident-${{ github.event.client_payload.alarmName || inputs.alarmName }}
+
+jobs:
+  incident:
+    name: incident
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ALARM: ${{ github.event.client_payload.alarmName || inputs.alarmName }}
+      STATE: ${{ github.event.client_payload.state || inputs.state }}
+      REASON: ${{ github.event.client_payload.reason || 'manual test' }}
+      AT: ${{ github.event.client_payload.time || github.event.repository.updated_at }}
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+    steps:
+      - name: Find the open issue for this alarm
+        id: find
+        run: |
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --label incident --search "\"$ALARM\" in:title" --json number --jq '.[0].number // empty')
+          echo "issue=$n" >> "$GITHUB_OUTPUT"
+          echo "Alarm $ALARM is $STATE; open issue: ${n:-none}"
+
+      - name: Recovery
+        if: env.STATE == 'OK'
+        env:
+          ISSUE: ${{ steps.find.outputs.issue }}
+        run: |
+          if [ -z "$ISSUE" ]; then echo "No open incident for $ALARM; nothing to do."; exit 0; fi
+          gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body "**Recovered** at $AT: \`$ALARM\` is back to OK."
+
+      - name: Repeat alarm on an open incident
+        if: env.STATE == 'ALARM' && steps.find.outputs.issue != ''
+        env:
+          ISSUE: ${{ steps.find.outputs.issue }}
+        run: |
+          gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body "**Alarm again** at $AT: \`$ALARM\`. $REASON"
+
+      - uses: actions/checkout@v4
+        if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
+        with:
+          fetch-depth: 30
+
+      - name: Read-only AWS access
+        if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-incident-readonly
+          aws-region: us-east-1
+
+      - name: Claude investigates
+        id: investigate
+        if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the incident investigator for this repository's production environment on AWS (read-only access).
+            CloudWatch alarm `${{ env.ALARM }}` went into ALARM at ${{ env.AT }}. Reason from AWS: ${{ env.REASON }}
+
+            Investigate, then explain what is happening for a programmer who will fix it:
+            1. `aws cloudwatch describe-alarms --alarm-names "${{ env.ALARM }}"` for what it measures.
+            2. Recent errors from the affected service's logs, e.g.
+               `aws logs filter-log-events --log-group-name /ecs/orders-demo/api-prod --start-time <ms 20 minutes ago> --filter-pattern '?error ?Error ?Exception ?FaultInjected' --max-items 50`.
+               Find the failing endpoint, the error message and a stack trace.
+            3. Recent deploys and changes: `gh run list --workflow deploy.yml --limit 5`, `git log --oneline -15`, and
+               `aws ecs describe-services --cluster orders-demo --services api-prod` (deployments and events).
+            4. Check whether a feature flag explains it (log lines with `FaultInjected` name the flag).
+            Don't change anything. Base every claim on evidence you saw, and quote short log excerpts.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Bash(aws cloudwatch describe-alarms:*),Bash(aws cloudwatch get-metric-statistics:*),Bash(aws logs filter-log-events:*),Bash(aws logs describe-log-groups:*),Bash(aws ecs describe-services:*),Bash(aws ecs list-tasks:*),Bash(aws ecs describe-tasks:*),Bash(gh run list:*),Bash(gh run view:*),Bash(git log:*),Bash(git show:*),Bash(date:*)"
+            --json-schema '{"type":"object","required":["title","summary","evidence","likely_cause","suggested_fix"],"properties":{"title":{"type":"string"},"summary":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"}},"likely_cause":{"type":"string"},"suggested_fix":{"type":"string"},"feature_flag":{"type":"string"}}}'
+
+      - name: Open the incident issue
+        if: steps.investigate.outcome == 'success'
+        env:
+          RESULT: ${{ steps.investigate.outputs.structured_output }}
+        run: |
+          title="Incident: $(jq -r .title <<<"$RESULT") ($ALARM)"
+          {
+            echo "**Alarm** \`$ALARM\` went into ALARM at $AT."
+            echo; echo "$REASON"
+            echo; echo "## What's happening"; echo; jq -r .summary <<<"$RESULT"
+            echo; echo "## Evidence"; echo; jq -r '.evidence[] | "- \(.)"' <<<"$RESULT"
+            echo; echo "## Likely cause"; echo; jq -r .likely_cause <<<"$RESULT"
+            flag=$(jq -r '.feature_flag // empty' <<<"$RESULT")
+            if [ -n "$flag" ]; then echo; echo "Feature flag involved: \`$flag\`"; fi
+            echo; echo "## Acceptance criteria"
+            echo; echo "- [ ] $(jq -r .suggested_fix <<<"$RESULT")"
+            echo "- [ ] A test reproduces the failure and passes after the fix"
+            echo "- [ ] \`$ALARM\` returns to OK after the fix is deployed"
+            echo; echo "_Opened by the incident agent from a CloudWatch alarm._"
+          } > issue.md
+          gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file issue.md --label incident
