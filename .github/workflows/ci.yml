@@ -127,10 +127,61 @@ jobs:
           fi
           exit $fail
 
+  # The release image is built once, in the merge queue, and tagged with the merge group's SHA, which
+  # is the commit that lands on main. A push to main (an admin bypass) builds only what is missing.
+  image:
+    name: Release image
+    if: github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-deploy
+          aws-region: us-east-1
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push linux/arm64 images tagged with the commit SHA
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          {
+            echo "### Release images for \`${SHA::7}\`"
+            echo "| Repository | Result |"
+            echo "| --- | --- |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          build() {
+            local repo=$1 dockerfile=$2 err
+            if [ ! -f "$dockerfile" ]; then
+              echo "$dockerfile not found, skipping $repo"
+              echo "| $repo | skipped (no $dockerfile) |" >>"$GITHUB_STEP_SUMMARY"
+              return
+            fi
+            if err=$(aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$SHA" 2>&1 >/dev/null); then
+              echo "$repo:$SHA already exists, not rebuilding"
+              echo "| $repo | already existed |" >>"$GITHUB_STEP_SUMMARY"
+              return
+            elif ! grep -q ImageNotFoundException <<<"$err"; then
+              echo "::error::Could not check $repo:$SHA: $err"; return 1
+            fi
+            docker buildx build --platform linux/arm64 -f "$dockerfile" \
+              --label "org.opencontainers.image.revision=$SHA" \
+              --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              -t "$REGISTRY/$repo:$SHA" --push .
+            echo "| $repo | pushed \`$repo:$SHA\` |" >>"$GITHUB_STEP_SUMMARY"
+          }
+          build orders-api src/Orders.Api/Dockerfile
+          build orders-console src/Orders.Console/Dockerfile
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, lint, unit, integration, security, pr-rules]
+    needs: [changes, lint, unit, integration, security, pr-rules, image]
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed or were skipped on purpose
