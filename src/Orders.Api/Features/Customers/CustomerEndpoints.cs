@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Data;
 using Orders.Api.Domain;
+using Orders.Api.Features.Orders;
 using Orders.Api.Infrastructure;
 
 namespace Orders.Api.Features.Customers;
@@ -23,6 +24,7 @@ internal static class CustomerEndpoints
         var customers = api.MapGroup("/customers").WithTags("Customers");
         customers.MapGet("/", List);
         customers.MapGet("/{id:guid}", Get);
+        customers.MapGet("/{id:guid}/orders", ListOrders);
         customers.MapPost("/", Create);
     }
 
@@ -36,6 +38,21 @@ internal static class CustomerEndpoints
         await db.Customers.FindAsync([id], ct) is { } customer
             ? TypedResults.Ok(CustomerResponse.From(customer))
             : Problems.NotFound("Customer", id);
+
+    private static async Task<Results<Ok<PagedResponse<OrderSummaryResponse>>, ProblemHttpResult>> ListOrders(
+        Guid id,
+        OrdersDbContext db,
+        CancellationToken ct,
+        [Range(1, 100_000)] int page = 1,
+        [Range(1, 100)] int pageSize = 20)
+    {
+        if (!await db.Customers.AnyAsync(c => c.Id == id, ct))
+        {
+            return Problems.NotFound("Customer", id);
+        }
+
+        return TypedResults.Ok(await OrderEndpoints.QueryAsync(db, null, id, page, pageSize, ct));
+    }
 
     private static async Task<Results<Created<CustomerResponse>, ProblemHttpResult>> Create(
         CreateCustomerRequest request, OrdersDbContext db, TimeProvider clock, CancellationToken ct)

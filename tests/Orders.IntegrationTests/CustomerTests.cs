@@ -1,5 +1,6 @@
 using System.Net;
 using Orders.Api.Features.Customers;
+using Orders.Api.Features.Orders;
 
 namespace Orders.IntegrationTests;
 
@@ -43,6 +44,54 @@ public class CustomerTests(ApiFixture fixture)
 
         Assert.Contains(problem.Errors.Keys, k => k.Equals(field, StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public async Task ListOrders_ReturnsOnlyThatCustomersOrders_NewestFirstAndPaged()
+    {
+        var customer = await _client.CreateCustomerAsync();
+        var other = await _client.CreateCustomerAsync();
+        var product = await _client.CreateProductAsync();
+        var first = await _client.CreateOrderAsync(customer.Id, (product.Id, 1));
+        var second = await _client.CreateOrderAsync(customer.Id, (product.Id, 2));
+        await _client.CreateOrderAsync(other.Id, (product.Id, 1));
+
+        var page1 = await ListOrdersAsync(customer.Id, "?pageSize=1");
+        Assert.Equal((1, 1, 2), (page1.Page, page1.PageSize, page1.TotalCount));
+        Assert.Equal([second.Id], page1.Items.Select(o => o.Id));
+
+        var page2 = await ListOrdersAsync(customer.Id, "?pageSize=1&page=2");
+        Assert.Equal([first.Id], page2.Items.Select(o => o.Id));
+        Assert.All(page1.Items.Concat(page2.Items), o => Assert.Equal(customer.Id, o.CustomerId));
+    }
+
+    [Fact]
+    public async Task ListOrders_CustomerWithoutOrders_ReturnsEmptyPage()
+    {
+        var customer = await _client.CreateCustomerAsync();
+
+        var page = await ListOrdersAsync(customer.Id, string.Empty);
+
+        Assert.Empty(page.Items);
+        Assert.Equal((1, 20, 0), (page.Page, page.PageSize, page.TotalCount));
+    }
+
+    [Fact]
+    public async Task ListOrders_UnknownCustomer_Returns404Problem() =>
+        await (await _client.Get($"/api/customers/{Guid.NewGuid()}/orders")).ReadProblemAsync(HttpStatusCode.NotFound);
+
+    [Theory]
+    [InlineData("?pageSize=101")]
+    [InlineData("?pageSize=0")]
+    [InlineData("?page=0")]
+    public async Task ListOrders_InvalidQuery_Returns400(string query)
+    {
+        var customer = await _client.CreateCustomerAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.Get($"/api/customers/{customer.Id}/orders{query}")).StatusCode);
+    }
+
+    private async Task<PagedResponse<OrderSummaryResponse>> ListOrdersAsync(Guid customerId, string query) =>
+        await (await _client.Get($"/api/customers/{customerId}/orders{query}")).ReadAsync<PagedResponse<OrderSummaryResponse>>();
 
     [Fact]
     public async Task Create_DuplicateEmail_Returns409()
