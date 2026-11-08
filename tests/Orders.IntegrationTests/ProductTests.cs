@@ -47,6 +47,51 @@ public class ProductTests(ApiFixture fixture)
         Assert.Contains(problem.Errors.Keys, k => k.Equals(field, StringComparison.OrdinalIgnoreCase));
     }
 
+    private async Task<ProductResponse> CreateWithStock(int stock) =>
+        await (await _client.Post("/api/products", new { sku = Api.UniqueSku(), name = "Low Stock Item", price = 1m, stock }))
+            .ReadAsync<ProductResponse>(HttpStatusCode.Created);
+
+    [Fact]
+    public async Task LowStock_DefaultThreshold_ReturnsStrictlyBelowTenLowestFirst()
+    {
+        var two = await CreateWithStock(2);
+        var nine = await CreateWithStock(9);
+        var ten = await CreateWithStock(10);
+
+        var result = await (await _client.Get("/api/products/low-stock")).ReadAsync<List<ProductResponse>>();
+
+        Assert.Contains(two, result);
+        Assert.Contains(nine, result);
+        Assert.DoesNotContain(ten, result);
+        Assert.All(result, p => Assert.True(p.Stock < 10));
+        Assert.Equal(result.OrderBy(p => p.Stock).ThenBy(p => p.Sku, StringComparer.Ordinal).ToList(), result);
+        Assert.True(result.IndexOf(two) < result.IndexOf(nine));
+    }
+
+    [Fact]
+    public async Task LowStock_CustomThreshold_FiltersByIt()
+    {
+        var twenty = await CreateWithStock(20);
+        var fifty = await CreateWithStock(50);
+
+        var result = await (await _client.Get("/api/products/low-stock?threshold=21")).ReadAsync<List<ProductResponse>>();
+
+        Assert.Contains(twenty, result);
+        Assert.DoesNotContain(fifty, result);
+        Assert.All(result, p => Assert.True(p.Stock < 21));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1001")]
+    [InlineData("abc")]
+    public async Task LowStock_InvalidThreshold_Returns400(string threshold)
+    {
+        var problem = await (await _client.Get($"/api/products/low-stock?threshold={threshold}")).ReadValidationProblemAsync();
+
+        Assert.Contains(problem.Errors.Keys, k => k.Equals("threshold", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task Create_DuplicateSku_Returns409()
     {
