@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demo console tour</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F6F3}
+a{color:#1F4FC4}a:hover{color:#16398F}
+</style>
+</helmet>
+<div style="min-height: 100vh; box-sizing: border-box; background: #F6F6F3; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5; position: relative">
+<div style="max-width: 1360px; margin: 0 auto; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; align-items: center; gap: 16px">
+<div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">Demo Console</div>
+<div style="display: flex; background: #E9E9E4; border-radius: 10px; padding: 4px; gap: 4px">
+<button type="button" disabled title="Not part of this spike" style="border: 0; background: transparent; color: #5A5F69; font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 7px; min-height: 36px">Status</button>
+<button type="button" onClick="{{tabs.present.go}}" aria-pressed="{{tabs.present.on}}" style="border: 0; background: {{tabs.present.bg}}; color: #16181D; font: inherit; font-size: 14px; font-weight: {{tabs.present.weight}}; padding: 8px 14px; border-radius: 7px; min-height: 36px; cursor: pointer">Present</button>
+<button type="button" onClick="{{tabs.arch.go}}" aria-pressed="{{tabs.arch.on}}" style="border: 0; background: {{tabs.arch.bg}}; color: #16181D; font: inherit; font-size: 14px; font-weight: {{tabs.arch.weight}}; padding: 8px 14px; border-radius: 7px; min-height: 36px; cursor: pointer">Architecture</button>
+</div>
+</div>
+<sc-if value="{{isPresent}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; align-items: center; gap: 12px; color: #4A4F59; font-size: 14px">
+<span style="font-weight: 600; color: #16181D">The Tour: idea to production</span>
+<span>Step {{stepNum}} of {{stepCount}}</span>
+</div>
+</sc-if>
+<sc-if value="{{isArch}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 14px; font-weight: 600; color: #16181D">Everything in the demo, and where it runs</div>
+</sc-if>
+</header>
+
+<sc-if value="{{isPresent}}" hint-placeholder-val="{{true}}">
+<nav aria-label="Lifecycle" style="background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #5A5F69">The whole loop</div>
+<div style="font-size: 13px; color: #5A5F69">Click any stage to see what it is</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<sc-for list="{{stages}}" as="s" hint-placeholder-count="8">
+<div style="display: flex; align-items: center; gap: 8px">
+<button type="button" onClick="{{s.open}}" style="font: inherit; font-size: 14px; font-weight: {{s.weight}}; background: {{s.bg}}; color: {{s.fg}}; border: 1.5px solid {{s.border}}; border-radius: 999px; padding: 8px 16px; min-height: 44px; cursor: pointer; display: flex; align-items: center; gap: 8px">
+<sc-if value="{{s.done}}" hint-placeholder-val="{{false}}">
+<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg>
+</sc-if>
+<span>{{s.name}}</span>
+</button>
+<sc-if value="{{s.arrow}}" hint-placeholder-val="{{true}}">
+<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" fill="none" stroke="#A9ACA4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h15M11 1.5L16 6l-5 4.5"></path></svg>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</nav>
+
+<main style="display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch">
+
+<section aria-label="Narration" style="flex: 1 1 360px; max-width: 460px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #1F4FC4">{{current.stageName}}</div>
+<h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 30px; line-height: 1.15; font-weight: 600; letter-spacing: -0.015em">{{current.title}}</h1>
+<p style="margin: 0; font-size: 17px; line-height: 1.55; color: #33373F">{{current.narration}}</p>
+<button type="button" onClick="{{openCurrent}}" style="align-self: flex-start; font: inherit; font-size: 14px; color: #1F4FC4; background: transparent; border: 0; padding: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"></circle><path d="M10 9v5M10 6.2v.1" stroke-linecap="round"></path></svg>
+<span>What is {{current.stageName}}?</span>
+</button>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 12px">
+<button type="button" onClick="{{next}}" style="font: inherit; font-size: 16px; font-weight: 600; background: #1F4FC4; color: #FFFFFF; border: 0; border-radius: 10px; padding: 14px 18px; min-height: 52px; cursor: pointer; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span>{{current.action}}</span>
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h12M10 4l5 5-5 5"></path></svg>
+</button>
+<div style="display: flex; justify-content: space-between; gap: 12px">
+<button type="button" onClick="{{back}}" disabled="{{isFirst}}" style="font: inherit; font-size: 14px; background: #FFFFFF; color: #33373F; border: 1px solid #D5D7D1; border-radius: 10px; padding: 10px 16px; min-height: 44px; cursor: pointer">Back</button>
+<button type="button" onClick="{{next}}" disabled="{{isLast}}" style="font: inherit; font-size: 14px; background: #FFFFFF; color: #33373F; border: 1px solid #D5D7D1; border-radius: 10px; padding: 10px 16px; min-height: 44px; cursor: pointer">Next</button>
+</div>
+</div>
+</section>
+
+<section aria-label="Live view" style="flex: 999 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1F7A45">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #1F8A4C; display: inline-block"></span>
+<span>Live view</span>
+</div>
+<div style="font-size: 12px; color: #5A5F69">Sample data in this spike</div>
+</div>
+
+<sc-if value="{{show.issue}}" hint-placeholder-val="{{true}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; overflow: hidden">
+<div style="padding: 16px 20px; border-bottom: 1px solid #ECEDE9; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; color: #5A5F69">GitHub issue #42 · opened just now</div>
+<div style="font-size: 20px; font-weight: 600">Let customers filter orders by status</div>
+<div style="display: flex; gap: 6px; flex-wrap: wrap">
+<span style="font-size: 12px; font-weight: 500; background: #EEF1F6; color: #3B4250; border-radius: 999px; padding: 3px 10px">enhancement</span>
+<span style="font-size: 12px; font-weight: 500; background: #FDF1E3; color: #8A4B0B; border-radius: 999px; padding: 3px 10px">waiting for triage</span>
+</div>
+</div>
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-weight: 600">Acceptance criteria</div>
+<div style="display: flex; flex-direction: column; gap: 8px; color: #33373F">
+<div style="display: flex; gap: 10px; align-items: flex-start"><span aria-hidden="true" style="width: 16px; height: 16px; border: 1.5px solid #A9ACA4; border-radius: 4px; margin-top: 3px; flex: none"></span><span>GET /orders accepts a status filter (open, shipped, cancelled)</span></div>
+<div style="display: flex; gap: 10px; align-items: flex-start"><span aria-hidden="true" style="width: 16px; height: 16px; border: 1.5px solid #A9ACA4; border-radius: 4px; margin-top: 3px; flex: none"></span><span>An unknown status returns 400 with a clear message</span></div>
+<div style="display: flex; gap: 10px; align-items: flex-start"><span aria-hidden="true" style="width: 16px; height: 16px; border: 1.5px solid #A9ACA4; border-radius: 4px; margin-top: 3px; flex: none"></span><span>Covered by unit and integration tests</span></div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{show.triage}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 10px">
+<span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 8px; background: #E6EDFB; color: #1F4FC4; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px">AI</span>
+<div><div style="font-weight: 600">Auto-triager</div><div style="font-size: 13px; color: #5A5F69">commented on #42</div></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="background: #EAF6EF; border-radius: 10px; padding: 14px 16px"><div style="font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #1F6B40">Risk</div><div style="font-size: 22px; font-weight: 600; color: #134B2C">Low</div><div style="font-size: 13px; color: #2D4A38">No auth, data model or infra changes</div></div>
+<div style="background: #FDF1E3; border-radius: 10px; padding: 14px 16px"><div style="font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #8A4B0B">Difficulty</div><div style="font-size: 22px; font-weight: 600; color: #6B3A08">Medium</div><div style="font-size: 13px; color: #5C3A12">One endpoint, a query filter and tests</div></div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F3F5F9; border-radius: 10px; padding: 12px 14px">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#1F4FC4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg>
+<span>Safe for an agent, so it was <strong>assigned to the agent</strong>. No human needed.</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{show.agent}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; overflow: hidden">
+<div style="padding: 14px 20px; border-bottom: 1px solid #ECEDE9; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<div><div style="font-weight: 600">GitHub Actions · agent for #42</div><div style="font-size: 13px; color: #5A5F69">Running on a fresh, throwaway machine</div></div>
+<span style="align-self: center; font-size: 12px; font-weight: 600; background: #FDF1E3; color: #8A4B0B; border-radius: 999px; padding: 4px 10px">In progress</span>
+</div>
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13.5px">
+<div style="display: flex; gap: 10px"><span style="color: #1F8A4C">done</span><span>Read AGENTS.md and issue #42</span></div>
+<div style="display: flex; gap: 10px"><span style="color: #1F8A4C">done</span><span>Branch agent/42-order-status-filter</span></div>
+<div style="display: flex; gap: 10px"><span style="color: #1F8A4C">done</span><span>Changed OrdersController.cs, OrderQuery.cs</span></div>
+<div style="display: flex; gap: 10px"><span style="color: #1F8A4C">done</span><span>Added 6 tests</span></div>
+<div style="display: flex; gap: 10px"><span style="color: #B45309">running</span><span>just ci</span></div>
+<div style="display: flex; gap: 10px; color: #8A8E96"><span>next</span><span>Open PR, turn on auto-merge</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{show.checks}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; overflow: hidden">
+<div style="padding: 14px 20px; border-bottom: 1px solid #ECEDE9; display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 13px; color: #5A5F69">Pull request #57 · closes #42 · auto-merge on</div>
+<div style="font-size: 18px; font-weight: 600">feat: filter orders by status</div>
+</div>
+<div style="padding: 16px 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>Format and lint</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>Unit tests</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>Integration tests</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>Build container image</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>Security scans</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>PR rules</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F4FAF6; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg><span>AI review: no blocking findings</span></div>
+<div style="display: flex; align-items: center; gap: 10px; background: #F3F5F9; border-radius: 8px; padding: 10px 12px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F4FC4" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"></path></svg><span>Preview: pr-57.demo.joshb.app</span></div>
+</div>
+<div style="padding: 12px 20px; border-top: 1px solid #ECEDE9; font-size: 14px; color: #33373F">All checks ran at the same time. No files a human owns were touched, so no approval is needed.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{show.queue}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="font-weight: 600">Merge queue for main</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; gap: 12px; background: #E6EDFB; border: 1.5px solid #1F4FC4; border-radius: 10px; padding: 12px 14px"><span><strong>#57</strong> feat: filter orders by status</span><span style="color: #1F4FC4; font-weight: 600">Re-testing on latest main</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; background: #F6F6F3; border-radius: 10px; padding: 12px 14px; color: #4A4F59"><span><strong>#58</strong> chore: bump Npgsql</span><span>Waiting</span></div>
+</div>
+<div style="font-size: 14px; color: #33373F">Two PRs can each pass on their own and still break each other. The queue tests each one on top of everything ahead of it, then squash-merges it into main.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{show.deploy}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="font-weight: 600">Deploy of v1.4.0 (commit a3f9c21)</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="background: #F4FAF6; border-radius: 10px; padding: 14px"><div style="font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #1F6B40">Image</div><div style="font-weight: 600">Built once by CI</div><div style="font-size: 13px; color: #4A4F59">Same image everywhere</div></div>
+<div style="background: #F4FAF6; border-radius: 10px; padding: 14px"><div style="font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #1F6B40">Staging</div><div style="font-weight: 600">Migrated, smoke tests passed</div><div style="font-size: 13px; color: #4A4F59">staging.demo.joshb.app</div></div>
+<div style="background: #E6EDFB; border: 1.5px solid #1F4FC4; border-radius: 10px; padding: 14px"><div style="font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #1F4FC4">Production</div><div style="font-weight: 600">Rolling out, 1 of 2 tasks</div><div style="font-size: 13px; color: #4A4F59">Rolls back by itself if unhealthy</div></div>
+</div>
+<div style="font-size: 14px; color: #33373F">Nobody clicked deploy. Merging to main was the approval.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{show.monitor}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #E1E2DD; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="font-weight: 600">Production, under normal load</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="background: #F6F6F3; border-radius: 10px; padding: 14px"><div style="font-size: 13px; color: #4A4F59">Requests</div><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 26px; font-weight: 600">[LIVE]</div></div>
+<div style="background: #F6F6F3; border-radius: 10px; padding: 14px"><div style="font-size: 13px; color: #4A4F59">Error rate</div><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 26px; font-weight: 600">[LIVE]</div></div>
+<div style="background: #F6F6F3; border-radius: 10px; padding: 14px"><div style="font-size: 13px; color: #4A4F59">p95 latency</div><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 26px; font-weight: 600">[LIVE]</div></div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; background: #EAF6EF; border-radius: 10px; padding: 12px 14px; color: #134B2C">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#1F8A4C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg>
+<span>All alarms OK. If one fires, the incident agent opens an issue and the loop starts again.</span>
+</div>
+</div>
+</sc-if>
+</section>
+</main>
+
+<section aria-label="Where this is running" style="background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #5A5F69">Where this is running</div>
+<div style="font-size: 13px; color: #5A5F69">Highlighted: the parts working in this step</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: #F3F5F9; border-radius: 10px; padding: 12px 14px">
+<sc-for list="{{flow}}" as="f" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 14px; color: #16181D">{{f.text}}</span>
+<sc-if value="{{f.arrow}}" hint-placeholder-val="{{true}}">
+<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" fill="none" stroke="#1F4FC4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h15M11 1.5L16 6l-5 4.5"></path></svg>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+<div style="flex: 1 1 300px; min-width: 0; border: 1.5px dashed #C9CBC4; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px"><span style="font-weight: 600">GitHub</span><span style="font-size: 12px; color: #5A5F69">github.com, in our org</span></div>
+<sc-for list="{{zones.github}}" as="n" hint-placeholder-count="3">
+<div style="background: {{n.bg}}; border: 1.5px solid {{n.border}}; border-radius: 10px; padding: 10px 12px; opacity: {{n.opacity}}">
+<div style="font-weight: 600; font-size: 14px; color: #16181D">{{n.name}}</div>
+<div style="font-size: 13px; color: #4A4F59">{{n.desc}}</div>
+<sc-if value="{{n.hasDetail}}" hint-placeholder-val="{{false}}">
+<div style="margin-top: 8px; padding-left: 10px; border-left: 2px solid #9FB4EA; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{n.detail}}" as="d" hint-placeholder-count="2">
+<div style="background: #FFFFFF; border: 1px solid #C9D6F5; border-radius: 8px; padding: 6px 10px">
+<div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 500; color: #16181D">{{d.k}}</div>
+<div style="font-size: 12.5px; color: #4A4F59">{{d.v}}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="flex: 1.4 1 380px; min-width: 0; border: 1.5px dashed #C9CBC4; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px"><span style="font-weight: 600">AWS</span><span style="font-size: 12px; color: #5A5F69">our account, defined in Terraform</span></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{zones.aws}}" as="n" hint-placeholder-count="4">
+<div style="background: {{n.bg}}; border: 1.5px solid {{n.border}}; border-radius: 10px; padding: 10px 12px; opacity: {{n.opacity}}">
+<div style="font-weight: 600; font-size: 14px; color: #16181D">{{n.name}}</div>
+<div style="font-size: 13px; color: #4A4F59">{{n.desc}}</div>
+<sc-if value="{{n.hasDetail}}" hint-placeholder-val="{{false}}">
+<div style="margin-top: 8px; padding-left: 10px; border-left: 2px solid #9FB4EA; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{n.detail}}" as="d" hint-placeholder-count="2">
+<div style="background: #FFFFFF; border: 1px solid #C9D6F5; border-radius: 8px; padding: 6px 10px">
+<div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 500; color: #16181D">{{d.k}}</div>
+<div style="font-size: 12.5px; color: #4A4F59">{{d.v}}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="flex: 0.8 1 220px; min-width: 0; border: 1.5px dashed #C9CBC4; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px"><span style="font-weight: 600">AI service</span><span style="font-size: 12px; color: #5A5F69">called over the internet</span></div>
+<sc-for list="{{zones.ai}}" as="n" hint-placeholder-count="1">
+<div style="background: {{n.bg}}; border: 1.5px solid {{n.border}}; border-radius: 10px; padding: 10px 12px; opacity: {{n.opacity}}">
+<div style="font-weight: 600; font-size: 14px; color: #16181D">{{n.name}}</div>
+<div style="font-size: 13px; color: #4A4F59">{{n.desc}}</div>
+<sc-if value="{{n.hasDetail}}" hint-placeholder-val="{{false}}">
+<div style="margin-top: 8px; padding-left: 10px; border-left: 2px solid #9FB4EA; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{n.detail}}" as="d" hint-placeholder-count="2">
+<div style="background: #FFFFFF; border: 1px solid #C9D6F5; border-radius: 8px; padding: 6px 10px">
+<div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 500; color: #16181D">{{d.k}}</div>
+<div style="font-size: 12.5px; color: #4A4F59">{{d.v}}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{isArch}}" hint-placeholder-val="{{false}}">
+<section aria-label="Architecture" style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+<p style="margin: 0; font-size: 16px; color: #33373F; max-width: 760px">Every component in the demo and what runs inside it. The code and its history live in GitHub; the running app lives in AWS; the AI and sign-in come from outside services.</p>
+</div>
+
+<figure style="margin: 0; background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<svg viewBox="0 0 1210 790" role="img" aria-label="One loop: work starts in GitHub, runs in AWS, and comes back as new work" style="width: 100%; height: auto; display: block; font-family: Inter, system-ui, sans-serif">
+<defs>
+<marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7B818B"></path></marker>
+<marker id="arch-arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F4FC4"></path></marker>
+<marker id="arch-arrow-alert" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#C2410C"></path></marker>
+</defs>
+
+<text x="24" y="32" font-size="18" font-weight="600" fill="#16181D">One loop: work starts in GitHub, runs in AWS, and comes back as new work</text>
+
+<rect x="190" y="56" width="1000" height="234" rx="14" fill="#F4F7FC" stroke="#C9D6F5" stroke-width="1.25"></rect>
+<text x="206" y="82" font-size="15" font-weight="600" fill="#183E99">GitHub</text>
+<text x="268" y="82" font-size="12" fill="#4A4F59">code, issues, and the jobs that do the work</text>
+<text x="918" y="192" font-size="12" fill="#4A4F59">Jobs run on throwaway runners</text>
+
+<rect x="190" y="380" width="1000" height="390" rx="14" fill="#FBF8F2" stroke="#E2D5BC" stroke-width="1.25"></rect>
+<text x="206" y="402" font-size="15" font-weight="600" fill="#7A4F0E">AWS</text>
+<text x="246" y="402" font-size="12" fill="#4A4F59">the running app, all defined in Terraform</text>
+
+<g fill="none" stroke="#7B818B" stroke-width="1.4">
+<path d="M164 128H208" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M350 128H374" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M516 128H540" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M682 128H706" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M848 128H872" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M1014 128H1038" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M820 156V418" marker-end="url(#arch-arrow)"></path>
+<path d="M890 156V418" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M1110 156V418" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M1110 476V640H762" marker-end="url(#arch-arrow-accent)" stroke="#1F4FC4"></path>
+<path d="M790 445H762" marker-end="url(#arch-arrow)"></path>
+<path d="M760 518H788" marker-end="url(#arch-arrow)"></path>
+<path d="M790 589H762" marker-end="url(#arch-arrow)"></path>
+<path d="M340 473H363" marker-end="url(#arch-arrow)"></path>
+<path d="M430 655V688" marker-end="url(#arch-arrow)"></path>
+<path d="M500 690V657" marker-end="url(#arch-arrow-alert)" stroke="#C2410C" stroke-dasharray="5 4"></path>
+<path d="M365 715H342" marker-end="url(#arch-arrow-alert)" stroke="#C2410C"></path>
+<path d="M210 715H178V236H208" marker-end="url(#arch-arrow-alert)" stroke="#C2410C"></path>
+<path d="M280 210V158" marker-end="url(#arch-arrow-alert)" stroke="#C2410C"></path>
+</g>
+<g fill="none" stroke="#8E7CC3" stroke-width="1.3" stroke-dasharray="3 3">
+<path d="M280 308V262"></path>
+<path d="M446 308V156"></path>
+<path d="M612 308V156"></path>
+<path d="M690 333H730V156"></path>
+</g>
+
+<text x="812" y="300" font-size="12" fill="#4A4F59" text-anchor="end">preview image</text>
+<text x="898" y="300" font-size="12" fill="#183E99">release image</text>
+<text x="1102" y="342" font-size="12" fill="#183E99" text-anchor="end">signs in, no stored keys</text>
+<text x="935" y="630" font-size="12" fill="#183E99" text-anchor="middle">deploys previews, staging, prod</text>
+<text x="738" y="250" font-size="12" fill="#5B4A99">AI calls</text>
+<text x="422" y="677" font-size="12" fill="#4A4F59" text-anchor="end">logs, metrics</text>
+<text x="508" y="677" font-size="12" fill="#C2410C">rollback if unhealthy</text>
+<text x="288" y="188" font-size="12" fill="#C2410C">opens an issue</text>
+<text x="24" y="466" font-size="12" fill="#C2410C">an alarm starts</text>
+<text x="24" y="482" font-size="12" fill="#C2410C">the incident job</text>
+
+<rect x="24" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#7B818B" stroke-width="1.25"></rect>
+<text x="94" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">You and the team</text>
+<text x="94" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">ask for changes</text>
+
+<rect x="210" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="280" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Issue</text>
+<text x="280" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">the unit of work</text>
+<rect x="376" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="446" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Triage job</text>
+<text x="446" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">scores and assigns</text>
+<rect x="542" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="612" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Agent job</text>
+<text x="612" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">writes code, tests</text>
+<rect x="708" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="778" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">PR checks</text>
+<text x="778" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">build, test, review</text>
+<rect x="874" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="944" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Merge queue</text>
+<text x="944" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">re-test, build, merge</text>
+<rect x="1040" y="100" width="140" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="1110" y="124" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Deploy job</text>
+<text x="1110" y="141" font-size="11.5" fill="#4A4F59" text-anchor="middle">staging, then prod</text>
+
+<rect x="210" y="210" width="140" height="52" rx="8" fill="#FFFFFF" stroke="#C2410C" stroke-width="1.5"></rect>
+<text x="280" y="232" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Incident job</text>
+<text x="280" y="249" font-size="11.5" fill="#4A4F59" text-anchor="middle">on an alarm</text>
+
+<rect x="210" y="308" width="480" height="50" rx="8" fill="#F4F1FB" stroke="#8E7CC3" stroke-width="1.5"></rect>
+<text x="450" y="329" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Claude, the AI model (outside service)</text>
+<text x="450" y="346" font-size="11.5" fill="#4A4F59" text-anchor="middle">called by triage, the agent, AI review and the incident job</text>
+
+<rect x="210" y="445" width="130" height="56" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="275" y="469" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">Load balancer</text>
+<text x="275" y="486" font-size="11.5" fill="#4A4F59" text-anchor="middle">routes by hostname</text>
+
+<rect x="365" y="405" width="395" height="250" rx="12" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.5"></rect>
+<text x="389" y="429" font-size="13" font-weight="600" fill="#16181D">ECS cluster: demo</text>
+<text x="522" y="429" font-size="11.5" fill="#4A4F59">containers, no servers to manage</text>
+<rect x="380" y="445" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="467" y="464" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service prod</text>
+<text x="467" y="480" font-size="11.5" fill="#4A4F59" text-anchor="middle">2 tasks</text>
+<rect x="380" y="500" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="467" y="519" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service staging</text>
+<text x="467" y="535" font-size="11.5" fill="#4A4F59" text-anchor="middle">1 task</text>
+<rect x="380" y="555" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="467" y="574" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service pr-N</text>
+<text x="467" y="590" font-size="11.5" fill="#4A4F59" text-anchor="middle">1 task per open PR</text>
+<rect x="570" y="445" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="657" y="464" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">service console</text>
+<text x="657" y="480" font-size="11.5" fill="#4A4F59" text-anchor="middle">this demo console</text>
+<rect x="570" y="500" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="657" y="519" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">task load-generator</text>
+<text x="657" y="535" font-size="11.5" fill="#4A4F59" text-anchor="middle">simulated users</text>
+<rect x="570" y="555" width="175" height="44" rx="7" fill="#FBF8F2" stroke="#D9C9A6"></rect>
+<text x="657" y="574" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">task migrate</text>
+<text x="657" y="590" font-size="11.5" fill="#4A4F59" text-anchor="middle">runs once, then exits</text>
+<text x="380" y="626" font-size="11.5" fill="#4A4F59">A task is one running copy of a container.</text>
+
+<rect x="790" y="420" width="120" height="50" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="850" y="441" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">ECR</text>
+<text x="850" y="457" font-size="11.5" fill="#4A4F59" text-anchor="middle">app images</text>
+<rect x="790" y="490" width="120" height="56" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="850" y="513" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">RDS Postgres</text>
+<text x="850" y="530" font-size="11.5" fill="#4A4F59" text-anchor="middle">prod + non-prod</text>
+<rect x="790" y="566" width="120" height="46" rx="8" fill="#FFFFFF" stroke="#9C8150" stroke-width="1.25"></rect>
+<text x="850" y="585" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">AppConfig</text>
+<text x="850" y="601" font-size="11.5" fill="#4A4F59" text-anchor="middle">feature flags</text>
+
+<rect x="1050" y="420" width="120" height="56" rx="8" fill="#FFFFFF" stroke="#1F4FC4" stroke-width="1.5"></rect>
+<text x="1110" y="443" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">IAM role</text>
+<text x="1110" y="460" font-size="11.5" fill="#4A4F59" text-anchor="middle">only what it needs</text>
+
+<rect x="365" y="690" width="190" height="50" rx="8" fill="#FFFFFF" stroke="#C2410C" stroke-width="1.5"></rect>
+<text x="460" y="711" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">CloudWatch</text>
+<text x="460" y="727" font-size="11.5" fill="#4A4F59" text-anchor="middle">logs, metrics, alarms</text>
+<rect x="210" y="690" width="130" height="50" rx="8" fill="#FFFFFF" stroke="#C2410C" stroke-width="1.5"></rect>
+<text x="275" y="711" font-size="13" font-weight="600" fill="#16181D" text-anchor="middle">EventBridge</text>
+<text x="275" y="727" font-size="11.5" fill="#4A4F59" text-anchor="middle">routes the alarm</text>
+
+<g font-size="11" font-weight="700" text-anchor="middle" fill="#FFFFFF">
+<circle cx="210" cy="100" r="11" fill="#1F4FC4"></circle><text x="210" y="104">1</text>
+<circle cx="376" cy="100" r="11" fill="#1F4FC4"></circle><text x="376" y="104">2</text>
+<circle cx="542" cy="100" r="11" fill="#1F4FC4"></circle><text x="542" y="104">3</text>
+<circle cx="708" cy="100" r="11" fill="#1F4FC4"></circle><text x="708" y="104">4</text>
+<circle cx="874" cy="100" r="11" fill="#1F4FC4"></circle><text x="874" y="104">5</text>
+<circle cx="1040" cy="100" r="11" fill="#1F4FC4"></circle><text x="1040" y="104">6</text>
+<circle cx="365" cy="405" r="11" fill="#9C6A12"></circle><text x="365" y="409">7</text>
+<circle cx="365" cy="690" r="11" fill="#C2410C"></circle><text x="365" y="694">8</text>
+<circle cx="210" cy="210" r="11" fill="#C2410C"></circle><text x="210" y="214">9</text>
+</g>
+</svg>
+<figcaption style="display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 14px; color: #33373F">
+<span><strong style="color: #1F4FC4">1 to 6</strong> every change, from request to production</span>
+<span><strong style="color: #9C6A12">7</strong> the running app and what it uses</span>
+<span><strong style="color: #C2410C">8 and 9</strong> how a problem in production becomes new work</span>
+<span><span style="color: #5B4A99; font-weight: 600">Dotted</span> calls to the AI model</span>
+</figcaption>
+</figure>
+
+<div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; font-weight: 600">Every component, in detail</div>
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<sc-for list="{{arch}}" as="z" hint-placeholder-count="3">
+<div style="flex: {{z.flex}}; min-width: 0; background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap">
+<span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; font-weight: 600">{{z.name}}</span>
+<span style="font-size: 13px; color: #5A5F69">{{z.where}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px">
+<sc-for list="{{z.items}}" as="c" hint-placeholder-count="4">
+<div style="border: 1.5px solid #D5D7D1; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: #FAFAF8">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
+<span style="font-weight: 600; font-size: 15px">{{c.name}}</span>
+<sc-if value="{{c.hasBadge}}" hint-placeholder-val="{{false}}">
+<span style="flex: none; font-size: 11px; font-weight: 600; background: {{c.badgeBg}}; color: {{c.badgeFg}}; border-radius: 999px; padding: 3px 8px">{{c.badge}}</span>
+</sc-if>
+</div>
+<div style="font-size: 13px; color: #4A4F59">{{c.desc}}</div>
+<div style="padding-left: 10px; border-left: 2px solid #C9CBC4; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{c.subs}}" as="s" hint-placeholder-count="3">
+<div style="background: #FFFFFF; border: 1px solid #E1E2DD; border-radius: 8px; padding: 6px 10px">
+<div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 500; color: #16181D">{{s.k}}</div>
+<div style="font-size: 12.5px; color: #4A4F59">{{s.v}}</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+
+</section>
+</sc-if>
+</div>
+
+<sc-if value="{{showExplain}}" hint-placeholder-val="{{false}}">
+<div style="position: fixed; inset: 0; background: rgba(22,24,29,0.32); display: flex; justify-content: flex-end">
+<aside role="dialog" aria-modal="true" aria-label="Explainer" style="width: 100%; max-width: 440px; height: 100%; box-sizing: border-box; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; box-shadow: -8px 0 24px rgba(0,0,0,0.12)">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px">
+<div>
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #1F4FC4">Explainer</div>
+<h2 style="margin: 4px 0 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 26px; font-weight: 600">{{explain.name}}</h2>
+</div>
+<button type="button" onClick="{{closeExplain}}" aria-label="Close explainer" style="width: 44px; height: 44px; border: 1px solid #D5D7D1; border-radius: 10px; background: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#33373F" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"></path></svg>
+</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 13px; font-weight: 600; color: #5A5F69">What it is</div>
+<p style="margin: 0; font-size: 16px; line-height: 1.55">{{explain.what}}</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 13px; font-weight: 600; color: #5A5F69">Built with</div>
+<p style="margin: 0; font-size: 16px; line-height: 1.55">{{explain.tech}}</p>
+</div>
+<div style="background: #F3F5F9; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 13px; font-weight: 600; color: #3B4250">If you know Azure</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.5; color: #33373F">{{explain.azure}}</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 13px; font-weight: 600; color: #5A5F69">See the real thing</div>
+<p style="margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13.5px; color: #1F4FC4">{{explain.where}}</p>
+</div>
+</aside>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const stages = [
+      { id: 'issue', name: 'Issue' },
+      { id: 'triage', name: 'Triage' },
+      { id: 'agent', name: 'Agent' },
+      { id: 'checks', name: 'PR checks' },
+      { id: 'queue', name: 'Merge queue' },
+      { id: 'deploy', name: 'Deploy' },
+      { id: 'monitor', name: 'Monitor' }
+    ];
+    const steps = [
+      { stage: 'issue', title: 'An idea becomes an issue', narration: 'Every change starts as a GitHub issue that says what done looks like. This one was typed a moment ago, by a person. It could just as easily have come from a monitoring alert.', action: 'Send it to triage' },
+      { stage: 'triage', title: 'An AI triager decides who should do it', narration: 'Within seconds, a triage job scores the issue for risk and difficulty. Low-risk work goes straight to an agent. Anything risky waits for a human.', action: 'Hand it to the agent' },
+      { stage: 'agent', title: 'An agent writes the code and the tests', narration: 'The agent works in a fresh machine in GitHub Actions. It reads the repo rules, writes the change and its tests, and runs the same checks you would run locally.', action: 'Open the pull request' },
+      { stage: 'checks', title: 'Every check runs on every PR, in parallel', narration: 'Build, tests, security scans and an AI review all run at once. A preview copy of the app is live for this PR alone. Nothing merges unless everything is green.', action: 'Send it to the merge queue' },
+      { stage: 'queue', title: 'The merge queue keeps main working', narration: 'Before merging, the queue re-tests the PR on top of the latest main, so two good changes cannot break each other, and builds the image that will ship. Then it merges, with no button pressed.', action: 'Watch it deploy' },
+      { stage: 'deploy', title: 'Merging is deploying', narration: 'The image CI already built goes to staging, passes smoke tests, then rolls out to production. If the new version is unhealthy, AWS rolls it back on its own.', action: 'Watch production' },
+      { stage: 'monitor', title: 'Production watches itself', narration: 'Logs, metrics and alarms track every request. When something breaks, an agent investigates and opens an issue, and the loop starts again.', action: 'End of the tour' }
+    ];
+    const explainers = {
+      issue: { name: 'Issue', what: 'A tracked piece of work in GitHub, with a goal and acceptance criteria. Agents only work from issues, so every change has a clear reason and a definition of done.', tech: 'GitHub Issues, with a Projects board as the overview.', azure: 'An Azure Boards work item.', where: '.github/ISSUE_TEMPLATE/agent-task.yml' },
+      triage: { name: 'Triage', what: 'A short AI job that runs on every new issue. It scores risk and difficulty, labels the issue, and assigns safe work to an agent.', tech: 'A GitHub Actions workflow that calls Claude.', azure: 'No built-in equivalent. Closest is an Azure DevOps automation rule.', where: '.github/workflows/triage.yml' },
+      agent: { name: 'Agent', what: 'An AI coding agent that writes the change, the tests and the PR. It follows the same rules and runs the same checks a person would.', tech: 'The Claude Code GitHub Action, on a fresh GitHub-hosted runner.', azure: 'An Azure Pipelines job running an agent on a hosted build agent.', where: '.github/workflows/agent.yml and AGENTS.md' },
+      checks: { name: 'PR checks', what: 'Automated jobs that run on every pull request: build, tests, security scans, AI review, and a preview deploy. Required checks must pass before anything can merge.', tech: 'GitHub Actions workflows plus a ruleset on main.', azure: 'Azure Pipelines PR validation with branch policies.', where: '.github/workflows/ci.yml' },
+      queue: { name: 'Merge queue', what: 'A line of approved PRs. Each one is re-tested on top of the PRs ahead of it, then merged, so main never breaks from two changes that each passed alone.', tech: 'The GitHub merge queue.', azure: 'No built-in equivalent in Azure DevOps.', where: 'Repo settings, ruleset for main' },
+      deploy: { name: 'Deploy', what: 'Running the new version. The app runs as containers that AWS manages, with no servers to patch. Staging gets it first, then production, with automatic rollback.', tech: 'Amazon ECS on Fargate, images in Amazon ECR, PostgreSQL on Amazon RDS, all defined in Terraform.', azure: 'Azure Container Apps, Azure Container Registry and Azure Database for PostgreSQL.', where: '.github/workflows/deploy.yml and infra/' },
+      monitor: { name: 'Monitor', what: 'Logs, metrics and alarms for every environment. When an alarm fires, the incident agent investigates and opens an issue with the evidence.', tech: 'Amazon CloudWatch (logs, metrics, alarms), AWS X-Ray traces, and an event-driven Claude job.', azure: 'Azure Monitor and Application Insights.', where: 'infra/alarms.tf and .github/workflows/incident.yml' }
+    };
+    const nodes = {
+      github: [
+        { id: 'repo', name: 'Repository and issues', desc: 'The code, its history, issues and pull requests.' },
+        { id: 'runner', name: 'Actions runners', desc: 'A temporary machine GitHub starts for each job, then throws away. Triage, agents and CI all run here.' },
+        { id: 'queue', name: 'Merge queue', desc: 'Re-tests approved PRs on the latest main, then merges them.' }
+      ],
+      aws: [
+        { id: 'ecr', name: 'ECR', desc: 'Image registry: stores the app image CI built.' },
+        { id: 'ecs', name: 'ECS Fargate', desc: 'Runs the app containers with no servers to manage. A cluster holds services; a task is one running copy of the container.' },
+        { id: 'rds', name: 'RDS PostgreSQL', desc: 'The databases: one for production, one for the rest.' },
+        { id: 'cw', name: 'CloudWatch', desc: 'Logs, metrics and alarms for every environment.' }
+      ],
+      ai: [
+        { id: 'claude', name: 'Claude', desc: 'The AI model the triager, agents, AI review and incident agent call.' }
+      ]
+    };
+    const where = {
+      issue: { on: ['repo'], flow: ['You, in a browser', 'Issue saved in the repository'], detail: {
+        repo: [{ k: 'Issue #42', v: 'Let customers filter orders by status' }]
+      } },
+      triage: { on: ['repo', 'runner', 'claude'], flow: ['New issue', 'Actions starts a triage job on a runner', 'Claude scores it', 'Labels written back to the issue'], detail: {
+        repo: [{ k: 'Issue #42', v: 'Labelled risk:low, difficulty:medium; assigned to the agent' }],
+        runner: [{ k: 'Job: triage', v: 'A fresh Linux machine, deleted when the job ends' }],
+        claude: [{ k: '1 request', v: 'Reads the issue, returns risk, difficulty and reasons' }]
+      } },
+      agent: { on: ['repo', 'runner', 'claude'], flow: ['Issue assigned', 'Actions starts the agent on a runner', 'Claude writes code and tests', 'Branch pushed to the repository'], detail: {
+        repo: [{ k: 'Branch agent/42-order-status-filter', v: 'The agent pushes its commits here, never to main' }],
+        runner: [{ k: 'Job: agent', v: 'Clones the repo, installs .NET, runs just ci' }],
+        claude: [{ k: 'Many requests', v: 'Plans, edits files, reads test output, fixes' }]
+      } },
+      checks: { on: ['repo', 'runner', 'ecr', 'ecs', 'rds'], flow: ['PR opened', 'Runners build and test in parallel', 'Image pushed to ECR', 'Preview runs on ECS with its own database'], detail: {
+        repo: [{ k: 'PR #57', v: 'Closes #42; auto-merge on' }],
+        runner: [{ k: '7 jobs at once', v: 'One runner each: lint, unit, integration, build, security, PR rules, AI review' }, { k: 'Job: integration', v: 'Starts its own throwaway Postgres container' }],
+        ecr: [{ k: 'orders-api:pr-57', v: 'A preview-only image, deleted with the preview' }],
+        ecs: [{ k: 'cluster demo › service pr-57', v: '1 task: one copy of the container, 0.25 vCPU' }, { k: 'pr-57.demo.joshb.app', v: 'Its own address, removed when the PR closes' }],
+        rds: [{ k: 'Non-prod instance › db pr_57', v: 'Created for this PR, migrated, seeded' }]
+      } },
+      queue: { on: ['repo', 'runner', 'queue'], flow: ['PR joins the queue', 'Re-tested on a runner against latest main', 'Squash-merged into main'], detail: {
+        queue: [{ k: '#57, then #58', v: 'Each tested on top of the one ahead of it' }],
+        runner: [{ k: 'Job: CI on the merge group', v: 'The same checks on the exact commit main will get' }, { k: 'Release image', v: 'Built here and tagged with that commit; never rebuilt' }],
+        repo: [{ k: 'main', v: 'One squash commit for PR #57' }]
+      } },
+      deploy: { on: ['runner', 'ecr', 'ecs', 'rds'], flow: ['Runner signs in to AWS, no stored keys', 'ECS pulls the image from ECR', 'Migrations run on RDS', 'Staging, then production'], detail: {
+        runner: [{ k: 'Job: deploy', v: 'Gets short-lived AWS credentials through OIDC' }],
+        ecr: [{ k: 'orders-api:<commit>', v: 'The image the merge queue built and tested' }],
+        ecs: [{ k: 'task: migrate', v: 'Runs once against the database, then exits' }, { k: 'service staging', v: '1 task, replaced with the new version' }, { k: 'service prod', v: '2 tasks, replaced one at a time' }],
+        rds: [{ k: 'Prod instance › db orders', v: 'Migration applied before the new code starts' }]
+      } },
+      monitor: { on: ['ecs', 'cw', 'runner', 'claude', 'repo'], flow: ['App on ECS', 'CloudWatch logs and alarms', 'Alarm starts the incident agent on a runner', 'Claude investigates', 'Issue opened'], detail: {
+        ecs: [{ k: 'service prod', v: '2 tasks sending logs and metrics' }],
+        cw: [{ k: 'log group /ecs/orders-api/prod', v: 'Every request, as structured JSON' }, { k: 'alarms', v: 'Error rate, p95 latency, health checks' }],
+        runner: [{ k: 'Job: incident', v: 'Starts only when an alarm fires' }],
+        claude: [{ k: 'On an alarm', v: 'Reads logs, recent deploys and commits' }],
+        repo: [{ k: 'New issue', v: 'Opened with the evidence; triage takes it from there' }]
+      } }
+    };
+    const REBUILT = { badge: 'Rebuilt each demo', badgeBg: '#EEF1F6', badgeFg: '#3B4250' };
+    const KEPT = { badge: 'Kept', badgeBg: '#EAF6EF', badgeFg: '#1F6B40' };
+    const arch = [
+      { name: 'GitHub', where: 'github.com, in our organization', flex: '1 1 520px', items: [
+        { name: 'Repository', desc: 'The code, its history, and the rules for changing it.', subs: [
+          { k: 'main', v: 'Always deployable; protected by a ruleset' },
+          { k: 'agent/<issue>-<slug> branches', v: 'Where agents push their work' },
+          { k: 'AGENTS.md', v: 'Commands and rules every agent reads' },
+          { k: 'CODEOWNERS', v: 'Paths that need the human to approve' },
+          { k: 'infra/', v: 'Terraform for everything in AWS' }
+        ] },
+        { name: 'Issues and pull requests', desc: 'All work is tracked here; the Projects board is the overview.', subs: [
+          { k: 'Issues', v: 'From people, the incident agent and mutation tests' },
+          { k: 'Labels', v: 'risk:*, difficulty:*, agent, needs-human, incident' },
+          { k: 'Pull requests', v: 'One per issue; auto-merge when green' }
+        ] },
+        { name: 'Actions workflows', desc: 'Automated jobs. Each job runs on its own temporary runner machine.', subs: [
+          { k: 'triage.yml', v: 'On every new issue: score, label, assign' },
+          { k: 'agent.yml', v: 'Claude Code works an assigned issue, opens a PR' },
+          { k: 'ci.yml', v: 'Lint, unit, integration, build, security, PR rules, AI review' },
+          { k: 'preview.yml', v: 'Deploys and removes per-PR previews' },
+          { k: 'deploy.yml', v: 'Staging, then production, on merge to main' },
+          { k: 'incident.yml', v: 'Started by an AWS alarm; opens an issue' },
+          { k: 'mutation.yml', v: 'Nightly; files issues for weak tests' },
+          { k: 'release.yml', v: 'Versions and changelog' }
+        ] },
+        { name: 'Merge queue', desc: 'Re-tests each ready PR on top of the latest main, then merges it.', subs: [
+          { k: 'Merge group', v: 'The PR plus everything ahead of it' }
+        ] },
+        { name: 'Agents GitHub App', desc: 'The identity agents use. Can push branches and open PRs, never approve or push to main.', subs: [
+          { k: 'Permissions', v: 'Contents and pull requests: write; settings: none' }
+        ] },
+        { name: 'Dependabot', desc: 'GitHub\'s built-in bot that keeps dependencies up to date with its own PRs.', subs: [
+          { k: '.github/dependabot.yml', v: 'NuGet packages, Docker images and Actions versions' },
+          { k: 'Weekly grouped PRs', v: 'Same checks as any PR; patch updates merge on their own when green' }
+        ] }
+      ] },
+      { name: 'AWS', where: 'our account, us-east-1, defined in Terraform', flex: '1.6 1 640px', items: [
+        { name: 'ECS cluster: demo', desc: 'Runs every container. A service keeps tasks running; a task is one running copy of a container.', subs: [
+          { k: 'service prod', v: '2 tasks of the app' },
+          { k: 'service staging', v: '1 task of the app' },
+          { k: 'service pr-<N>', v: '1 task per open PR preview' },
+          { k: 'service console', v: 'This demo console' },
+          { k: 'task migrate', v: 'One-off; runs database migrations, then exits' },
+          { k: 'task load-generator', v: 'NBomber scenarios, started from the console' }
+        ] },
+        { name: 'Load balancer', desc: 'Receives web traffic and sends it to the right service by hostname.', subs: [
+          { k: 'demo.joshb.app', v: 'service prod' },
+          { k: 'staging.demo.joshb.app', v: 'service staging' },
+          { k: 'pr-<N>.demo.joshb.app', v: 'service pr-<N>' },
+          { k: 'console.demo.joshb.app', v: 'service console, behind Google sign-in' }
+        ] },
+        { name: 'ECR', desc: 'The image registry. CI builds an image once and every environment runs that same image.', subs: [
+          { k: 'repository orders-api', v: 'Release images by commit; preview images by PR' },
+          { k: 'repository console', v: 'The console image' }
+        ] },
+        { name: 'RDS PostgreSQL', desc: 'Managed databases; AWS handles patching and backups.', subs: [
+          { k: 'prod instance › db orders', v: 'Production data' },
+          { k: 'non-prod instance › db staging', v: 'Staging data' },
+          { k: 'non-prod instance › db pr_<N>', v: 'One per open PR preview' }
+        ] },
+        { name: 'AppConfig', desc: 'Feature flags the app reads at run time, toggled from the console.', subs: [
+          { k: 'Feature flags', v: 'Per environment' },
+          { k: 'Fault flags', v: 'Switch on known-bad paths for demos' }
+        ] },
+        { name: 'CloudWatch and X-Ray', desc: 'Where logs, metrics, traces and alarms live.', subs: [
+          { k: 'Log groups', v: 'One per service, structured JSON' },
+          { k: 'Alarms', v: 'Error rate, p95 latency, health; also trigger rollback' },
+          { k: 'X-Ray', v: 'Traces from request to database' }
+        ] },
+        { name: 'EventBridge', desc: 'Routes events between services.', subs: [
+          { k: 'Alarm rule', v: 'Alarm fires › starts incident.yml in GitHub' }
+        ] },
+        { name: 'IAM roles', desc: 'Who may do what. GitHub signs in with OIDC, so no keys are stored anywhere.', subs: [
+          { k: 'deploy-prod', v: 'Only deploy.yml on main' },
+          { k: 'deploy-staging', v: 'Only deploy.yml on main' },
+          { k: 'preview', v: 'PR workflows; preview resources only' },
+          { k: 'incident-readonly', v: 'Reads logs and metrics, nothing else' }
+        ] },
+        { name: 'Route 53 and ACM', desc: 'DNS names and the HTTPS certificate.', subs: [
+          { k: '*.demo.joshb.app', v: 'Records and a wildcard certificate' }
+        ] },
+        { name: 'Terraform state and OIDC provider', desc: 'What Terraform and GitHub sign-in rely on, set up once in the infra repo.', subs: [
+          { k: 'S3 state bucket', v: 'Remembers what Terraform built' },
+          { k: 'GitHub OIDC provider', v: 'Lets Actions sign in to AWS' }
+        ] },
+        { name: 'Cost Explorer', desc: 'What the demo costs, by tag, shown on the console.', subs: [
+          { k: 'project tag', v: 'Every demo resource carries it' }
+        ] }
+      ] },
+      { name: 'Outside services', where: 'called over the internet', flex: '0.8 1 300px', items: [
+        { name: 'Claude', desc: 'The AI model behind the triager, agents, AI review and incident agent.', subs: [
+          { k: 'Anthropic API', v: 'Called from Actions jobs with an API key secret' }
+        ] },
+        { name: 'Google sign-in', desc: 'Who can open the console.', subs: [
+          { k: 'billigmeier.org accounts', v: 'Only these can sign in' }
+        ] },
+        { name: '1Password', desc: 'Where the few real secrets live.', subs: [
+          { k: 'Infra vault', v: 'API keys and tokens for setup' }
+        ] }
+      ] }
+    ].map(z => ({ ...z, items: z.items.map(c => ({ ...c, hasBadge: !!c.badge })) }));
+    const mode = this.state.mode ?? 'present';
+    const tab = id => ({ on: mode === id, bg: mode === id ? '#FFFFFF' : 'transparent', weight: mode === id ? 600 : 500, go: () => this.setState({ mode: id }) });
+    const step = this.state.step ?? 0;
+    const current = steps[step];
+    const here = where[current.stage];
+    const paint = list => list.map(n => {
+      const on = here.on.indexOf(n.id) >= 0;
+      const detail = (on && here.detail && here.detail[n.id]) || [];
+      return { ...n, detail, hasDetail: detail.length > 0, bg: on ? '#E6EDFB' : '#FAFAF8', border: on ? '#1F4FC4' : '#E1E2DD', opacity: on ? 1 : 0.55 };
+    });
+    const zones = { github: paint(nodes.github), aws: paint(nodes.aws), ai: paint(nodes.ai) };
+    const flow = here.flow.map((t, i) => ({ text: t, arrow: i < here.flow.length - 1 }));
+    const activeIndex = stages.findIndex(s => s.id === current.stage);
+    const stageList = stages.map((s, i) => {
+      const active = i === activeIndex;
+      const done = i < activeIndex;
+      return {
+        ...s,
+        done,
+        arrow: i < stages.length - 1,
+        bg: active ? '#1F4FC4' : (done ? '#E6EDFB' : '#FFFFFF'),
+        fg: active ? '#FFFFFF' : (done ? '#183E99' : '#3B4250'),
+        border: active ? '#1F4FC4' : (done ? '#B9C9F2' : '#D5D7D1'),
+        weight: active ? 600 : 500,
+        open: () => this.setState({ explain: s.id })
+      };
+    });
+    const show = {};
+    stages.forEach(s => { show[s.id] = s.id === current.stage; });
+    const explainId = this.state.explain;
+    return {
+      stages: stageList,
+      current: { ...current, stageName: stages[activeIndex].name },
+      show,
+      zones,
+      flow,
+      arch,
+      tabs: { present: tab('present'), arch: tab('arch') },
+      isPresent: mode === 'present',
+      isArch: mode === 'arch',
+      stepNum: step + 1,
+      stepCount: steps.length,
+      isFirst: step === 0,
+      isLast: step === steps.length - 1,
+      next: () => this.setState({ step: Math.min(step + 1, steps.length - 1) }),
+      back: () => this.setState({ step: Math.max(step - 1, 0) }),
+      openCurrent: () => this.setState({ explain: current.stage }),
+      showExplain: !!explainId,
+      explain: explainers[explainId] || explainers.issue,
+      closeExplain: () => this.setState({ explain: null })
+    };
+  }
+}
+</script>
+</body>
+</html>
