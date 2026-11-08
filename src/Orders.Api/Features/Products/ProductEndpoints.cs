@@ -24,6 +24,7 @@ internal static class ProductEndpoints
     {
         var products = api.MapGroup("/products").WithTags("Products");
         products.MapGet("/", List);
+        products.MapGet("/low-stock", LowStock);
         products.MapGet("/{id:guid}", Get);
         products.MapPost("/", Create);
     }
@@ -33,6 +34,22 @@ internal static class ProductEndpoints
             .OrderBy(p => p.Sku)
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct));
+
+    private static async Task<Results<Ok<List<ProductResponse>>, ValidationProblem>> LowStock(
+        OrdersDbContext db, CancellationToken ct, string? threshold = null)
+    {
+        var limit = 10;
+        if (threshold is not null && (!int.TryParse(threshold, out limit) || limit is < 1 or > 1000))
+        {
+            return Problems.Invalid(nameof(threshold), "threshold must be a whole number between 1 and 1000.");
+        }
+
+        return TypedResults.Ok(await db.Products
+            .Where(p => p.Stock < limit)
+            .OrderBy(p => p.Stock).ThenBy(p => p.Sku)
+            .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
+            .ToListAsync(ct));
+    }
 
     private static async Task<Results<Ok<ProductResponse>, ProblemHttpResult>> Get(Guid id, OrdersDbContext db, CancellationToken ct) =>
         await db.Products.FindAsync([id], ct) is { } product
