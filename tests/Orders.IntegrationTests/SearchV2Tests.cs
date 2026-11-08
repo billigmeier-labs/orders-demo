@@ -54,7 +54,8 @@ public sealed class SearchV2Tests : IAsyncDisposable
         var byId = await SearchAsync(order.Id.ToString()[..13]);
 
         Assert.Equal([order.Id], byCustomer.Orders.Select(o => o.Id));
-        Assert.Equal(order.Id, byId.Orders[0].Id);
+        // Version 7 ids start with a timestamp, so orders other tests create in the same instant share the prefix.
+        Assert.Contains(order.Id, byId.Orders.Select(o => o.Id));
     }
 
     [Theory]
