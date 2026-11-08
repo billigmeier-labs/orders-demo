@@ -1,0 +1,7 @@
+# Git hooks (optional). Install with `lefthook install`.
+pre-commit:
+  commands:
+    dotnet-format:
+      glob: "*.cs"
+      run: ./scripts/dotnet format Orders.slnx --include {staged_files}
+      stage_fixed: true

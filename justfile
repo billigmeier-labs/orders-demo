@@ -10,6 +10,8 @@ configuration := "Release"
 postgres_image := "postgres:17-alpine"
 api_port := "8080"
 db_port := "5432"
+# Where the API finds the dev Postgres when dotnet runs natively (the devcontainer sets host.docker.internal)
+dev_db_host := env("DEV_DB_HOST", "localhost")
 
 # List recipes
 default:
@@ -62,7 +64,7 @@ dev:
 
     export ASPNETCORE_ENVIRONMENT=Development MIGRATE_ON_STARTUP=true SEED_DATA=true
     export APP_VERSION=dev APP_COMMIT=local APP_ENVIRONMENT=local
-    db_host=localhost
+    db_host={{ dev_db_host }}
     if command -v dotnet >/dev/null 2>&1; then
         export ASPNETCORE_URLS=http://localhost:{{ api_port }}
     else
