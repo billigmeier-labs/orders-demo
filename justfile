@@ -10,6 +10,8 @@ configuration := "Release"
 postgres_image := "postgres:17-alpine"
 api_port := "8080"
 db_port := "5432"
+e2e_port := "8088"
+console_url := "https://console.demo.joshb.app"
 # Where the API finds the dev Postgres when dotnet runs natively (the devcontainer sets host.docker.internal)
 dev_db_host := env("DEV_DB_HOST", "localhost")
 
@@ -75,6 +77,46 @@ dev:
     fi
     export ConnectionStrings__Orders="Host=$db_host;Port={{ db_port }};Database=orders;Username=orders;Password=orders"
     {{ dotnet }} run --project src/Orders.Api --no-launch-profile
+
+# Playwright suite against the console in fake mode, auth on (extra args go to `playwright test`)
+e2e *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker build -f src/Orders.Console/Dockerfile -t orders-console:e2e .
+    token=$(openssl rand -hex 24)
+    docker rm -f orders-console-e2e >/dev/null 2>&1 || true
+    trap 'docker rm -f orders-console-e2e >/dev/null 2>&1 || true' EXIT
+    docker run -d --name orders-console-e2e -p 127.0.0.1:{{ e2e_port }}:8080 \
+        -e CONSOLE_FAKES=true -e CONSOLE_VERIFICATION_TOKEN="$token" orders-console:e2e >/dev/null
+    for _ in $(seq 1 60); do
+        curl -fsS http://127.0.0.1:{{ e2e_port }}/health/live >/dev/null 2>&1 && break
+        sleep 1
+    done
+    curl -fsS http://127.0.0.1:{{ e2e_port }}/health/live >/dev/null || { docker logs orders-console-e2e; exit 1; }
+    E2E_MODE=fake CONSOLE_URL=http://localhost:{{ e2e_port }} CONSOLE_VERIFICATION_TOKEN="$token" \
+        just _playwright {{ args }}
+
+# Playwright suite in live mode against the real console (`just e2e-live --grep-invert @live-slow` for the quick part)
+e2e-live *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    token_file="$HOME/.config/op/orders-demo-console-token"
+    [ -r "$token_file" ] || { echo "Put the console verification token in $token_file" >&2; exit 1; }
+    E2E_MODE=live CONSOLE_URL={{ console_url }} CONSOLE_VERIFICATION_TOKEN="$(tr -d '[:space:]' < "$token_file")" \
+        just _playwright {{ args }}
+
+# Runs tests/Orders.E2E in the official Playwright image matching its @playwright/test version
+[private]
+_playwright *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(sed -nE 's/.*"@playwright\/test": "([0-9.]+)".*/\1/p' tests/Orders.E2E/package.json)
+    docker run --rm --network host --ipc host --init \
+        --user "$(id -u):$(id -g)" -e HOME=/tmp -e npm_config_cache=/tmp/.npm -e CI=1 \
+        -e E2E_MODE -e CONSOLE_URL -e CONSOLE_VERIFICATION_TOKEN \
+        -v "$PWD/tests/Orders.E2E:/e2e" -w /e2e \
+        "mcr.microsoft.com/playwright:v${version}-noble" \
+        bash -c 'npm ci --no-audit --no-fund --loglevel=error && npx playwright test "$@"' playwright {{ args }}
 
 # AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`
 mod env "infra/infra.just"

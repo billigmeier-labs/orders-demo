@@ -1,0 +1,19 @@
+{
+  "name": "orders-e2e",
+  "private": true,
+  "description": "Playwright end-to-end suite for the Orders demo console",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "E2E_MODE=fake playwright test",
+    "test:live": "E2E_MODE=live playwright test",
+    "test:live:quick": "E2E_MODE=live playwright test --grep-invert @live-slow",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
