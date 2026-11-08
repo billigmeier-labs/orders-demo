@@ -25,6 +25,7 @@ Base path `/api`. JSON, camelCase. Errors are RFC 7807 problem details. IDs are 
 | `GET /health/ready` | DB reachable |
 | `GET /api/version` | `{ version, commit, environment }` from env vars `APP_VERSION`, `APP_COMMIT`, `APP_ENVIRONMENT` |
 | `GET /api/customers`, `GET /api/customers/{id}`, `POST /api/customers` | Customers: `id, name, email, createdAt` |
+| `GET /api/customers/{id}/orders?page=&pageSize=` | A customer's orders, newest first, same paged shape as `GET /api/orders` (default 20, max 100); 404 if the customer doesn't exist |
 | `GET /api/products`, `GET /api/products/{id}`, `POST /api/products` | Products: `id, sku, name, price, stock` |
 | `GET /api/orders?status=&customerId=&page=&pageSize=` | List orders, newest first, paged (default 20, max 100) |
 | `GET /api/orders/{id}` | One order with lines and total |

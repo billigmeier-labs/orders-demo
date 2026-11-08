@@ -24,7 +24,12 @@ internal static class OrderEndpoints
         Guid? customerId,
         CancellationToken ct,
         [Range(1, 100_000)] int page = 1,
-        [Range(1, 100)] int pageSize = 20)
+        [Range(1, 100)] int pageSize = 20) =>
+        TypedResults.Ok(await QueryAsync(db, status, customerId, page, pageSize, ct));
+
+    /// <summary>Shared by <c>GET /api/orders</c> and <c>GET /api/customers/{id}/orders</c>: newest first, paged.</summary>
+    internal static async Task<PagedResponse<OrderSummaryResponse>> QueryAsync(
+        OrdersDbContext db, OrderStatus? status, Guid? customerId, int page, int pageSize, CancellationToken ct)
     {
         var query = db.Orders.AsQueryable();
         if (status is not null)
@@ -45,7 +50,7 @@ internal static class OrderEndpoints
                 o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
             .ToListAsync(ct);
 
-        return TypedResults.Ok(new PagedResponse<OrderSummaryResponse>(items, page, pageSize, totalCount));
+        return new PagedResponse<OrderSummaryResponse>(items, page, pageSize, totalCount);
     }
 
     private static async Task<Results<Ok<OrderResponse>, ProblemHttpResult>> Get(Guid id, OrdersDbContext db, CancellationToken ct) =>
