@@ -14,7 +14,7 @@
         "kind": "load.start",
         "args": {
           "scenario": "normal",
-          "durationMinutes": "20"
+          "durationMinutes": "45"
         }
       }
     },

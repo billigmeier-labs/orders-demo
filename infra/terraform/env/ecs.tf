@@ -239,7 +239,8 @@ resource "aws_ecs_task_definition" "loadgen" {
       image     = "${local.ecr["orders-loadgen"]}:${var.loadgen_image_tag}"
       essential = true
       environment = concat(local.common_env, [
-        { name = "TARGET_BASE_URL", value = "https://staging.${local.domain}" },
+        # The demo story is customers on production, so the load goes there.
+        { name = "TARGET_BASE_URL", value = "https://${local.domain}" },
       ])
       logConfiguration = local.log_config["loadgen"]
     }
