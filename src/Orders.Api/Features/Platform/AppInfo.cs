@@ -7,7 +7,4 @@ public sealed record AppInfo(string Version, string Commit, string Environment)
         configuration["APP_VERSION"] ?? "0.0.0-local",
         configuration["APP_COMMIT"] ?? "unknown",
         configuration["APP_ENVIRONMENT"] ?? "local");
-
-    internal Dictionary<string, object> ToLogScope() =>
-        new() { ["app.version"] = Version, ["app.commit"] = Commit, ["app.environment"] = Environment };
 }

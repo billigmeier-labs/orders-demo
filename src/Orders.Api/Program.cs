@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using Amazon.AppConfigData;
+using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Data;
 using Orders.Api.Features.Customers;
@@ -9,10 +11,12 @@ using Orders.Api.Features.Search;
 using Orders.Api.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+var appInfo = AppInfo.From(builder.Configuration);
 
+// JSON logs everywhere but a developer's terminal, each line tagged with AppVersion, AppCommit and AppEnvironment.
 if (!builder.Environment.IsDevelopment())
 {
-    builder.Logging.ClearProviders().AddJsonConsole(options => options.IncludeScopes = true);
+    builder.Logging.AddAppJsonConsole(appInfo);
 }
 
 builder.Services.AddDbContext<OrdersDbContext>((services, options) =>
@@ -26,25 +30,42 @@ builder.Services.AddValidation();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 
+// One log line per request: method, path, status and duration.
+builder.Services.AddHttpLogging(options =>
+{
+    options.LoggingFields = HttpLoggingFields.RequestMethod | HttpLoggingFields.RequestPath | HttpLoggingFields.RequestQuery
+        | HttpLoggingFields.ResponseStatusCode | HttpLoggingFields.Duration;
+    options.CombineLogs = true;
+});
+
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<IFeatureFlags, ConfigurationFeatureFlags>();
-builder.Services.AddSingleton(services => AppInfo.From(services.GetRequiredService<IConfiguration>()));
+builder.Services.AddSingleton(appInfo);
+builder.Services.AddSingleton<FaultInjector>(services =>
+    new(services.GetRequiredService<IFeatureFlags>(), services.GetRequiredService<ILogger<FaultInjector>>()));
+
+// Flags come from AppConfig when APPCONFIG_APPLICATION is set (ECS), otherwise from configuration.
+if (AppConfigSettings.From(builder.Configuration) is { } appConfig)
+{
+    builder.Services.AddSingleton(appConfig);
+    builder.Services.AddSingleton<IAmazonAppConfigData>(_ => new AmazonAppConfigDataClient());
+    builder.Services.AddSingleton<AppConfigFeatureFlags>();
+    builder.Services.AddSingleton<IFeatureFlags>(services => services.GetRequiredService<AppConfigFeatureFlags>());
+    builder.Services.AddHostedService<AppConfigPoller>();
+}
+else
+{
+    builder.Services.AddSingleton<IFeatureFlags, ConfigurationFeatureFlags>();
+}
+
+builder.Services.AddOptionalTelemetry(builder.Configuration, appInfo);
 
 var app = builder.Build();
 
+app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health"), branch => branch.UseHttpLogging());
+// Unhandled exceptions are logged once, with the stack, by the exception handler; EF Core's own
+// failure logs are switched off in appsettings.json so the same error doesn't appear three times.
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-
-// Every log line written while handling a request carries the app version, commit and environment.
-var logScope = app.Services.GetRequiredService<AppInfo>().ToLogScope();
-var requestLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Orders.Api");
-app.Use(async (context, next) =>
-{
-    using (requestLogger.BeginScope(logScope))
-    {
-        await next(context);
-    }
-});
 
 app.MapPlatform();
 

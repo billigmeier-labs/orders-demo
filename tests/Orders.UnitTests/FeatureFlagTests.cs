@@ -21,4 +21,15 @@ public class FeatureFlagTests
     [Fact]
     public void IsEnabled_FlagMissing_ReturnsFalse() =>
         Assert.False(Flags().IsEnabled("NewCheckout"));
+
+    [Fact]
+    public void GetFlag_EnabledWithAttributes_ReadsBoth()
+    {
+        var flag = Flags(("FeatureFlags:faultFailOrders:enabled", "true"), ("FeatureFlags:faultFailOrders:percent", "40"))
+            .GetFlag("faultFailOrders");
+
+        Assert.True(flag.Enabled);
+        Assert.Equal(40, flag.Number("percent", 0));
+        Assert.False(flag.Attributes.ContainsKey("enabled"));
+    }
 }

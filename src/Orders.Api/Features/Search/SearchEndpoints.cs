@@ -12,13 +12,17 @@ public sealed record SearchResponse(IReadOnlyList<ProductResponse> Products, IRe
 
 internal static class SearchEndpoints
 {
-    private const int MaxResults = 20;
+    internal const int MaxResults = 20;
 
     public static void MapSearch(this IEndpointRouteBuilder api) =>
         api.MapGet("/search", Search).WithTags("Search");
 
-    /// <summary>Products by name or SKU; orders by id prefix or customer name. Case-insensitive.</summary>
-    private static async Task<Results<Ok<SearchResponse>, ValidationProblem>> Search([Required, StringLength(100)] string q, OrdersDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Products by name or SKU; orders by id prefix or customer name. Case-insensitive.
+    /// With the searchV2 flag on, <see cref="SearchV2"/> answers instead (ranked, word-prefix matching).
+    /// </summary>
+    private static async Task<Results<Ok<SearchResponse>, ValidationProblem>> Search(
+        [Required, StringLength(100)] string q, OrdersDbContext db, IFeatureFlags flags, FaultInjector faults, CancellationToken ct)
     {
         var term = q.Trim().ToLowerInvariant();
         if (term.Length == 0)
@@ -26,6 +30,16 @@ internal static class SearchEndpoints
             return Problems.Invalid("q", "The q field is required.");
         }
 
+        await faults.MaybeSlowSearchAsync(ct);
+
+        var result = flags.IsEnabled(Flags.SearchV2)
+            ? await SearchV2.SearchAsync(db, term, ct)
+            : await SearchV1Async(db, term, ct);
+        return TypedResults.Ok(result);
+    }
+
+    private static async Task<SearchResponse> SearchV1Async(OrdersDbContext db, string term, CancellationToken ct)
+    {
         var contains = $"%{EscapeLike(term)}%";
 
         var products = await db.Products
@@ -43,7 +57,7 @@ internal static class SearchEndpoints
                 o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
             .ToListAsync(ct);
 
-        return TypedResults.Ok(new SearchResponse(products, orders));
+        return new SearchResponse(products, orders);
     }
 
     private static string EscapeLike(string value) =>
