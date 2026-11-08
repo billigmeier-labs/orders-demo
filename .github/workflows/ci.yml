@@ -177,6 +177,7 @@ jobs:
           }
           build orders-api src/Orders.Api/Dockerfile
           build orders-console src/Orders.Console/Dockerfile
+          build orders-loadgen src/Orders.LoadGenerator/Dockerfile
 
   ci-ok:
     name: ci-ok
