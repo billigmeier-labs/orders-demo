@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Runs `dotnet` from PATH if installed, otherwise inside the official .NET SDK container.
+#
+# The container mounts the repo at the same path, runs as the calling user, keeps
+# HOME and the NuGet cache in .cache/, and can start sibling containers through the
+# Docker socket (Testcontainers reaches them via host.docker.internal).
+# Extra `docker run` flags can be passed in DOTNET_DOCKER_ARGS (used by `just dev`).
+set -euo pipefail
+
+if command -v dotnet >/dev/null 2>&1; then
+    exec dotnet "$@"
+fi
+
+image="${DOTNET_SDK_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0}"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+socket=/var/run/docker.sock
+socket_gid="$(stat -c %g "$socket" 2>/dev/null || stat -f %g "$socket" 2>/dev/null || echo 0)"
+workdir="$PWD"
+case "$workdir" in "$root"|"$root"/*) ;; *) workdir="$root" ;; esac
+mkdir -p "$root/.cache/home" "$root/.cache/nuget"
+
+tty_args=()
+if [ -t 0 ] && [ -t 1 ]; then
+    tty_args=(-it)
+fi
+
+# shellcheck disable=SC2086 # DOTNET_DOCKER_ARGS is a list of flags
+exec docker run --rm --init "${tty_args[@]}" \
+    --user "$(id -u):$(id -g)" --group-add "$socket_gid" \
+    -v "$root:$root" -w "$workdir" \
+    -e HOME="$root/.cache/home" -e DOTNET_CLI_HOME="$root/.cache/home" -e NUGET_PACKAGES="$root/.cache/nuget" \
+    -e DOTNET_NOLOGO=1 -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    -e DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK=1 \
+    -v "$socket:$socket" \
+    --add-host=host.docker.internal:host-gateway -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
+    ${DOTNET_DOCKER_ARGS:-} \
+    "$image" dotnet "$@"
