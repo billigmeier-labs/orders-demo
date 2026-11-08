@@ -58,3 +58,16 @@ resource "aws_appconfig_deployment" "initial" {
   deployment_strategy_id   = "AppConfig.AllAtOnce"
   description              = "Initial flags"
 }
+
+# Flag toggles from the console deploy a new version each time, and AppConfig
+# allows one deployment per environment at a time (bake time included). The
+# predefined AllAtOnce bakes for 10 minutes; this one finishes immediately.
+resource "aws_appconfig_deployment_strategy" "instant" {
+  name                           = "orders-demo-instant"
+  description                    = "100% immediately, no bake"
+  deployment_duration_in_minutes = 0
+  final_bake_time_in_minutes     = 0
+  growth_factor                  = 100
+  growth_type                    = "LINEAR"
+  replicate_to                   = "NONE"
+}

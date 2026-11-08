@@ -16,7 +16,11 @@ data "aws_iam_policy_document" "trust" {
       "${local.repo_sub}:ref:refs/heads/main",
       "${local.repo_sub}:ref:refs/heads/gh-readonly-queue/main/*",
     ]
-    preview  = ["${local.repo_sub}:pull_request"]
+    # pull_request: per-PR previews. main: the nightly / manual preview reaper.
+    preview = [
+      "${local.repo_sub}:pull_request",
+      "${local.repo_sub}:ref:refs/heads/main",
+    ]
     readonly = ["${local.repo_sub}:*"]
   }
 
@@ -246,6 +250,25 @@ data "aws_iam_policy_document" "preview" {
       "ecs:TagResource",
     ]
     resources = ["${local.service_arns}/pr-*"]
+  }
+
+  # The preview's one-off migration runs its own task definition with the
+  # command overridden to ./efbundle.
+  statement {
+    sid       = "PrRunMigrations"
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:${local.partition}:ecs:${var.region}:${local.account_id}:task-definition/orders-demo-pr-*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [local.cluster_arn]
+    }
+  }
+
+  statement {
+    sid       = "PrStopTasks"
+    actions   = ["ecs:StopTask"]
+    resources = ["arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.cluster_name}/*"]
   }
 
   statement {

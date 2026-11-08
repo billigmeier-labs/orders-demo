@@ -22,8 +22,28 @@ up:
     {{ _load_token }}
     terraform -chdir={{ tf }}/base init -input=false
     terraform -chdir={{ tf }}/base apply -input=false -auto-approve
+    just --justfile {{ source_file() }} --working-directory {{ source_directory() }} secrets
     terraform -chdir={{ tf }}/env init -input=false
     terraform -chdir={{ tf }}/env apply -input=false -auto-approve
+
+# Write the console's secrets (one JSON secret, created empty by base) from 1Password.
+secrets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+      OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/op/service-account-token)"
+      export OP_SERVICE_ACCOUNT_TOKEN
+    fi
+    arn="$(terraform -chdir={{ tf }}/base output -raw console_secret_arn)"
+    jq -n \
+      --arg gh "$(op read "op://Infra/orders-demo-automation/credential")" \
+      --arg id "$(op read "op://Infra/google-console-oauth/username")" \
+      --arg secret "$(op read "op://Infra/google-console-oauth/credential")" \
+      --arg verify "$(tr -d '[:space:]' < ~/.config/op/orders-demo-console-token)" \
+      '{GITHUB_TOKEN: $gh, CONSOLE_VERIFICATION_TOKEN: $verify, GOOGLE_CLIENT_ID: $id, GOOGLE_CLIENT_SECRET: $secret}' \
+      | aws secretsmanager put-secret-value --region us-east-1 --secret-id "$arn" \
+          --secret-string file:///dev/stdin --query VersionId --output text >/dev/null
+    echo "Console secrets written to $arn"
 
 # Destroy the per-demo environment (ALB, ECS, RDS, ...); keeps base.
 down:

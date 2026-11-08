@@ -35,3 +35,11 @@ output "appconfig" {
     environment_arns = { for k, e in aws_appconfig_environment.this : k => e.arn }
   }
 }
+
+output "appconfig_deployment_strategy_id" {
+  value = aws_appconfig_deployment_strategy.instant.id
+}
+
+output "console_secret_arn" {
+  value = aws_secretsmanager_secret.console.arn
+}
