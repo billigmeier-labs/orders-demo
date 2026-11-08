@@ -1,21 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Orders.Console</RootNamespace>
     <AssemblyName>Orders.Console</AssemblyName>
+    <!-- Lock files also cover the container targets, so the Dockerfile can restore per architecture in locked mode. -->
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.AppConfig" Version="4.0.101.22" />
-    <PackageReference Include="AWSSDK.CloudWatch" Version="4.0.107.5" />
-    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.0.108.1" />
-    <PackageReference Include="AWSSDK.CostExplorer" Version="4.0.101.9" />
-    <PackageReference Include="AWSSDK.ECS" Version="4.0.110.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
+    <PackageReference Include="AWSSDK.AppConfig" />
+    <PackageReference Include="AWSSDK.CloudWatch" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" />
+    <PackageReference Include="AWSSDK.CostExplorer" />
+    <PackageReference Include="AWSSDK.ECS" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
   </ItemGroup>
 
   <ItemGroup>

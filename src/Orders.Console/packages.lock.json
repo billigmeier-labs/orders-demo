@@ -1,0 +1,138 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "AWSSDK.AppConfig": {
+        "type": "Direct",
+        "requested": "[4.0.101.22, )",
+        "resolved": "4.0.101.22",
+        "contentHash": "iVKmc/f50xQF6wuzwGDa8BMsZ1XlcKXIJE7PrqVna80HdKBSmLgeqNFPoin/GepxpVZgR1xFBZobtPIjPCw17g==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+        }
+      },
+      "AWSSDK.CloudWatch": {
+        "type": "Direct",
+        "requested": "[4.0.107.5, )",
+        "resolved": "4.0.107.5",
+        "contentHash": "2xgRgbeL0fyY+BO7+d6ZxVs5I3ReCs3Kc12ZbMVb0dqsl9UAokohe3xelAyH+gAkvsb9wIbSp5DsQy2m7U7hOg==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)",
+          "AWSSDK.Extensions.CborProtocol": "[4.0.100.25, 5.0.0)"
+        }
+      },
+      "AWSSDK.CloudWatchLogs": {
+        "type": "Direct",
+        "requested": "[4.0.108.1, )",
+        "resolved": "4.0.108.1",
+        "contentHash": "fEKFzyWUlbsWFC9ac/wLSlZ88KdbsjlzfOV6Z3v8L8xBgQFAkYZ6S68EzKmzJDsFAa9mbPDTBYOUuOZL7qDrKQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+        }
+      },
+      "AWSSDK.CostExplorer": {
+        "type": "Direct",
+        "requested": "[4.0.101.9, )",
+        "resolved": "4.0.101.9",
+        "contentHash": "5p6HPhYnbxF6/8rNfC/0ypIP1q1gJmQGG0HvoEKVNKwCySKss6NzqcjzuV/m1flmdHJlN83S0WptIii5FBFPWw==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+        }
+      },
+      "AWSSDK.ECS": {
+        "type": "Direct",
+        "requested": "[4.0.110.2, )",
+        "resolved": "4.0.110.2",
+        "contentHash": "PsFE1Xuvr/q0GbWT5t8RoeRbu6lTilwGlRyPzFNxwprmOvPCP7j3CbwfN8DdaMwLYBXJUm+K10/2JM8eT8DGng==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+        }
+      },
+      "Microsoft.AspNetCore.Authentication.OpenIdConnect": {
+        "type": "Direct",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "W5g9xaWjPudw7GNwxCqP9uLxpwE1+LkRf4f8i0aF6Ga1AY3qU2UvBa4+41Opz15sO5oTCLwYYXcvb477Ry8NZQ==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.19.2"
+        }
+      },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.19",
+        "contentHash": "Hb6P2ui6y0U+UNUjcC4ASFFoTLzCijhMzfOCXfoFTXq/o0YWQsO1oSH1NG2GQ9dlIT693xeeih0yAcfeL1dphg=="
+      },
+      "AWSSDK.Extensions.CborProtocol": {
+        "type": "Transitive",
+        "resolved": "4.0.100.25",
+        "contentHash": "PHM8U0MOjH7tQ/5XfQjn3jc2jmoCSs4QNKNiiYRViXoL6dKfBa18Xwoxthpbkz4MnJd0sTkZ1gGf3tpp3oPlMQ==",
+        "dependencies": {
+          "AWSSDK.Core": "4.0.102.19"
+        }
+      },
+      "Microsoft.Bcl.Cryptography": {
+        "type": "Transitive",
+        "resolved": "10.0.2",
+        "contentHash": "LG9Yll3B5aNpxv0+D47g6LiOiKBIlodhcHdQwcYzo8VeexFLGqx5ymetmA2aBRyo9cCcWsQWrFsdbsr8LvmWDw=="
+      },
+      "Microsoft.IdentityModel.Abstractions": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "HJbo/lnSfNHUfphPRT910poQc4T2/9+8svFLvzuaYHGAOJ2Tu+oEDqpX0BVP3BJ4OuUM1kylEKyaiX2fCAK3Cw=="
+      },
+      "Microsoft.IdentityModel.JsonWebTokens": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "ui3fuBT4fs8kdKfBthI4NzLYIBIneEVS8UrL1JVBzAn80UiKmngBBi0BEByE7n/9c+EElcfFlCMFFTqpkBSLNA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Logging": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "r5YLDIxGOnkVJHrqXv/iD1FM1CgGrQOdriXuvuWvTPmKbnGANhEysq9XKmN6IHjf2a+9bAGEpnoRBsAQlvJU5w==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Abstractions": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "sGxSsSrZXNmca6D+jHH2rVRyo2nNRd/g4H9CFbPmLLq0xgoH1U0orLWE5minfijw7+zq49tBs7txenbfAErRoQ==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols.OpenIdConnect": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "1XOcyY36cVymzE3qKdzKaUEZ4Pzt7ZpSa14JZoPPK1NLFUkQDs85TCqpV6XDo0YjFXj6nVK00AfOHppjghjhtw==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols": "8.19.2",
+          "System.IdentityModel.Tokens.Jwt": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Tokens": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "GtPC1S02uH1gOO4fQ+zRysIicKmEXaYFP8PIkdJYXqMyruYhopre4ozVHp0XiDSA0+GJvOZH9prxCPvgBMg4Ww==",
+        "dependencies": {
+          "Microsoft.Bcl.Cryptography": "10.0.2",
+          "Microsoft.IdentityModel.Logging": "8.19.2"
+        }
+      },
+      "System.IdentityModel.Tokens.Jwt": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "gqhDC/icByKEutygpr+OFgAmjwTVowyzFjWB8K0q1ww8uFj5a1BQNL+QvijUl9uhq4p8OdDwcAIrjVC+eC9FVA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.JsonWebTokens": "8.19.2",
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      }
+    },
+    "net10.0/linux-arm64": {},
+    "net10.0/linux-x64": {}
+  }
+}

@@ -19,7 +19,7 @@ with, the Azure equivalent, and a link to the real file or console.
 No `dotnet` on the host? Build and run in containers:
 
 ```sh
-docker buildx build --platform linux/amd64 -t orders-console:dev --load src/Orders.Console
+docker buildx build --platform linux/amd64 -f src/Orders.Console/Dockerfile -t orders-console:dev --load .
 docker run --rm -p 8080:8080 -e CONSOLE_FAKES=true -e CONSOLE_AUTH=off orders-console:dev
 # http://localhost:8080
 ```
@@ -30,8 +30,9 @@ at a time. A new issue is triaged (`.github` or `migration` in the text goes to 
 opens a PR, checks pass, the queue merges, the deploy succeeds; the `demo/canned-bug` PR deploys, alarms and
 rolls back; turning on `faultFailOrders` fires an alarm, opens an `incident` issue, and an agent's fix clears it.
 
-The Dockerfile is multi-stage, runs as the image's non-root `app` user on port 8080, and cross-publishes,
-so `--platform linux/arm64` builds on an amd64 host without emulation. Build context: this directory.
+The Dockerfile is multi-stage, restores in locked mode from `packages.lock.json`, runs as the image's non-root
+`app` user on port 8080, and cross-publishes, so `--platform linux/arm64` builds on an amd64 host without emulation.
+Build context: the repo root (like the API).
 
 ## Configuration
 
@@ -57,7 +58,7 @@ so `--platform linux/arm64` builds on an amd64 host without emulation. Build con
 | `ERROR_LOG_FILTER` | `?ERROR ?Error ?Exception` | CloudWatch Logs filter pattern |
 | `COST_PROJECT_TAG` | `orders-demo` | Cost Explorer filter on tag `project` |
 | `APPCONFIG_APPLICATION`, `APPCONFIG_ENVIRONMENT`, `APPCONFIG_PROFILE` | `orders-demo`, `prod`, `feature-flags` | Name or id of the feature-flag profile |
-| `APPCONFIG_DEPLOYMENT_STRATEGY` | `AppConfig.AllAtOnce` | Use a strategy with no bake time, or the next toggle waits for the bake to finish |
+| `APPCONFIG_DEPLOYMENT_STRATEGY` | `orders-demo-instant` | Name or id of the deployment strategy for flag toggles (see below) |
 | `LOADGEN_TASK_DEFINITION`, `LOADGEN_CONTAINER` | `loadgen`, `loadgen` | Started with env `SCENARIO` and `DURATION_MINUTES`, `startedBy=orders-console` |
 | `LOADGEN_SUBNETS`, `LOADGEN_SECURITY_GROUPS` | | Comma-separated; required to start load |
 | `LOADGEN_ASSIGN_PUBLIC_IP` | `false` | |
@@ -67,6 +68,24 @@ so `--platform linux/arm64` builds on an amd64 host without emulation. Build con
 
 Behind the ALB, `X-Forwarded-For` and `X-Forwarded-Proto` are trusted. `/health/live` is anonymous; everything
 else needs Google sign-in or the verification token. Page fetches and `/api/*` get a 401 instead of a redirect.
+
+### AppConfig deployment strategy
+
+Flag toggles deploy a new configuration version, and AppConfig allows one deployment per environment at a time,
+including its bake time. The predefined `AppConfig.AllAtOnce` bakes for 10 minutes, so a second toggle (or the
+incident scenario's reset) would fail for 10 minutes. The console expects a custom strategy named
+**`orders-demo-instant`**: `deployment_duration_in_minutes = 0`, `final_bake_time_in_minutes = 0`,
+`growth_factor = 100`, `growth_type = LINEAR`, `replicate_to = NONE`. Another name works if you set
+`APPCONFIG_DEPLOYMENT_STRATEGY`; names starting with `AppConfig.` are used as ids directly.
+
+### In ECS
+
+Secrets (from Secrets Manager or SSM): `GITHUB_TOKEN` (the automation PAT), `CONSOLE_VERIFICATION_TOKEN`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Plain env: `LOADGEN_SUBNETS`, `LOADGEN_SECURITY_GROUPS`, and any
+names that differ from the defaults above (cluster, services, alarm prefix, log group, AppConfig names,
+loadgen task definition). Set `DATAPROTECTION_KEYS_PATH` to a mounted EFS directory if the service runs more
+than one task or should keep sign-ins across deploys. Health check path: `/health/live`. Google OAuth redirect URI:
+`https://console.demo.joshb.app/signin-oidc`.
 
 IAM the task role needs: `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory`, `logs:FilterLogEvents`,
 `ecs:DescribeServices`, `ecs:RunTask`, `ecs:StopTask`, `ecs:ListTasks`, `ecs:DescribeTasks`, `iam:PassRole` (loadgen roles),

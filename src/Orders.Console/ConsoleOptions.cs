@@ -35,7 +35,7 @@ public sealed class ConsoleOptions
     public string AppConfigApplication { get; init; } = "orders-demo";
     public string AppConfigEnvironment { get; init; } = "prod";
     public string AppConfigProfile { get; init; } = "feature-flags";
-    public string AppConfigDeploymentStrategy { get; init; } = "AppConfig.AllAtOnce";
+    public string AppConfigDeploymentStrategy { get; init; } = "orders-demo-instant";
 
     public string LoadgenTaskDefinition { get; init; } = "loadgen";
     public string LoadgenContainer { get; init; } = "loadgen";
