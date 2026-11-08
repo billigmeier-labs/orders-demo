@@ -6,3 +6,4 @@
 .devcontainer/
 tests/
 **/TestResults/
+StrykerOutput/

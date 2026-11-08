@@ -13,3 +13,4 @@ playwright-report/
 test-results/
 node_modules/
 .cache/
+StrykerOutput/

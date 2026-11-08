@@ -1,0 +1,33 @@
+{
+  "stryker-config": {
+    "project-info": {
+      "name": "github.com/billigmeier-labs/orders-demo",
+      "module": "Orders.Api",
+      "version": "main"
+    },
+    "solution": "Orders.slnx",
+    "project": "src/Orders.Api/Orders.Api.csproj",
+    "test-runner": "mtp",
+    "configuration": "Release",
+    "mutation-level": "Standard",
+    "coverage-analysis": "perTest",
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "reporters": [
+      "progress",
+      "cleartext",
+      "html",
+      "json"
+    ],
+    "ignore-methods": [
+      "*Log*"
+    ],
+    "mutate": [
+      "!**/Data/Migrations/**/*.cs",
+      "!**/Program.cs"
+    ]
+  }
+}
