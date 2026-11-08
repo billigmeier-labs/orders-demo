@@ -21,7 +21,7 @@ builder.Services.AddHealthChecks().AddDbContextCheck<OrdersDbContext>(tags: [Pla
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ConflictExceptionHandler>();
-// DataAnnotations on endpoint parameters and public request records -> 400 validation problem.
+// DataAnnotations on endpoint parameters and public request records turn bad input into a 400 validation problem.
 builder.Services.AddValidation();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
