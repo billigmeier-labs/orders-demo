@@ -37,7 +37,7 @@ locals {
   # secret below), so the connection string itself carries no secret.
   connection_strings = {
     for k, db in aws_db_instance.this :
-    k => "Host=${db.address};Port=${db.port};Database=${db.db_name};Username=${db.username};SSL Mode=Require"
+    k => "Host=${db.address};Port=${db.port};Database=${db.db_name};Username=${db.username};SSL Mode=Require;Maximum Pool Size=20"
   }
   db_password_secret = {
     for k, db in aws_db_instance.this : k => "${db.master_user_secret[0].secret_arn}:password::"

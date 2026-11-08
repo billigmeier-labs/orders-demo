@@ -140,3 +140,6 @@ _playwright *args:
 
 # AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`
 mod env "infra/infra.just"
+
+# Demo resets: `just demo reset` (or flags-off, bad-deploy, incident, cleanup)
+mod demo "demo.just"
