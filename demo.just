@@ -39,7 +39,7 @@ bad-deploy:
     git fetch -q origin main
     git merge -q --ff-only origin/main
     # The original bug commit: the first commit whose subject starts with the bug's title (never a Revert/Reapply).
-    bug=$(git log --reverse --format='%H%x09%s' origin/main | awk -F'\t' 'index($2, "perf(search): run the product and order lookups in parallel") == 1 {print $1; exit}')
+    bug=$(git log --reverse --format='%H%x09%s' origin/main | awk -F'\t' 'index($2, "perf(search): run the product and order lookups in parallel") == 1 && !f {print $1; f=1}')
     if [ -z "$bug" ]; then bug=$(git rev-parse -q --verify origin/demo/canned-bug 2>/dev/null || true); fi
     if [ -z "$bug" ]; then echo "Can't find the canned bug commit."; exit 1; fi
     # Is the bug on main right now? Decide from the code, not from commit titles.
@@ -66,7 +66,7 @@ incident:
     if grep -q 'TsQuerySyntax().Replace(term, string.Empty)}:\*' {{ search_v2 }}; then
         echo "SearchV2 bug already present."; exit 0
     fi
-    fix=$(git log --format='%H %an' -- {{ search_v2 }} | awk '$2 ~ /^claude/ {print $1; exit}')
+    fix=$(git log --format='%H %an' -- {{ search_v2 }} | awk '$2 ~ /^claude/ && !f {print $1; f=1}')
     if [ -z "$fix" ]; then echo "SearchV2 changed but not by the agent; fix by hand."; exit 1; fi
     git revert --no-edit "$fix"
     git push -q origin main
