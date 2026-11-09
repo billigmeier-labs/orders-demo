@@ -86,10 +86,12 @@
                     {
                         case StepStates.Waiting when snap is not null:
                             var elapsed = v.Now - (snap.WaitStartedAt ?? v.Now);
+                            // After "Keep waiting" the deadline moves out, so the budget is start → deadline, not one timeout.
+                            var budget = snap.Deadline is { } dl && snap.WaitStartedAt is { } ws ? dl - ws : TimeSpan.FromSeconds(snap.TimeoutSeconds);
                             <div class="status-box waiting">
                                 <span class="spinner" aria-hidden="true"></span>
                                 <div>
-                                    <strong>Still waiting</strong> <span class="muted small" data-testid="wait-elapsed">@Fmt.Seconds(elapsed) of @snap.TimeoutSeconds s</span>
+                                    <strong>Still waiting</strong> <span class="muted small" data-testid="wait-elapsed">@Fmt.Seconds(elapsed) of @Fmt.Seconds(budget)</span>
                                     <ul class="waits">
                                         @foreach (var w in snap.Waits)
                                         {
