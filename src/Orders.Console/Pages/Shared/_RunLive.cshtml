@@ -9,6 +9,7 @@
     var explain = step.ExplainId is { } ex && Explainers.Find(ex) is { } exp ? exp : null;
     string ViewUrl(int i) => $"/present?scenario={scenarioId}&view={v.Steps[i].Def.Id}";
 }
+<span hidden data-step-counter>Step @(v.ActiveIndex + 1) of @v.Steps.Count</span>
 <div class="run" data-testid="run" data-run-state="@v.RunState" data-run-id="@(v.Run?.Id ?? "")" data-active-step="@(v.Run?.ActiveStepId ?? "")" data-focus-step="@step.Def.Id">
 
     <div class="run-bar">

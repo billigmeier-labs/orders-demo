@@ -23,6 +23,10 @@
       const open = new Set(Array.from(el.querySelectorAll('details[data-keep-open][open]')).map(d => d.dataset.keepOpen));
       el.innerHTML = await res.text();
       el.querySelectorAll('details[data-keep-open]').forEach(d => { if (open.has(d.dataset.keepOpen)) d.open = true; });
+      // The header's "Step N of M" is outside the polled region; copy it from the fresh content.
+      const counter = el.querySelector('[data-step-counter]');
+      const header = document.querySelector('[data-header-step]');
+      if (counter && header) header.textContent = counter.textContent;
       delete el.dataset.pollError;
       el.dataset.pollAt = new Date().toISOString();
       localTimes(el);

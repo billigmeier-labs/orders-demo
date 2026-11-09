@@ -58,6 +58,8 @@ test('the Tour runs from a new issue to production @live-slow', async ({ page, c
   }
 
   await expect(page.getByTestId('run')).toHaveAttribute('data-run-state', 'completed');
+  // The header's step counter follows the run without a page reload.
+  await expect(page.locator('[data-header-step]')).toHaveText(`Step ${tour.steps.length} of ${tour.steps.length}`);
   await expect(page.getByTestId('run-issue')).toBeVisible();
   await expect(page.getByTestId('run-pr')).toBeVisible();
 
