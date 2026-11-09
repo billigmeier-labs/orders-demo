@@ -62,11 +62,13 @@ jobs:
             --json-schema '{"type":"object","required":["opened_pr"],"properties":{"opened_pr":{"type":"boolean"},"pr_number":{"type":"integer"},"summary":{"type":"string"}}}'
 
       - name: Turn on auto-merge
-        if: steps.work.outputs.structured_output != '' && fromJSON(steps.work.outputs.structured_output).opened_pr
+        if: steps.work.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
-          PR: ${{ fromJSON(steps.work.outputs.structured_output).pr_number }}
+          RESULT: ${{ steps.work.outputs.structured_output }}
         run: |
+          if [ "$(jq -r '.opened_pr // false' <<<"${RESULT:-{\}}")" != true ]; then echo "No PR opened."; exit 0; fi
+          PR=$(jq -r .pr_number <<<"$RESULT")
           gh pr edit "$PR" --add-label agent
           gh pr merge "$PR" --auto --squash
 
