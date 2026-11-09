@@ -88,7 +88,7 @@ than one task or should keep sign-ins across deploys. Health check path: `/healt
 `https://console.demo.joshb.app/signin-oidc`.
 
 IAM the task role needs: `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory`, `logs:FilterLogEvents`,
-`ecs:DescribeServices`, `ecs:RunTask`, `ecs:StopTask`, `ecs:ListTasks`, `ecs:DescribeTasks`, `iam:PassRole` (loadgen roles),
+`ecs:DescribeServices`, `ecs:RunTask`, `ecs:TagResource` (on RunTask), `ecs:StopTask` (only tasks tagged `component=loadgen`), `ecs:ListTasks`, `ecs:DescribeTasks`, `iam:PassRole` (loadgen roles),
 `appconfig:List*`, `appconfig:GetHostedConfigurationVersion`, `appconfig:CreateHostedConfigurationVersion`,
 `appconfig:StartDeployment`, `ce:GetCostAndUsage`.
 

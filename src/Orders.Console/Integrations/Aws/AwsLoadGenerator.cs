@@ -14,6 +14,10 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
     public const string ProjectTagKey = "project";
     public const string ProjectTagValue = "orders-demo";
 
+    /// <summary>The console's task role may stop only tasks with this tag (infra/terraform/env/iam.tf), so it can never stop a service task.</summary>
+    public const string ComponentTagKey = "component";
+    public const string ComponentTagValue = "loadgen";
+
     public async Task<LoadStatus> GetStatusAsync(CancellationToken ct)
     {
         var tasks = await RunningAsync(ct);
@@ -49,7 +53,8 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
     }
 
     /// <summary>The loadgen RunTask call. Tasks don't inherit tags by default, so the task gets <c>project=orders-demo</c> itself
-    /// and Cost Explorer counts it with the rest of the demo. (Setting the tag needs ecs:TagResource.)</summary>
+    /// and Cost Explorer counts it with the rest of the demo, plus <c>component=loadgen</c>, which is what lets the console
+    /// stop it. (Setting the tags needs ecs:TagResource.)</summary>
     internal RunTaskRequest RunTaskRequestFor(string scenario, int durationMinutes) =>
         new()
         {
@@ -58,7 +63,11 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
             LaunchType = LaunchType.FARGATE,
             Count = 1,
             StartedBy = StartedBy,
-            Tags = [new Tag { Key = ProjectTagKey, Value = ProjectTagValue }],
+            Tags =
+            [
+                new Tag { Key = ProjectTagKey, Value = ProjectTagValue },
+                new Tag { Key = ComponentTagKey, Value = ComponentTagValue },
+            ],
             NetworkConfiguration = new NetworkConfiguration
             {
                 AwsvpcConfiguration = new AwsVpcConfiguration
