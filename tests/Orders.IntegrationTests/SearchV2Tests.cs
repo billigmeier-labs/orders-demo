@@ -65,6 +65,28 @@ public sealed class SearchV2Tests : IAsyncDisposable
     public async Task QuotesAndOperatorsInTheTerm_DoNotBreakTheQuery(string q) =>
         await SearchAsync(q);
 
+    [Fact]
+    public async Task MultiWordTerm_MatchesEveryWordAsPrefix()
+    {
+        var marker = $"zt{Guid.NewGuid():N}"[..10];
+        var match = await _client.CreateProductAsync(name: $"Desk {marker}lamp");
+        await _client.CreateProductAsync(name: $"Desk {Guid.NewGuid():N}"[..20]);
+
+        var result = await SearchAsync($"desk  {marker[..7]}");
+
+        Assert.Equal([match.Id], result.Products.Select(p => p.Id));
+    }
+
+    [Theory]
+    [InlineData("desk lamp")]
+    [InlineData("!!!")]
+    public async Task MultiWordOrPunctuationTerm_Returns200(string q)
+    {
+        var response = await _client.Get($"/api/search?q={Uri.EscapeDataString(q)}");
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
     private async Task<SearchResponse> SearchAsync(string q) =>
         await (await _client.Get($"/api/search?q={Uri.EscapeDataString(q)}")).ReadAsync<SearchResponse>();
 }
