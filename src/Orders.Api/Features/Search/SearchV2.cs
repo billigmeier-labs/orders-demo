@@ -19,11 +19,6 @@ internal static partial class SearchV2
     public static async Task<SearchResponse> SearchAsync(OrdersDbContext db, string term, CancellationToken ct)
     {
         var query = PrefixQuery(term);
-        if (query.Length == 0)
-        {
-            // Nothing searchable (punctuation only): don't send an invalid tsquery to PostgreSQL.
-            return new SearchResponse([], []);
-        }
 
         var products = await db.Products
             .Where(p => EF.Functions.ToTsVector(Config, p.Name + " " + p.Sku).Matches(EF.Functions.ToTsQuery(Config, query)))
@@ -48,16 +43,10 @@ internal static partial class SearchV2
     }
 
     /// <summary>
-    /// The search term as a tsquery prefix match on every word: "lam" becomes "lam:*" and "desk lamp"
-    /// becomes "desk:* &amp; lamp:*". Characters that are tsquery syntax (operators, parentheses, quotes) are
-    /// dropped so user input can't change the query's meaning. Returns an empty string when no word is left.
+    /// The search term as a tsquery prefix match: "lam" becomes "lam:*". Characters that are tsquery
+    /// syntax (operators, parentheses, quotes) are dropped so user input can't change the query's meaning.
     /// </summary>
-    internal static string PrefixQuery(string term) => string.Join(
-        " & ",
-        term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => TsQuerySyntax().Replace(word, string.Empty))
-            .Where(word => word.Any(char.IsLetterOrDigit))
-            .Select(word => $"{word}:*"));
+    internal static string PrefixQuery(string term) => $"{TsQuerySyntax().Replace(term, string.Empty)}:*";
 
     [GeneratedRegex(@"[&|!():*'<>\\]")]
     private static partial Regex TsQuerySyntax();

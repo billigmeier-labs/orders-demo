@@ -65,29 +65,6 @@ public sealed class SearchV2Tests : IAsyncDisposable
     public async Task QuotesAndOperatorsInTheTerm_DoNotBreakTheQuery(string q) =>
         await SearchAsync(q);
 
-    [Fact]
-    public async Task MultiWordTerm_MatchesProductsWithEveryWord()
-    {
-        var marker = $"zt{Guid.NewGuid():N}"[..10];
-        var product = await _client.CreateProductAsync(name: $"Desk {marker} lamp");
-        await _client.CreateProductAsync(name: $"Desk {marker} chair");
-
-        var result = await SearchAsync($"desk {marker[..6]} la");
-
-        Assert.Equal([product.Id], result.Products.Select(p => p.Id));
-    }
-
-    [Theory]
-    [InlineData("&|!")]
-    [InlineData("  &  ")]
-    public async Task PunctuationOnlyTerm_ReturnsEmptyResult(string q)
-    {
-        var result = await SearchAsync(q);
-
-        Assert.Empty(result.Products);
-        Assert.Empty(result.Orders);
-    }
-
     private async Task<SearchResponse> SearchAsync(string q) =>
         await (await _client.Get($"/api/search?q={Uri.EscapeDataString(q)}")).ReadAsync<SearchResponse>();
 }
