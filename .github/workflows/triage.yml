@@ -40,7 +40,7 @@ jobs:
           case "$level" in admin|maintain|write) echo "allowed=true" >> "$GITHUB_OUTPUT";;
             *) echo "allowed=false" >> "$GITHUB_OUTPUT"; echo "::notice::$AUTHOR has '$level' access; not triaging automatically.";; esac
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.allowed == 'true'
 
       - name: Score the issue
