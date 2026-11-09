@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Re-run if the failure was a timeout
         run: |
-          if gh run view "$RUN" -R "$GITHUB_REPOSITORY" --log-failed | grep -qE 'Unexpected HTTP response: 50[234]|HTTP (error )?50[234]|returned error: 50[234]'; then
+          if gh run view "$RUN" -R "$GITHUB_REPOSITORY" --log-failed | grep -qE 'Unexpected HTTP response: 50[234]|HTTP (error )?50[234]|returned error: 50[234]|CannotPullContainerError|i/o timeout'; then
             echo "Transient download failure; re-running failed jobs of run $RUN."
             sleep 30
             gh run rerun "$RUN" -R "$GITHUB_REPOSITORY" --failed

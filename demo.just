@@ -6,8 +6,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 repo := "billigmeier-labs/orders-demo"
 search_v2 := "src/Orders.Api/Features/Search/SearchV2.cs"
 
-# Everything below, in order
-reset: flags-off bad-deploy incident tour cleanup
+# Everything below, in order. bad-deploy goes last: it rebuilds demo/canned-bug from main, so main must already be reset.
+reset: flags-off tour incident bad-deploy cleanup
     @echo "Demo reset complete."
 
 # Turn every AppConfig flag off in prod, staging and preview (via the console's API would be nicer; this is direct)
