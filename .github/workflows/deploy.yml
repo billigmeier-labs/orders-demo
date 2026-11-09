@@ -44,12 +44,12 @@ jobs:
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::sha must be a full 40-character commit SHA"; exit 1; fi
           echo "sha=$sha" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.sha.outputs.sha }}
           fetch-depth: 0
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-deploy
           aws-region: us-east-1
