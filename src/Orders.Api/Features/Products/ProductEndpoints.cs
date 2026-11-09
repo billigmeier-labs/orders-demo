@@ -24,6 +24,7 @@ internal static class ProductEndpoints
     {
         var products = api.MapGroup("/products").WithTags("Products");
         products.MapGet("/", List);
+        products.MapGet("/low-stock", LowStock);
         products.MapGet("/{id:guid}", Get);
         products.MapPost("/", Create);
     }
@@ -31,6 +32,21 @@ internal static class ProductEndpoints
     private static async Task<Ok<List<ProductResponse>>> List(OrdersDbContext db, CancellationToken ct) =>
         TypedResults.Ok(await db.Products
             .OrderBy(p => p.Sku)
+            .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
+            .ToListAsync(ct));
+
+    public const int DefaultLowStockThreshold = 5;
+
+    /// <summary>Products with stock strictly below the threshold, lowest stock first, ties by SKU.</summary>
+    internal static IQueryable<Product> BelowStock(this IQueryable<Product> products, int threshold) =>
+        products.Where(p => p.Stock < threshold).OrderBy(p => p.Stock).ThenBy(p => p.Sku);
+
+    private static async Task<Ok<List<ProductResponse>>> LowStock(
+        OrdersDbContext db,
+        CancellationToken ct,
+        [Range(0, int.MaxValue)] int threshold = DefaultLowStockThreshold) =>
+        TypedResults.Ok(await db.Products
+            .BelowStock(threshold)
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct));
 
