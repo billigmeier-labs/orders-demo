@@ -7,7 +7,7 @@ repo := "billigmeier-labs/orders-demo"
 search_v2 := "src/Orders.Api/Features/Search/SearchV2.cs"
 
 # Everything below, in order
-reset: flags-off bad-deploy incident cleanup
+reset: flags-off bad-deploy incident tour cleanup
     @echo "Demo reset complete."
 
 # Turn every AppConfig flag off in prod, staging and preview (via the console's API would be nicer; this is direct)
@@ -71,6 +71,19 @@ incident:
     git revert --no-edit "$fix"
     git push -q origin main
     echo "Reverted the agent's SearchV2 fix ($fix); the bug is back behind the searchV2 flag."
+
+# Remove the Tour's feature (the low-stock endpoint) if an agent built it, so the Tour's issue is new work again
+tour:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(git status --porcelain)" ]; then echo "Commit your changes first; demo resets need a clean checkout."; exit 1; fi
+    git checkout -q main && git fetch -q origin main && git merge -q --ff-only origin/main
+    if ! grep -q 'low-stock' src/Orders.Api/Features/Products/ProductEndpoints.cs; then echo "Low-stock endpoint not present."; exit 0; fi
+    fix=$(git log --format='%H%x09%an%x09%s' -- src/Orders.Api/Features/Products | awk -F'\t' '$2 ~ /^claude/ && tolower($3) ~ /low.stock/ && !f {print $1; f=1}')
+    if [ -z "$fix" ]; then echo "Low-stock endpoint wasn't added by the agent; remove it by hand."; exit 1; fi
+    git revert --no-edit "$fix"
+    git push -q origin main
+    echo "Reverted the agent's low-stock endpoint ($fix); the Tour's issue is new work again."
 
 # Close demo PRs (deleting their branches) and delete demo issues
 cleanup:
