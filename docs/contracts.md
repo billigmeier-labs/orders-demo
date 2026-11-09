@@ -27,7 +27,6 @@ Base path `/api`. JSON, camelCase. Errors are RFC 7807 problem details. IDs are 
 | `GET /api/customers`, `GET /api/customers/{id}`, `POST /api/customers` | Customers: `id, name, email, createdAt` |
 | `GET /api/customers/{id}/orders?page=&pageSize=` | A customer's orders, newest first, same paged shape as `GET /api/orders` (default 20, max 100); 404 if the customer doesn't exist |
 | `GET /api/products`, `GET /api/products/{id}`, `POST /api/products` | Products: `id, sku, name, price, stock` |
-| `GET /api/products/low-stock?threshold=` | Products with `stock` strictly below `threshold` (default 5), lowest stock first, ties by SKU; `threshold=0` gives an empty list; negative or non-numeric threshold is 400 |
 | `GET /api/orders?status=&customerId=&page=&pageSize=` | List orders, newest first, paged (default 20, max 100) |
 | `GET /api/orders/{id}` | One order with lines and total |
 | `POST /api/orders` | Create: `{ customerId, lines: [{ productId, quantity }] }`; unit price copied from product; reduces stock; 409 if not enough stock |
