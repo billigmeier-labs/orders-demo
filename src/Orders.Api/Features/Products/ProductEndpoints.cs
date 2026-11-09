@@ -24,7 +24,7 @@ internal static class ProductEndpoints
     {
         var products = api.MapGroup("/products").WithTags("Products");
         products.MapGet("/", List);
-        products.MapGet("/low-stock", LowStock);
+        products.MapGet("/low-stock", GetLowStock);
         products.MapGet("/{id:guid}", Get);
         products.MapPost("/", Create);
     }
@@ -35,13 +35,10 @@ internal static class ProductEndpoints
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct));
 
-    private const int DefaultLowStockThreshold = 5;
-
-    private static async Task<Results<Ok<List<ProductResponse>>, ValidationProblem>> LowStock(
+    private static async Task<Results<Ok<List<ProductResponse>>, ValidationProblem>> GetLowStock(
         OrdersDbContext db, CancellationToken ct, string? threshold = null)
     {
-        var limit = DefaultLowStockThreshold;
-        if (threshold is not null && (!int.TryParse(threshold, out limit) || limit < 0))
+        if (!LowStock.TryParseThreshold(threshold, out var limit))
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
@@ -49,10 +46,7 @@ internal static class ProductEndpoints
             });
         }
 
-        return TypedResults.Ok(await db.Products
-            .Where(p => p.Stock < limit)
-            .OrderBy(p => p.Stock)
-            .ThenBy(p => p.Sku)
+        return TypedResults.Ok(await LowStock.Query(db.Products, limit)
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct));
     }
