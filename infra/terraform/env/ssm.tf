@@ -12,6 +12,9 @@ locals {
       "task-role-arn/prod"      = aws_iam_role.task["task-prod"].arn
       "task-role-arn/nonprod"   = aws_iam_role.task["task-nonprod"].arn
       "preview/log-group"       = aws_cloudwatch_log_group.this["preview"].name
+      "preview/security-group"  = aws_security_group.previews.id
+      "preview/execution-role"  = aws_iam_role.preview_execution.arn
+      "preview/task-role"       = aws_iam_role.task["preview-task"].arn
       "preview/db-host"         = aws_db_instance.this["nonprod"].address
       "preview/db-username"     = aws_db_instance.this["nonprod"].username
       "preview/db-password-ref" = local.db_password_secret["nonprod"]

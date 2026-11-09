@@ -20,22 +20,45 @@ locals {
 # deployment branch policy (GitHub side) decides which refs may use it:
 #   staging, production, preview-reaper: main only
 #   release: main and gh-readonly-queue/main/* (the merge queue builds the release images)
-data "aws_iam_policy_document" "trust" {
-  for_each = {
-    # deploy.yml / deploy-service.yml: staging and production (the console deploys as production).
-    deploy = [
-      "${local.env_sub}:staging",
-      "${local.env_sub}:production",
-    ]
+#
+# Where it is known, the trust also pins job_workflow_ref (owner/repo/<workflow path>@<ref>, name based
+# even with the immutable subject; for a job in a reusable workflow it is the called workflow), so a
+# different workflow file that names the same environment, or runs on main, cannot assume the role.
+# The preview role cannot be pinned this way: on pull_request the PR's own copy of the workflow runs
+# (and its job_workflow_ref is the PR's merge ref), so its permissions are the boundary instead.
+locals {
+  workflow_ref = "${var.github_repo}/.github/workflows"
+
+  trust = {
+    # deploy-service.yml (called by deploy.yml): staging and production (the console deploys as production).
+    deploy = {
+      subs      = ["${local.env_sub}:staging", "${local.env_sub}:production"]
+      workflows = ["${local.workflow_ref}/deploy-service.yml@refs/heads/main"]
+    }
     # ci.yml release image job (merge queue, push to main) and deploy.yml's Prepare job.
-    release = ["${local.env_sub}:release"]
+    release = {
+      subs = ["${local.env_sub}:release"]
+      workflows = [
+        "${local.workflow_ref}/ci.yml@refs/heads/main",
+        "${local.workflow_ref}/ci.yml@refs/heads/gh-readonly-queue/main/*",
+        "${local.workflow_ref}/deploy.yml@refs/heads/main",
+      ]
+    }
     # pull_request: per-PR previews. preview-reaper: the nightly / manual reaper on main.
-    preview = [
-      "${local.repo_sub}:pull_request",
-      "${local.env_sub}:preview-reaper",
-    ]
-    readonly = ["${local.repo_sub}:*"]
+    preview = {
+      subs      = ["${local.repo_sub}:pull_request", "${local.env_sub}:preview-reaper"]
+      workflows = []
+    }
+    # incident.yml (repository_dispatch and workflow_dispatch) on main only.
+    readonly = {
+      subs      = ["${local.repo_sub}:ref:refs/heads/main"]
+      workflows = ["${local.workflow_ref}/incident.yml@refs/heads/main"]
+    }
   }
+}
+
+data "aws_iam_policy_document" "trust" {
+  for_each = local.trust
 
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -54,7 +77,16 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "StringLike"
       variable = "${local.github_oidc_host}:sub"
-      values   = each.value
+      values   = each.value.subs
+    }
+
+    dynamic "condition" {
+      for_each = length(each.value.workflows) > 0 ? [each.value.workflows] : []
+      content {
+        test     = "StringLike"
+        variable = "${local.github_oidc_host}:job_workflow_ref"
+        values   = condition.value
+      }
     }
   }
 }
@@ -68,6 +100,8 @@ locals {
   log_group_arn   = "arn:${local.partition}:logs:${var.region}:${local.account_id}:log-group:/ecs/orders-demo/*"
   elb_prefix      = "arn:${local.partition}:elasticloadbalancing:${var.region}:${local.account_id}"
   role_prefix     = "arn:${local.partition}:iam::${local.account_id}:role/${local.ecs_role_prefix}"
+  task_def_prefix = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task-definition/"
+  task_arns       = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.cluster_name}"
 }
 
 # ---------------------------------------------------------------- deploy ----
@@ -292,27 +326,65 @@ data "aws_iam_policy_document" "preview" {
     resources = [local.ecr_preview_arn]
   }
 
+  # Everything below is reachable from any same-repo PR (it runs its own copy of preview.yml), so the
+  # policy itself keeps previews away from production: only orders-demo-pr-* task definitions,
+  # services and tasks, and only the preview execution and task roles (nonprod secret, preview log
+  # group, preview AppConfig). RegisterTaskDefinition is scoped by family so a PR cannot add a
+  # revision to a prod family that the next deploy would copy.
   statement {
-    sid = "TaskDefinitions"
+    sid       = "RegisterPrTaskDefinitions"
+    actions   = ["ecs:RegisterTaskDefinition"]
+    resources = ["${local.task_def_prefix}orders-demo-pr-*"]
+  }
+
+  # No resource-level permissions for these (Service Authorization Reference).
+  statement {
+    sid = "TaskDefinitionsRead"
     actions = [
       "ecs:DeregisterTaskDefinition",
       "ecs:DescribeTaskDefinition",
       "ecs:ListTaskDefinitions",
-      "ecs:RegisterTaskDefinition",
-      "ecs:TagResource",
     ]
     resources = ["*"]
   }
 
+  # Tags only on resources being created (register, create-service, run-task), and they must carry
+  # preview=pr-*: an existing (prod) task can never be tagged into the PrStopTasks scope.
   statement {
-    sid = "PrServices"
-    actions = [
-      "ecs:CreateService",
-      "ecs:DeleteService",
-      "ecs:DescribeServices",
-      "ecs:UpdateService",
-      "ecs:TagResource",
+    sid     = "TagPrResourcesOnCreate"
+    actions = ["ecs:TagResource"]
+    resources = [
+      "${local.task_def_prefix}orders-demo-pr-*",
+      "${local.service_arns}/pr-*",
+      "${local.task_arns}/*",
     ]
+    condition {
+      test     = "StringEquals"
+      variable = "ecs:CreateAction"
+      values   = ["RegisterTaskDefinition", "CreateService", "RunTask"]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "aws:RequestTag/preview"
+      values   = ["pr-*"]
+    }
+  }
+
+  # A pr-* service may only run a pr-* task definition (not, say, orders-demo-api-prod).
+  statement {
+    sid       = "PrServicesWrite"
+    actions   = ["ecs:CreateService", "ecs:UpdateService"]
+    resources = ["${local.service_arns}/pr-*"]
+    condition {
+      test     = "ArnLike"
+      variable = "ecs:task-definition"
+      values   = ["${local.task_def_prefix}orders-demo-pr-*"]
+    }
+  }
+
+  statement {
+    sid       = "PrServicesManage"
+    actions   = ["ecs:DeleteService", "ecs:DescribeServices"]
     resources = ["${local.service_arns}/pr-*"]
   }
 
@@ -321,7 +393,7 @@ data "aws_iam_policy_document" "preview" {
   statement {
     sid       = "PrRunMigrations"
     actions   = ["ecs:RunTask"]
-    resources = ["arn:${local.partition}:ecs:${var.region}:${local.account_id}:task-definition/orders-demo-pr-*"]
+    resources = ["${local.task_def_prefix}orders-demo-pr-*"]
     condition {
       test     = "ArnEquals"
       variable = "ecs:cluster"
@@ -329,10 +401,17 @@ data "aws_iam_policy_document" "preview" {
     }
   }
 
+  # StopTask has no task-definition condition key; preview tasks carry preview=pr-<N> (run-task --tags,
+  # services --propagate-tags SERVICE).
   statement {
     sid       = "PrStopTasks"
     actions   = ["ecs:StopTask"]
-    resources = ["arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.cluster_name}/*"]
+    resources = ["${local.task_arns}/*"]
+    condition {
+      test     = "StringLike"
+      variable = "aws:ResourceTag/preview"
+      values   = ["pr-*"]
+    }
   }
 
   statement {
@@ -341,10 +420,12 @@ data "aws_iam_policy_document" "preview" {
     resources = ["*"]
   }
 
+  # Only the preview roles (env layer): never orders-demo-ecs-execution, which can read the prod
+  # database and console secrets.
   statement {
-    sid       = "PassNonprodTaskRoles"
+    sid       = "PassPreviewTaskRoles"
     actions   = ["iam:PassRole"]
-    resources = ["${local.role_prefix}execution", "${local.role_prefix}task-nonprod"]
+    resources = ["${local.role_prefix}${local.preview_execution_role}", "${local.role_prefix}${local.preview_task_role}"]
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
@@ -430,7 +511,7 @@ resource "aws_iam_role_policy" "preview" {
 
 resource "aws_iam_role" "incident_readonly" {
   name                 = "orders-demo-incident-readonly"
-  description          = "Any workflow in the repo: read logs, metrics, alarms, ECS, X-Ray"
+  description          = "incident.yml on main: read logs, metrics, alarms, ECS, X-Ray"
   assume_role_policy   = data.aws_iam_policy_document.trust["readonly"].json
   max_session_duration = 3600
 }

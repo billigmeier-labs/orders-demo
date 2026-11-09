@@ -15,7 +15,9 @@ data "aws_iam_policy_document" "ecs_tasks_trust" {
 
 # Role names must start with the base layer's ecs_role_prefix: the GitHub
 # deploy role may pass orders-demo-ecs-*, the preview role only
-# orders-demo-ecs-execution and orders-demo-ecs-task-nonprod.
+# orders-demo-ecs-preview-execution and orders-demo-ecs-preview-task (names in
+# the base layer's locals.tf). Any same-repo PR can use the preview role, so
+# those two roles must never reach anything production or console.
 
 # ------------------------------------------------------------ execution ----
 
@@ -45,13 +47,58 @@ resource "aws_iam_role_policy" "execution_secrets" {
   policy = data.aws_iam_policy_document.execution_secrets.json
 }
 
+# ---------------------------------------------------- preview execution ----
+
+# Execution role for PR previews (preview.yml registers orders-demo-pr-<N> with it). Pulls only
+# orders-api-preview, writes only the preview log group, reads only the nonprod database secret.
+# The ADOT sidecar image is on public ECR, which needs no permissions.
+resource "aws_iam_role" "preview_execution" {
+  name               = "${local.role_pfx}preview-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+}
+
+data "aws_iam_policy_document" "preview_execution" {
+  statement {
+    sid       = "EcrLogin"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "PullPreviewImages"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = ["arn:aws:ecr:${var.region}:${local.account_id}:repository/orders-api-preview"]
+  }
+
+  statement {
+    sid       = "PreviewLogs"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.this["preview"].arn}:*"]
+  }
+
+  statement {
+    sid       = "NonprodDbSecret"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.this["nonprod"].master_user_secret[0].secret_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "preview_execution" {
+  name   = "preview-execution"
+  role   = aws_iam_role.preview_execution.id
+  policy = data.aws_iam_policy_document.preview_execution.json
+}
+
 # ----------------------------------------------------------- task roles ----
 
 locals {
   appconfig_env_arns = local.appconfig.environment_arns
+  # Each list is the AppConfig environments the role may read (plus X-Ray write for all).
+  # preview-task is for PR previews only (passable by the GitHub preview role).
   task_roles = {
     task-prod    = ["prod"]
-    task-nonprod = ["staging", "preview"]
+    task-nonprod = ["staging"]
+    preview-task = ["preview"]
     console      = []
   }
 }
@@ -139,10 +186,17 @@ data "aws_iam_policy_document" "console" {
     }
   }
 
+  # StopTask has no task-definition condition key, so the console tags the load generator tasks it
+  # starts (component=loadgen, AwsLoadGenerator.cs) and may stop only those, never a service task.
   statement {
-    sid       = "StopTasks"
+    sid       = "StopLoadGeneratorTasks"
     actions   = ["ecs:StopTask"]
     resources = ["arn:aws:ecs:${var.region}:${local.account_id}:task/${aws_ecs_cluster.this.name}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/component"
+      values   = ["loadgen"]
+    }
   }
 
   statement {

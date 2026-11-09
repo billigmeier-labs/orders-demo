@@ -20,7 +20,7 @@ resource "aws_db_instance" "this" {
   manage_master_user_password = true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
-  vpc_security_group_ids = [aws_security_group.db.id]
+  vpc_security_group_ids = [each.key == "prod" ? aws_security_group.db.id : aws_security_group.db_nonprod.id]
   publicly_accessible    = false
   multi_az               = false
 
@@ -30,6 +30,9 @@ resource "aws_db_instance" "this" {
   apply_immediately            = true
   auto_minor_version_upgrade   = true
   performance_insights_enabled = false
+
+  # nonprod moves to db_nonprod: its ingress rules must exist first so staging never loses access.
+  depends_on = [aws_vpc_security_group_ingress_rule.db_nonprod]
 }
 
 locals {

@@ -18,6 +18,10 @@ output "task_security_group_id" {
   value = aws_security_group.tasks.id
 }
 
+output "preview_security_group_id" {
+  value = aws_security_group.previews.id
+}
+
 output "https_listener_arn" {
   value = aws_lb_listener.https.arn
 }
