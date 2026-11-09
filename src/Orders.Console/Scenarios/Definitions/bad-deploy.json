@@ -110,7 +110,7 @@
       "id": "alarm",
       "stage": "monitor",
       "title": "An alarm fires",
-      "narration": "Under real traffic the new version starts failing requests. CloudWatch notices within a minute.",
+      "narration": "The new version reaches production after staging. Under real traffic it starts failing requests, and CloudWatch notices within a minute.",
       "explain": "alarm",
       "wait": [
         {
@@ -118,7 +118,7 @@
           "description": "A production alarm goes into ALARM"
         }
       ],
-      "timeoutSeconds": 900
+      "timeoutSeconds": 1800
     },
     {
       "id": "rollback",
