@@ -11,6 +11,8 @@ namespace Orders.Console.Integrations.Aws;
 public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : ILoadGenerator
 {
     public const string StartedBy = "orders-console";
+    public const string ProjectTagKey = "project";
+    public const string ProjectTagValue = "orders-demo";
 
     public async Task<LoadStatus> GetStatusAsync(CancellationToken ct)
     {
@@ -38,13 +40,25 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
         }
 
         await StopAsync(ct);
-        var response = await ecs.RunTaskAsync(new RunTaskRequest
+        var response = await ecs.RunTaskAsync(RunTaskRequestFor(scenario, durationMinutes), ct);
+
+        if (response.Failures is { Count: > 0 } failures)
+        {
+            throw new InvalidOperationException($"RunTask failed: {failures[0].Reason} {failures[0].Detail}");
+        }
+    }
+
+    /// <summary>The loadgen RunTask call. Tasks don't inherit tags by default, so the task gets <c>project=orders-demo</c> itself
+    /// and Cost Explorer counts it with the rest of the demo. (Setting the tag needs ecs:TagResource.)</summary>
+    internal RunTaskRequest RunTaskRequestFor(string scenario, int durationMinutes) =>
+        new()
         {
             Cluster = options.EcsCluster,
             TaskDefinition = options.LoadgenTaskDefinition,
             LaunchType = LaunchType.FARGATE,
             Count = 1,
             StartedBy = StartedBy,
+            Tags = [new Tag { Key = ProjectTagKey, Value = ProjectTagValue }],
             NetworkConfiguration = new NetworkConfiguration
             {
                 AwsvpcConfiguration = new AwsVpcConfiguration
@@ -69,13 +83,7 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
                     },
                 ],
             },
-        }, ct);
-
-        if (response.Failures is { Count: > 0 } failures)
-        {
-            throw new InvalidOperationException($"RunTask failed: {failures[0].Reason} {failures[0].Detail}");
-        }
-    }
+        };
 
     public async Task StopAsync(CancellationToken ct)
     {
