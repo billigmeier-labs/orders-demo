@@ -17,7 +17,7 @@ public sealed class FakeWorld :
     public const string Automation = "orders-demo-automation";
     public const string CannedBugBranch = "demo/canned-bug";
     public const string ErrorAlarm = "orders-prod-5xx-rate";
-    public const string FaultFlag = "faultFailOrders";
+    public const string FaultFlag = "searchV2";
 
     private static readonly string[] LatestWorkflows = ["ci", "ai-review", "deploy"];
 
@@ -168,7 +168,7 @@ public sealed class FakeWorld :
         {
             for (var i = 4; i >= 0; i--)
             {
-                lines.Add(new LogLine(now.AddSeconds(-i * 7), "{\"level\":\"Error\",\"message\":\"POST /api/orders failed: InvalidOperationException: order total could not be computed\",\"status\":500}", "orders-api/prod/" + (i % 2 == 0 ? "7d1c" : "93be")));
+                lines.Add(new LogLine(now.AddSeconds(-i * 7), "{\"level\":\"Error\",\"message\":\"GET /api/search failed: PostgresException 42601: syntax error in tsquery\",\"status\":500}", "orders-api/prod/" + (i % 2 == 0 ? "7d1c" : "93be")));
             }
         }
 
@@ -201,8 +201,8 @@ public sealed class FakeWorld :
             _faultFixed = false;
             After(1, () => FireAlarm(ErrorAlarm, "5xx rate 14% over 1 minute (threshold 2%)"));
             After(2, () => AddIssue(
-                "Incident: POST /api/orders returning 500s",
-                "Alarm orders-prod-5xx-rate fired. 14% of POST /api/orders requests fail with InvalidOperationException in OrderTotals. Started 2 minutes ago; no deploy in the last hour.",
+                "Incident: GET /api/search returning 500s for multi-word terms",
+                "Alarm orders-demo-api-prod-5xx fired. Multi-word searches fail with a tsquery syntax error in SearchV2 since the searchV2 flag was turned on. No deploy in the last hour.",
                 ["incident"],
                 "github-actions[bot]"));
         }
@@ -467,7 +467,8 @@ public sealed class FakeWorld :
     private void Seed()
     {
         var now = Now;
-        _flags[FaultFlag] = (false, "Fault: make some POST /api/orders requests fail");
+        _flags[FaultFlag] = (false, "New search engine (has a multi-word search bug)");
+        _flags["faultFailOrders"] = (false, "Fault: make some POST /api/orders requests fail");
         _flags["faultSlowSearch"] = (false, "Fault: add 1.5 s to /api/search");
         _flags["lowStockBanner"] = (true, "Show the low-stock banner on products");
 

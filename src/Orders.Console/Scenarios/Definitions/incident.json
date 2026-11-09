@@ -1,22 +1,36 @@
 {
   "id": "incident",
   "title": "An incident becomes a fix",
-  "summary": "Break orders in production with a fault flag; an alarm opens an incident issue and an agent ships the fix.",
+  "summary": "Turn on a new search engine that has a hidden bug; an alarm opens an incident issue and an agent ships the fix.",
   "order": 20,
   "steps": [
     {
       "id": "load",
       "title": "Put normal traffic on production",
-      "narration": "Simulated customers keep ordering, so the fault shows up as real failed requests.",
+      "narration": "Simulated customers browse, search and order, so a bug shows up as real failed requests.",
       "explain": "load-generator",
-      "action": { "label": "Start normal load", "kind": "load.start", "args": { "scenario": "normal", "durationMinutes": "30" } }
+      "action": {
+        "label": "Start normal load",
+        "kind": "load.start",
+        "args": {
+          "scenario": "normal",
+          "durationMinutes": "60"
+        }
+      }
     },
     {
       "id": "fault",
-      "title": "Switch on a known fault",
-      "narration": "The fault flag faultFailOrders makes some order requests fail, as a real bug would. It is changed in AppConfig, with no deploy.",
+      "title": "Turn on the new search",
+      "narration": "The searchV2 flag switches production to a new search engine. It passed every test, but it has a bug with multi-word searches that real customers hit right away. The flag changes in AppConfig, with no deploy.",
       "explain": "feature-flag",
-      "action": { "label": "Turn on faultFailOrders", "kind": "flags.set", "args": { "flag": "faultFailOrders", "enabled": "true" } }
+      "action": {
+        "label": "Turn on searchV2",
+        "kind": "flags.set",
+        "args": {
+          "flag": "searchV2",
+          "enabled": "true"
+        }
+      }
     },
     {
       "id": "alarm",
@@ -25,7 +39,10 @@
       "narration": "The error rate climbs and a CloudWatch alarm goes off. EventBridge starts the incident job in GitHub.",
       "explain": "alarm",
       "wait": [
-        { "kind": "alarm.alarm", "description": "A production alarm goes into ALARM" }
+        {
+          "kind": "alarm.alarm",
+          "description": "A production alarm goes into ALARM"
+        }
       ],
       "timeoutSeconds": 900
     },
@@ -35,7 +52,14 @@
       "title": "The incident agent opens an issue",
       "narration": "An agent reads the logs, recent deploys and commits, and opens an issue with the evidence, labeled incident.",
       "wait": [
-        { "kind": "issue.labeled", "detailContains": ["incident"], "capture": "issue", "description": "An issue labeled incident appears" }
+        {
+          "kind": "issue.labeled",
+          "detailContains": [
+            "incident"
+          ],
+          "capture": "issue",
+          "description": "An issue labeled incident appears"
+        }
       ],
       "timeoutSeconds": 1200
     },
@@ -43,9 +67,17 @@
       "id": "pr",
       "stage": "agent",
       "title": "An agent writes the fix",
-      "narration": "Triage hands the incident to an agent, which writes the fix and a test that would have caught it.",
+      "narration": "Triage hands the incident to an agent, which fixes the bug and adds a test that would have caught it.",
       "wait": [
-        { "kind": "pr.opened", "detailContains": ["{agent}", "#{issue}"], "capture": "pr", "description": "The agent opens a PR for the incident" }
+        {
+          "kind": "pr.opened",
+          "detailContains": [
+            "{agent}",
+            "#{issue}"
+          ],
+          "capture": "pr",
+          "description": "The agent opens a PR for the incident"
+        }
       ],
       "timeoutSeconds": 2400
     },
@@ -55,7 +87,11 @@
       "title": "The fix passes checks and merges",
       "narration": "The fix goes through exactly the same checks and merge queue as any other change.",
       "wait": [
-        { "kind": "pr.merged", "subject": "pr#{pr}", "description": "The fix is merged" }
+        {
+          "kind": "pr.merged",
+          "subject": "pr#{pr}",
+          "description": "The fix is merged"
+        }
       ],
       "timeoutSeconds": 2400
     },
@@ -65,10 +101,18 @@
       "title": "The fix deploys",
       "narration": "Merging deploys the fix to staging and then production.",
       "wait": [
-        { "kind": "deploy.succeeded", "subject": "prod", "description": "The fix is live in production" }
+        {
+          "kind": "deploy.succeeded",
+          "subject": "prod",
+          "description": "The fix is live in production"
+        }
       ],
       "failOn": [
-        { "kind": "deploy.rolledback", "subject": "prod", "description": "The fix was rolled back" }
+        {
+          "kind": "deploy.rolledback",
+          "subject": "prod",
+          "description": "The fix was rolled back"
+        }
       ],
       "timeoutSeconds": 1800
     },
@@ -78,13 +122,26 @@
       "title": "The alarm clears",
       "narration": "Requests succeed again and the alarm returns to OK. From alarm to fix, nobody wrote code by hand.",
       "wait": [
-        { "condition": "alarms-ok", "description": "Every production alarm is OK" }
+        {
+          "condition": "alarms-ok",
+          "description": "Every production alarm is OK"
+        }
       ],
       "timeoutSeconds": 900
     }
   ],
   "reset": [
-    { "label": "Turn off faultFailOrders", "kind": "flags.set", "args": { "flag": "faultFailOrders", "enabled": "false" } },
-    { "label": "Stop the load generator", "kind": "load.stop" }
+    {
+      "label": "Turn off searchV2",
+      "kind": "flags.set",
+      "args": {
+        "flag": "searchV2",
+        "enabled": "false"
+      }
+    },
+    {
+      "label": "Stop the load generator",
+      "kind": "load.stop"
+    }
   ]
 }
