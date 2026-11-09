@@ -44,14 +44,20 @@ bad-deploy:
     if [ -z "$bug" ]; then echo "Can't find the canned bug commit."; exit 1; fi
     # Is the bug on main right now? Decide from the code, not from commit titles.
     if grep -q 'new NpgsqlConnection' src/Orders.Api/Features/Search/SearchEndpoints.cs; then
-        git diff "$bug^" "$bug" | git apply -R
+        latest=$(git rev-parse -q --verify origin/demo/canned-bug 2>/dev/null || echo "$bug")
+        git diff "$latest^" "$latest" | git apply -3 -R
         git commit -qam "revert(demo): remove the canned bug after a bad-deploy demo"
         git push -q origin main
         echo "Removed the canned bug from main."
     fi
-    # Rebuild the branch as main + the bug, so the demo PR shows just the bug.
+    # Rebuild the branch as main + the bug, so the demo PR shows just the bug. Start from the branch's latest bug
+    # commit and apply it 3-way, so agents' later changes to the same file usually merge cleanly.
+    latest=$(git rev-parse -q --verify origin/demo/canned-bug 2>/dev/null || echo "$bug")
     git checkout -q -B demo/canned-bug origin/main
-    git diff "$bug^" "$bug" | git apply
+    if ! git diff "$latest^" "$latest" | git apply -3; then
+        echo "The canned bug no longer applies cleanly to main; resolve the conflict on demo/canned-bug, commit and push -f."
+        exit 1
+    fi
     git commit -qam "perf(search): run the product and order lookups in parallel"
     git push -q -f origin demo/canned-bug
     git checkout -q main
