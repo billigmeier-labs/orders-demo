@@ -1,5 +1,4 @@
 using Npgsql;
-using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Orders.Api.Features.Platform;
@@ -11,7 +10,7 @@ internal static class Telemetry
     public const string ServiceName = "orders-api";
 
     /// <summary>
-    /// OpenTelemetry traces and metrics (ASP.NET Core, HttpClient, Npgsql, which carries EF Core's queries),
+    /// OpenTelemetry traces (ASP.NET Core, HttpClient, Npgsql, which carries EF Core's queries),
     /// exported over OTLP. Off unless OTEL_EXPORTER_OTLP_ENDPOINT is set, e.g. to an ADOT or X-Ray collector
     /// sidecar; the deployment alarms use ALB metrics and don't need it.
     /// </summary>
@@ -33,12 +32,8 @@ internal static class Telemetry
                 .AddAspNetCoreInstrumentation(options => options.Filter = context => !context.Request.Path.StartsWithSegments("/health"))
                 .AddHttpClientInstrumentation()
                 .AddNpgsql()
-                .AddOtlpExporter())
-            .WithMetrics(metrics => metrics
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddMeter("Npgsql")
                 .AddOtlpExporter());
+        // Traces only: the collector sidecar sends them to X-Ray. Metrics come from the load balancer in CloudWatch.
         return services;
     }
 }

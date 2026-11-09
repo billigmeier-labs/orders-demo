@@ -4,7 +4,7 @@ name: Retry transient failures
 # re-run its failed jobs, up to 3 attempts. Real failures (tests, review findings) are left alone.
 on:
   workflow_run:
-    workflows: [Triage, Agent, Incident, AI review, CI, Deploy, Preview]
+    workflows: [Triage, Agent, Incident, AI review, CI, Deploy, Preview, Mutation]
     types: [completed]
 
 permissions:

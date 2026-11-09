@@ -106,17 +106,22 @@ jobs:
             def setenv($k; $v): [.[] | select(.name != $k)] + [{name: $k, value: $v}];
             .taskDefinition
             | .family = $family
-            | .containerDefinitions = [.containerDefinitions[] | select(.name == "api-staging")
-                | .name = "api"
-                | .image = $img
-                | .environment = ((.environment // [])
-                    | setenv("APP_ENVIRONMENT"; "preview") | setenv("APP_VERSION"; $name)
-                    | setenv("APP_COMMIT"; $commit) | setenv("SEED_DATA"; "true")
-                    | setenv("APPCONFIG_ENVIRONMENT"; "preview")
-                    | setenv("ConnectionStrings__Orders"; $conn))
-                | .secrets = [{name: "PGPASSWORD", valueFrom: $pw}]
+            # Keep the API container (renamed "api") and the X-Ray collector sidecar.
+            | .containerDefinitions = [.containerDefinitions[]
+                | select(.name == "api-staging" or .name == "otel-collector")
                 | .logConfiguration = {logDriver: "awslogs", options: {
-                    "awslogs-group": $group, "awslogs-region": $region, "awslogs-stream-prefix": $name}}]
+                    "awslogs-group": $group, "awslogs-region": $region, "awslogs-stream-prefix": $name}}
+                | if .name == "api-staging" then
+                    .name = "api"
+                    | .image = $img
+                    | .environment = ((.environment // [])
+                        | setenv("APP_ENVIRONMENT"; "preview") | setenv("APP_VERSION"; $name)
+                        | setenv("APP_COMMIT"; $commit) | setenv("SEED_DATA"; "true")
+                        | setenv("APPCONFIG_ENVIRONMENT"; "preview")
+                        | setenv("OTEL_SERVICE_NAME"; "orders-api-preview")
+                        | setenv("ConnectionStrings__Orders"; $conn))
+                    | .secrets = [{name: "PGPASSWORD", valueFrom: $pw}]
+                  else . end]
             | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions,
                requiresCompatibilities, cpu, memory, runtimePlatform}
             | with_entries(select(.value != null))
