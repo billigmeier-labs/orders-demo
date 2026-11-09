@@ -1,0 +1,3 @@
+# gitleaks findings reviewed and accepted as false positives (fingerprint per line).
+# An ECR image reference whose tag is a commit SHA, in a console test (since changed to a low-entropy SHA).
+0a514ce2340c74142e9efe48d16024c397244d8e:tests/Orders.Console.Tests/DeployCommitTests.cs:generic-api-key:13

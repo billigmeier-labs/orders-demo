@@ -10,7 +10,8 @@ public sealed class DeployCommitTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
-    [InlineData("983889169993.dkr.ecr.us-east-1.amazonaws.com/orders-api:3f2c9a1b4d5e6f708192a3b4c5d6e7f809112233", "3f2c9a1b4d5e6f708192a3b4c5d6e7f809112233")]
+    // A low-entropy SHA, so secret scanners don't mistake the image reference for an API key.
+    [InlineData("983889169993.dkr.ecr.us-east-1.amazonaws.com/orders-api:abcabcabcabcabcabcabcabcabcabcabcabcabca", "abcabcabcabcabcabcabcabcabcabcabcabcabca")]
     [InlineData("localhost:5000/orders-api:a3f9c21", "a3f9c21")]
     [InlineData("983889169993.dkr.ecr.us-east-1.amazonaws.com/orders-api:pr-42", null)]
     [InlineData("983889169993.dkr.ecr.us-east-1.amazonaws.com/orders-api:latest", null)]
