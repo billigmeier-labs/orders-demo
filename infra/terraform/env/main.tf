@@ -32,40 +32,45 @@ locals {
   role_pfx   = local.base.ecs_role_prefix
   appconfig  = local.base.appconfig
 
-  # Long-running services. desired is what the service runs once an image exists.
+  # Long-running services. desired is what the service runs once an image exists. bake_minutes is how
+  # long ECS keeps watching the deployment alarms after the new tasks are healthy: staging is short so
+  # merge to prod stays quick; prod keeps 5 minutes so a bad version under real traffic still rolls back.
   services = {
     api-prod = {
-      host        = local.domain
-      repo        = "orders-api"
-      tag         = var.api_image_tag
-      desired     = 2
-      health_path = "/health/ready"
-      env         = "prod"
-      db          = "prod"
-      task_role   = "task-prod"
-      priority    = 10
+      host         = local.domain
+      repo         = "orders-api"
+      tag          = var.api_image_tag
+      desired      = 2
+      health_path  = "/health/ready"
+      env          = "prod"
+      db           = "prod"
+      task_role    = "task-prod"
+      priority     = 10
+      bake_minutes = 5
     }
     api-staging = {
-      host        = "staging.${local.domain}"
-      repo        = "orders-api"
-      tag         = var.api_image_tag
-      desired     = 1
-      health_path = "/health/ready"
-      env         = "staging"
-      db          = "nonprod"
-      task_role   = "task-nonprod"
-      priority    = 20
+      host         = "staging.${local.domain}"
+      repo         = "orders-api"
+      tag          = var.api_image_tag
+      desired      = 1
+      health_path  = "/health/ready"
+      env          = "staging"
+      db           = "nonprod"
+      task_role    = "task-nonprod"
+      priority     = 20
+      bake_minutes = 1
     }
     console = {
-      host        = "console.${local.domain}"
-      repo        = "orders-console"
-      tag         = var.console_image_tag
-      desired     = 1
-      health_path = "/health/live"
-      env         = "prod"
-      db          = null
-      task_role   = "console"
-      priority    = 30
+      host         = "console.${local.domain}"
+      repo         = "orders-console"
+      tag          = var.console_image_tag
+      desired      = 1
+      health_path  = "/health/live"
+      env          = "prod"
+      db           = null
+      task_role    = "console"
+      priority     = 30
+      bake_minutes = 5
     }
   }
 }

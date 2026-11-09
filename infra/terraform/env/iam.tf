@@ -127,6 +127,18 @@ data "aws_iam_policy_document" "console" {
     }
   }
 
+  # RunTask with tags or propagateTags needs TagResource on the new task; only at RunTask time.
+  statement {
+    sid       = "TagLoadGeneratorTasks"
+    actions   = ["ecs:TagResource"]
+    resources = ["arn:aws:ecs:${var.region}:${local.account_id}:task/${aws_ecs_cluster.this.name}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ecs:CreateAction"
+      values   = ["RunTask"]
+    }
+  }
+
   statement {
     sid       = "StopTasks"
     actions   = ["ecs:StopTask"]

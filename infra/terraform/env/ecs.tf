@@ -181,11 +181,11 @@ resource "aws_ecs_service" "svc" {
     rollback = true
   }
 
-  # Keep watching the deployment alarms for 5 minutes after the new tasks are healthy, so a version
+  # Keep watching the deployment alarms for bake_minutes after the new tasks are healthy, so a version
   # that only fails under real traffic is still rolled back automatically.
   deployment_configuration {
     strategy             = "ROLLING"
-    bake_time_in_minutes = 5
+    bake_time_in_minutes = each.value.bake_minutes
   }
 
   alarms {
