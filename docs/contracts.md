@@ -27,6 +27,7 @@ Base path `/api`. JSON, camelCase. Errors are RFC 7807 problem details. IDs are 
 | `GET /api/customers`, `GET /api/customers/{id}`, `POST /api/customers` | Customers: `id, name, email, createdAt` |
 | `GET /api/customers/{id}/orders?page=&pageSize=` | A customer's orders, newest first, same paged shape as `GET /api/orders` (default 20, max 100); 404 if the customer doesn't exist |
 | `GET /api/products`, `GET /api/products/{id}`, `POST /api/products` | Products: `id, sku, name, price, stock` |
+| `POST /api/products/{id}/restock` | `{ quantity }` (1–10000) adds to stock atomically and returns the product; 400 if out of range, 404 if unknown |
 | `GET /api/orders?status=&customerId=&page=&pageSize=` | List orders, newest first, paged (default 20, max 100) |
 | `GET /api/orders/{id}` | One order with lines and total |
 | `POST /api/orders` | Create: `{ customerId, lines: [{ productId, quantity }] }`; unit price copied from product; reduces stock; 409 if not enough stock |
@@ -56,7 +57,7 @@ Logs outside Development are JSON, one object per line, with `AppVersion`, `AppC
 
 ## Load generator
 
-Env `TARGET_BASE_URL` (the task definition points it at production, `https://demo.joshb.app`), `SCENARIO` (`normal` ≈ 5 req/s, `peak` ≈ 25, `spike` = normal with a 60 s burst to 60, `soak` = normal, default 30 min), `DURATION_MINUTES` (default 5). Journeys: browse products, search, view orders, create orders, advance order status. 5xx and no-response count as failures; 4xx (409 out of stock or a lost race) are expected. Ends with a summary per endpoint on stdout.
+Env `TARGET_BASE_URL` (the task definition points it at production, `https://demo.joshb.app`), `SCENARIO` (`normal` ≈ 5 req/s, `peak` ≈ 25, `spike` = normal with a 60 s burst to 60, `soak` = normal, default 30 min), `DURATION_MINUTES` (default 5). Journeys: browse products, search, view orders, create orders, advance order status. 5xx and no-response count as failures; 4xx (409 out of stock or a lost race) are expected. Before the scenario starts it restocks every product with stock below 20 up to 100 (via `POST /api/products/{id}/restock`) and logs how many; a failed restock is logged and the run continues. Ends with a summary per endpoint on stdout.
 
 ## GitHub
 

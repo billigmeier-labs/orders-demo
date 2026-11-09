@@ -1,9 +1,27 @@
+using System.ComponentModel.DataAnnotations;
 using Orders.Api.Domain;
+using Orders.Api.Features.Products;
 
 namespace Orders.UnitTests;
 
 public class StockTests
 {
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(-1, false)]
+    [InlineData(1, true)]
+    [InlineData(10_000, true)]
+    [InlineData(10_001, false)]
+    public void RestockRequest_Quantity_MustBeOneToTenThousand(int quantity, bool valid) =>
+        Assert.Equal(valid, IsValid(new RestockRequest(quantity)));
+
+    [Fact]
+    public void RestockRequest_MissingQuantity_IsInvalid() =>
+        Assert.False(IsValid(new RestockRequest(null)));
+
+    private static bool IsValid(object instance) =>
+        Validator.TryValidateObject(instance, new ValidationContext(instance), null, validateAllProperties: true);
+
     [Fact]
     public void TryRemoveStock_Enough_ReducesStock()
     {

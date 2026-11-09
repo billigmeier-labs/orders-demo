@@ -32,6 +32,7 @@ catch (InvalidOperationException ex)
 }
 
 Console.WriteLine($"Target {settings.TargetBaseUrl}: {catalog.Customers.Count} customers, {catalog.Products.Count} products, {catalog.Orders.Count} recent orders.");
+await Restock.RunAsync(api, catalog.Products, Console.WriteLine, CancellationToken.None);
 foreach (var phase in LoadPlan.Phases(settings.Scenario, settings.Duration))
 {
     Console.WriteLine($"  {phase.Duration.TotalSeconds:0} s at {phase.RequestsPerSecond:0} req/s");

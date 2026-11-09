@@ -7,6 +7,14 @@ public class LoadGeneratorTests
     private static LoadSettings Settings(params (string Name, string Value)[] env) =>
         LoadSettings.From(name => env.FirstOrDefault(e => e.Name == name).Value);
 
+    [Theory]
+    [InlineData(0, 100)]
+    [InlineData(19, 81)]
+    [InlineData(20, 0)]
+    [InlineData(500, 0)]
+    public void Restock_QuantityFor_TopsUpProductsBelowTwenty(int stock, int expected) =>
+        Assert.Equal(expected, Restock.QuantityFor(stock));
+
     [Fact]
     public void Settings_Defaults_NormalForFiveMinutesAgainstLocalhost()
     {
