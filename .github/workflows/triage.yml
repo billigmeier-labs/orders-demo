@@ -42,6 +42,8 @@ jobs:
           AUTHOR: ${{ github.event.issue.user.login }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then echo "allowed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # Our own automation (incident and mutation issues) is trusted; bots have no collaborator permission to check.
+          case "$AUTHOR" in "orders-automation[bot]"|"claude[bot]") echo "allowed=true" >> "$GITHUB_OUTPUT"; exit 0;; esac
           level=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq .permission 2>/dev/null || echo none)
           case "$level" in admin|maintain|write) echo "allowed=true" >> "$GITHUB_OUTPUT";;
             *) echo "allowed=false" >> "$GITHUB_OUTPUT"; echo "::notice::$AUTHOR has '$level' access; not triaging automatically.";; esac

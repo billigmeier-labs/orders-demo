@@ -97,6 +97,10 @@ cleanup:
         if [ "$branch" = demo/canned-bug ]; then flag=""; else flag="--delete-branch"; fi
         gh pr close "$pr" -R {{ repo }} $flag -c "Closed by demo reset." >/dev/null && echo "Closed PR #$pr"
     done
+    # Incident issues a demo left open (e.g. from the bad deploy) would swallow the next alarm; close them.
+    for n in $(gh issue list -R {{ repo }} --label incident --state open --json number --jq '.[].number'); do
+        gh issue close "$n" -R {{ repo }} -c "Closed by demo reset." >/dev/null && echo "Closed incident #$n"
+    done
     for id in $(gh issue list -R {{ repo }} --label demo --state all --limit 200 --json id --jq '.[].id'); do
         gh api graphql -f query='mutation($id:ID!){deleteIssue(input:{issueId:$id}){clientMutationId}}' -f id="$id" >/dev/null && echo "Deleted issue $id"
     done
