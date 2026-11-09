@@ -33,7 +33,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 // One log line per request: method, path, status and duration.
 builder.Services.AddHttpLogging(options =>
 {
-    options.LoggingFields = HttpLoggingFields.RequestMethod | HttpLoggingFields.RequestPath | HttpLoggingFields.RequestQuery
+    // No query strings: they're user input, and the incident agent reads these logs.
+    options.LoggingFields = HttpLoggingFields.RequestMethod | HttpLoggingFields.RequestPath
         | HttpLoggingFields.ResponseStatusCode | HttpLoggingFields.Duration;
     options.CombineLogs = true;
 });

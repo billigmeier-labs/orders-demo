@@ -32,7 +32,7 @@ If `dotnet` isn't installed, the `just` recipes run it in the official .NET SDK 
 
 ## What you must not do
 
-- Don't edit `.github/`, `AGENTS.md`, `CODEOWNERS`, `infra/`, migrations you didn't create in this PR, or test thresholds. Those need a human; if your task needs them, say so in the PR and stop.
+- Don't edit anything `.github/CODEOWNERS` lists (`.github/`, `AGENTS.md`, `justfile`, `scripts/`, `infra/`, sign-in code, build settings, test thresholds) or migrations you didn't create in this PR. Those need a human; if your task needs them, say so in the PR and stop.
 - Don't skip, delete or weaken tests to make CI pass.
 - Don't add secrets, keys or tokens to the repo.
 - Don't push to `main`.

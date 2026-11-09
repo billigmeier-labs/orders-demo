@@ -8,12 +8,12 @@ The names and shapes every part of this repo agrees on. Change them here first, 
 | --- | --- |
 | `Orders.slnx` | The solution |
 | `src/Orders.Api` | ASP.NET Core (.NET 10) orders API |
-| `src/Orders.Console` | Demo console (ASP.NET Core), later phase |
+| `src/Orders.Console` | Demo console (ASP.NET Core): Status, Present (Tour and scenarios), Architecture |
 | `src/Orders.LoadGenerator` | NBomber load scenarios (`just load <scenario> <minutes>`) |
 | `tests/Orders.UnitTests` | xUnit, no I/O |
 | `tests/Orders.IntegrationTests` | xUnit + Testcontainers PostgreSQL |
-| `tests/Orders.E2E` | Playwright suite for the console, later phase |
-| `infra/terraform/base`, `infra/terraform/env` | AWS, later phase |
+| `tests/Orders.E2E` | Playwright suite for the console (`just e2e` fake mode, `just e2e-live` against AWS) |
+| `infra/terraform/base`, `infra/terraform/env` | AWS (`just env up` / `down`) |
 
 ## Orders API
 
@@ -61,7 +61,7 @@ Env `TARGET_BASE_URL` (the task definition points it at production, `https://dem
 ## GitHub
 
 - Default branch `main`. Squash merge only. Merge queue on `main`.
-- Required status checks on `main`: **`ci-ok`** and **`ai-review`** (later phase). `ci.yml` runs on `pull_request`, `merge_group` and `push` to `main`.
+- Required status checks on `main`: **`ci-ok`** and **`ai-review`**, both pinned to GitHub Actions (app 15368) so no other app can report them. `ci.yml` runs on `pull_request`, `merge_group` and `push` to `main`.
 - Labels: `demo`, `agent`, `needs-human`, `incident`, `risk:low`, `risk:medium`, `risk:high`, `difficulty:low`, `difficulty:medium`, `difficulty:high`, `mutation`, `bypass:build`.
 - Secrets (repo): `ANTHROPIC_API_KEY`, `AUTOMATION_APP_ID` + `AUTOMATION_APP_KEY` (the `orders-automation` GitHub App: workflows mint a short-lived token with `actions/create-github-app-token`, so labels, comments, issues and auto-merge show as `orders-automation[bot]`), `AUTOMATION_TOKEN` (fine-grained PAT, now only for the AWS alarm → `repository_dispatch` API destination and the console, which acts for the presenter), `CONSOLE_VERIFICATION_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. AWS access is OIDC, no keys.
 

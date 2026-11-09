@@ -1,9 +1,23 @@
 # Paths that always need a human's approval (see AGENTS.md).
 # Everything not listed here can merge on green checks alone.
+
+# The rules and the pipeline
 /.github/                                   @jbilligmeier
 /AGENTS.md                                  @jbilligmeier
+/justfile                                   @jbilligmeier
+/demo.just                                  @jbilligmeier
+/scripts/                                   @jbilligmeier
+/lefthook.yml                               @jbilligmeier
+/.gitleaksignore                            @jbilligmeier
+
+# Infrastructure and data
 /infra/                                     @jbilligmeier
 /src/Orders.Api/Data/Migrations/            @jbilligmeier
+
+# Build settings and test thresholds (Directory.Packages.props stays open so Dependabot patch updates can merge)
 /Directory.Build.props                      @jbilligmeier
+/global.json                                @jbilligmeier
 /stryker-config.json                        @jbilligmeier
-/tests/**/coverage.runsettings              @jbilligmeier
+
+# Sign-in and access control
+/src/Orders.Console/Auth/                   @jbilligmeier

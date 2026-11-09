@@ -44,6 +44,29 @@ jobs:
         with:
           tool: just
 
+      # Public repo: anyone can comment on an issue. Give the agent the issue plus only the comments from people
+      # with write access and from our own bots, so a stranger's comment can't steer it.
+      - name: Collect the issue from trusted authors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=.agent-issue.md
+          echo "$out" >> .git/info/exclude
+          gh issue view "$ISSUE" -R "$GITHUB_REPOSITORY" --json title,body,author --jq '"# #\(env.ISSUE): \(.title)\n\n_Opened by \(.author.login)_\n\n\(.body)\n"' > "$out"
+          gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --paginate --jq '.[] | @base64' | while read -r row; do
+            c=$(base64 -d <<<"$row"); who=$(jq -r .user.login <<<"$c")
+            case "$who" in
+              "orders-automation[bot]"|"claude[bot]") ok=true ;;
+              *) level=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$who/permission" --jq .permission 2>/dev/null || echo none)
+                 case "$level" in admin|maintain|write) ok=true ;; *) ok=false ;; esac ;;
+            esac
+            if [ "$ok" = true ]; then
+              jq -r '"\n---\n**Comment by \(.user.login)**\n\n\(.body)\n"' <<<"$c" >> "$out"
+            else
+              echo "Left out a comment from $who (no write access)."
+            fi
+          done
+
       - name: Claude works the issue
         id: work
         uses: anthropics/claude-code-action@v1
@@ -53,7 +76,7 @@ jobs:
           allowed_bots: "orders-automation,orders-automation[bot],claude,claude[bot]"
           prompt: |
             You are the coding agent for this repository. Read AGENTS.md and docs/contracts.md first and follow them exactly.
-            Your task is issue #${{ env.ISSUE }}: read it and its comments with `gh issue view ${{ env.ISSUE }} --comments`.
+            Your task is issue #${{ env.ISSUE }}. Read it, with its trusted comments, from the file `.agent-issue.md` (don't fetch the issue yourself; comments from people without write access are left out on purpose).
 
             1. Create a branch named `agent/${{ env.ISSUE }}-<short-slug>` from main.
             2. Implement the change with tests. Keep it small and focused on the issue.
@@ -66,7 +89,7 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 80
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just:*),Bash(dotnet:*),Bash(git:*),Bash(gh pr create:*),Bash(gh issue view:*),Bash(gh issue comment:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just:*),Bash(dotnet:*),Bash(git:*),Bash(gh pr create:*),Bash(gh issue comment:*)"
             --json-schema '{"type":"object","required":["opened_pr"],"properties":{"opened_pr":{"type":"boolean"},"pr_number":{"type":"integer"},"summary":{"type":"string"}}}'
 
       - name: Turn on auto-merge

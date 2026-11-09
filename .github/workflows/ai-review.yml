@@ -2,7 +2,7 @@ name: AI review
 
 # A required check. Claude reviews every PR against its linked issue and blocks only on real problems:
 # a bug, a security issue, untested behaviour, or not doing what the issue asks. Style is comments only.
-# After two blocked rounds it stops and labels the PR `needs-human`. Admins can override with a comment.
+# After two blocked rounds it stops and labels the PR `needs-human`. An admin's /override-ai-review comment (newer than the latest commit) lets it through.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -46,31 +46,45 @@ jobs:
           fork=${{ github.event.pull_request.head.repo.full_name != github.repository }}
           echo "fork=$fork" >> "$GITHUB_OUTPUT"
 
+      # The override is an /override-ai-review comment from a repository admin, posted after the PR's latest
+      # commit. The ai-review:override label is only a marker for people; it doesn't let anything through.
       - name: Admin override
         id: override
-        if: github.event_name == 'pull_request' && contains(steps.state.outputs.labels, 'ai-review:override')
-        run: echo "::notice::An admin overrode the AI review for this PR."
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          since=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA" --jq .commit.committer.date)
+          for who in $(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+              --jq ".[] | select(.created_at > \"$since\" and (.body | startswith(\"/override-ai-review\"))) | .user.login" | sort -u); do
+            if [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$who/permission" --jq .permission 2>/dev/null)" = admin ]; then
+              echo "::notice::$who (admin) overrode the AI review for this commit."
+              echo "active=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          done
+          echo "active=false" >> "$GITHUB_OUTPUT"
 
       - name: Outside contributors need a human
-        if: github.event_name == 'pull_request' && steps.override.outcome == 'skipped' && steps.state.outputs.fork == 'true'
+        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true' && steps.state.outputs.fork == 'true'
         run: |
           echo "::error::PRs from forks aren't sent to the AI. A maintainer reviews and comments '/override-ai-review'."
           exit 1
 
       - name: Already sent to a human
-        if: github.event_name == 'pull_request' && steps.override.outcome == 'skipped' && contains(steps.state.outputs.labels, 'needs-human')
+        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true' && contains(steps.state.outputs.labels, 'needs-human')
         run: |
           echo "::error::The AI review blocked this PR twice. A human needs to review it (or comment '/override-ai-review')."
           exit 1
 
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' && steps.override.outcome == 'skipped'
+        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true'
         with:
           fetch-depth: 0
 
       - name: Claude reviews
         id: review
-        if: github.event_name == 'pull_request' && steps.override.outcome == 'skipped'
+        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

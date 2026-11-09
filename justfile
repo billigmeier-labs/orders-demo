@@ -138,6 +138,27 @@ _playwright *args:
         "mcr.microsoft.com/playwright:v${version}-noble" \
         bash -c 'npm ci --no-audit --no-fund --loglevel=error && npx playwright test "$@"' playwright {{ args }}
 
+# Put an environment straight back on the previous release (no staging, no rebuild), e.g. `just rollback` or `just rollback staging`
+rollback env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    svc="api-{{ env }}"; family="orders-demo-api-{{ env }}"
+    current=$(aws ecs describe-services --cluster orders-demo --services "$svc" --query 'services[0].taskDefinition' --output text)
+    image=$(aws ecs describe-task-definition --task-definition "$current" --query 'taskDefinition.containerDefinitions[0].image' --output text)
+    # The newest earlier revision that runs a different image is the previous release.
+    target=""
+    for td in $(aws ecs list-task-definitions --family-prefix "$family" --sort DESC --status ACTIVE --query 'taskDefinitionArns' --output text); do
+        [ "$td" = "$current" ] && continue
+        other=$(aws ecs describe-task-definition --task-definition "$td" --query 'taskDefinition.containerDefinitions[0].image' --output text)
+        if [ "$other" != "$image" ]; then target="$td"; break; fi
+    done
+    [ -n "$target" ] || { echo "No earlier release found for $svc."; exit 1; }
+    echo "Rolling $svc back: ${image##*:} -> $(aws ecs describe-task-definition --task-definition "$target" --query 'taskDefinition.containerDefinitions[0].image' --output text | sed 's/.*://')"
+    aws ecs update-service --cluster orders-demo --service "$svc" --task-definition "$target" --query 'service.serviceName' --output text >/dev/null
+    start=$(date +%s)
+    aws ecs wait services-stable --cluster orders-demo --services "$svc"
+    echo "$svc is back on the previous release ($(( $(date +%s) - start )) s). Note: the next merge to main deploys again."
+
 # AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`
 mod env "infra/infra.just"
 
