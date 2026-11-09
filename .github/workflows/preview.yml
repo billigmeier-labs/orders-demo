@@ -80,7 +80,8 @@ jobs:
         id: cfg
         if: steps.env.outputs.up == 'true'
         run: |
-          names=(subnets task-security-group vpc-id https-listener-arn preview/log-group preview/db-host preview/db-username preview/db-password-ref)
+          names=(subnets vpc-id https-listener-arn preview/security-group preview/execution-role preview/task-role
+            preview/log-group preview/db-host preview/db-username preview/db-password-ref)
           params=$(aws ssm get-parameters --names "${names[@]/#//orders-demo/}" --query 'Parameters[].[Name,Value]' --output json)
           for n in "${names[@]}"; do
             v=$(jq -r --arg n "/orders-demo/$n" '.[] | select(.[0] == $n) | .[1]' <<<"$params")
@@ -97,15 +98,22 @@ jobs:
           DB_HOST: ${{ steps.cfg.outputs.preview_db_host }}
           DB_USER: ${{ steps.cfg.outputs.preview_db_username }}
           DB_PASSWORD_REF: ${{ steps.cfg.outputs.preview_db_password_ref }}
+          EXECUTION_ROLE: ${{ steps.cfg.outputs.preview_execution_role }}
+          TASK_ROLE: ${{ steps.cfg.outputs.preview_task_role }}
         run: |
-          # A copy of the staging API's definition, pointed at database pr_<N>.
+          # A copy of the staging API's definition, pointed at database pr_<N>, with the preview
+          # execution and task roles (the only roles orders-demo-preview may pass: nonprod DB secret,
+          # preview log group, preview AppConfig).
           staging=$(aws ecs describe-task-definition --task-definition orders-demo-api-staging)
           conn="Host=$DB_HOST;Port=5432;Database=pr_$PR;Username=$DB_USER;SSL Mode=Require"
           input=$(jq --arg family "orders-demo-$NAME" --arg img "$IMAGE" --arg conn "$conn" --arg name "$NAME" \
-            --arg commit "${HEAD_SHA::7}" --arg group "$LOG_GROUP" --arg region "$AWS_REGION" --arg pw "$DB_PASSWORD_REF" '
+            --arg commit "${HEAD_SHA::7}" --arg group "$LOG_GROUP" --arg region "$AWS_REGION" --arg pw "$DB_PASSWORD_REF" \
+            --arg exec "$EXECUTION_ROLE" --arg task "$TASK_ROLE" '
             def setenv($k; $v): [.[] | select(.name != $k)] + [{name: $k, value: $v}];
             .taskDefinition
             | .family = $family
+            | .executionRoleArn = $exec
+            | .taskRoleArn = $task
             # Keep the API container (renamed "api") and the X-Ray collector sidecar.
             | .containerDefinitions = [.containerDefinitions[]
                 | select(.name == "api-staging" or .name == "otel-collector")
@@ -135,13 +143,13 @@ jobs:
         env:
           TD: ${{ steps.td.outputs.arn }}
           SUBNETS: ${{ steps.cfg.outputs.subnets }}
-          SG: ${{ steps.cfg.outputs.task_security_group }}
+          SG: ${{ steps.cfg.outputs.preview_security_group }}
           LOG_GROUP: ${{ steps.cfg.outputs.preview_log_group }}
         run: |
           # Same image and definition, command swapped for the EF Core bundle, which creates
           # the database if it does not exist yet.
           run=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TD" --launch-type FARGATE \
-            --started-by "preview-$PR" \
+            --started-by "preview-$PR" --tags key=preview,value="$NAME" key=project,value=orders-demo \
             --overrides '{"containerOverrides":[{"name":"api","command":["./efbundle"]}]}' \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}")
           task=$(jq -r '.tasks[0].taskArn // empty' <<<"$run")
@@ -206,19 +214,23 @@ jobs:
           TD: ${{ steps.td.outputs.arn }}
           TG: ${{ steps.lb.outputs.tg }}
           SUBNETS: ${{ steps.cfg.outputs.subnets }}
-          SG: ${{ steps.cfg.outputs.task_security_group }}
+          SG: ${{ steps.cfg.outputs.preview_security_group }}
         run: |
           status=$(aws ecs describe-services --cluster "$CLUSTER" --services "$NAME" --query 'services[0].status' --output text)
           if [ "$status" = DRAINING ]; then
             aws ecs wait services-inactive --cluster "$CLUSTER" --services "$NAME"; status=INACTIVE
           fi
+          # Previews run in their own security group (only the nonprod database lets it in); tasks carry
+          # the service's preview=pr-<N> tag, which is what lets orders-demo-preview stop them.
+          network="awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}"
           if [ "$status" = ACTIVE ]; then
-            aws ecs update-service --cluster "$CLUSTER" --service "$NAME" --task-definition "$TD" --desired-count 1 >/dev/null
+            aws ecs update-service --cluster "$CLUSTER" --service "$NAME" --task-definition "$TD" --desired-count 1 \
+              --network-configuration "$network" --propagate-tags SERVICE >/dev/null
             echo "Updated service $NAME"
           else
             aws ecs create-service --cluster "$CLUSTER" --service-name "$NAME" --task-definition "$TD" \
               --desired-count 1 --launch-type FARGATE --health-check-grace-period-seconds 60 \
-              --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}" \
+              --network-configuration "$network" --propagate-tags SERVICE \
               --load-balancers "targetGroupArn=$TG,containerName=api,containerPort=8080" \
               --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},minimumHealthyPercent=100,maximumPercent=200" \
               --tags key=preview,value="$NAME" key=project,value=orders-demo >/dev/null
