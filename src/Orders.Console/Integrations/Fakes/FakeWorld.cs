@@ -494,9 +494,11 @@ public sealed class FakeWorld :
     private void Seed()
     {
         var now = Now;
-        _flags[FaultFlag] = (false, "New search engine (has a multi-word search bug)");
-        _flags["faultFailOrders"] = (false, "Fault: make some POST /api/orders requests fail");
-        _flags["faultSlowSearch"] = (false, "Fault: add 1.5 s to /api/search");
+        foreach (var (name, description) in KnownFlags.Descriptions)
+        {
+            _flags[name] = (false, description);
+        }
+
         _flags["lowStockBanner"] = (true, "Show the low-stock banner on products");
 
         foreach (var (name, reason) in new[]

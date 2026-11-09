@@ -69,9 +69,25 @@ public sealed class AwsFeatureFlags(IAmazonAppConfig appConfig, ConsoleOptions o
         return flags.Select(f => new FeatureFlag(
                 f.Key,
                 values?[f.Key]?["enabled"]?.GetValue<bool>() ?? false,
-                f.Value?["description"]?.GetValue<string>() ?? f.Value?["name"]?.GetValue<string>()))
+                Description(f.Key, f.Value)))
             .OrderBy(f => f.Name, StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>
+    /// The flag's description from AppConfig (<c>_description</c>, or <c>description</c>), else the built-in one
+    /// from <see cref="KnownFlags"/>, else its display name when that says more than the key.
+    /// </summary>
+    internal static string? Description(string key, JsonNode? flag)
+    {
+        static string? Text(JsonNode? node) =>
+            node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
+
+        var name = Text(flag?["name"]);
+        return Text(flag?["_description"])
+            ?? Text(flag?["description"])
+            ?? KnownFlags.Describe(key)
+            ?? (name is not null && !string.Equals(name, key, StringComparison.Ordinal) ? name : null);
     }
 
     public static JsonNode WithFlag(JsonNode? doc, string name, bool enabled)
