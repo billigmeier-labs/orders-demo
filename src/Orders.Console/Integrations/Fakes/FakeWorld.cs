@@ -362,7 +362,7 @@ public sealed class FakeWorld :
     private void DeployStart(FakePull pull)
     {
         var sha = Sha(pull.Number);
-        _deploys.Add(new DeployRecord("staging", $"1.4.{_patch + 1} ({sha})", "succeeded", Now, null));
+        _deploys.Add(new DeployRecord("staging", $"1.4.{_patch + 1}", "succeeded", Now, null, sha));
         Emit(EventKinds.DeployStarted, "prod", $"{sha}: {pull.Title}", RunUrl(++_runId));
         if (pull.Bad)
         {
@@ -370,7 +370,7 @@ public sealed class FakeWorld :
             After(2, () =>
             {
                 AddRun("deploy", "failure", pull.Title, "main", TimeSpan.FromSeconds(540));
-                _deploys.Add(new DeployRecord("prod", $"1.4.{_patch + 1} ({sha})", "rolled back", Now, null));
+                _deploys.Add(new DeployRecord("prod", $"1.4.{_patch + 1}", "rolled back", Now, null, sha));
                 Emit(EventKinds.DeployRolledBack, "prod", $"{sha} rolled back to {Version} ({_commit})", RunUrl(_runId));
             });
             After(3, ClearAlarms);
@@ -382,7 +382,7 @@ public sealed class FakeWorld :
             _patch++;
             _commit = sha;
             AddRun("deploy", "success", pull.Title, "main", TimeSpan.FromSeconds(486));
-            _deploys.Add(new DeployRecord("prod", $"{Version} ({sha})", "succeeded", Now, null));
+            _deploys.Add(new DeployRecord("prod", Version, "succeeded", Now, null, sha));
             Emit(EventKinds.DeploySucceeded, "prod", $"{sha}: {Version} is live", RunUrl(_runId));
             if (pull.FixesIncident)
             {
@@ -572,9 +572,9 @@ public sealed class FakeWorld :
         _runs.Add(new WorkflowRunSummary("deploy", "completed", "failure", "Deploy", "main", RunUrl(++_runId), now.AddDays(-3).AddMinutes(-9), now.AddDays(-3)));
         _runs.Add(new WorkflowRunSummary("deploy", "completed", "success", "Deploy", "main", RunUrl(++_runId), now.AddMinutes(-610), now.AddMinutes(-601)));
 
-        _deploys.Add(new DeployRecord("prod", "1.3.9 (5be01d2)", "rolled back", now.AddDays(-3), null));
-        _deploys.Add(new DeployRecord("staging", $"{Version} ({_commit})", "succeeded", now.AddMinutes(-608), null));
-        _deploys.Add(new DeployRecord("prod", $"{Version} ({_commit})", "succeeded", now.AddMinutes(-601), null));
+        _deploys.Add(new DeployRecord("prod", "1.3.9", "rolled back", now.AddDays(-3), null, "5be01d2"));
+        _deploys.Add(new DeployRecord("staging", Version, "succeeded", now.AddMinutes(-608), null, _commit));
+        _deploys.Add(new DeployRecord("prod", Version, "succeeded", now.AddMinutes(-601), null, _commit));
         Old(4320, EventKinds.DeployRolledBack, "prod", "5be01d2 rolled back to 1.3.8", null);
     }
 

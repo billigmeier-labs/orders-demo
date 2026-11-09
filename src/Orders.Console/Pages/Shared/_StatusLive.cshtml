@@ -1,5 +1,6 @@
 @model StatusSnapshot
 @inject TimeProvider Time
+@inject ConsoleOptions Options
 @{
     var now = Time.GetUtcNow();
 }
@@ -61,7 +62,23 @@
                 {
                     <li class="list-row" data-deploy-state="@d.State">
                         <span class="pill @(d.State is "succeeded" or "completed" ? "pill-ok" : d.State.Contains("roll") || d.State == "failed" ? "pill-bad" : "pill-warn")">@d.State</span>
-                        <span class="grow"><strong>@d.Environment</strong> <span class="mono small">@d.Version</span></span>
+                        <span class="grow" data-testid="deploy-entry"><strong>@d.Environment</strong>
+                            @if (d.ShortCommit is { } sha)
+                            {
+                                @if (string.IsNullOrEmpty(Options.GitHubRepository))
+                                {
+                                    <span class="mono small" data-testid="deploy-commit" title="@d.Commit">@sha</span>
+                                }
+                                else
+                                {
+                                    <a class="mono small" data-testid="deploy-commit" href="@Options.RepoUrl/commit/@d.Commit" target="_blank" rel="noopener" title="@d.Commit">@sha</a>
+                                }
+                            }
+                            else
+                            {
+                                <span class="mono small" data-testid="deploy-commit">@d.Version</span>
+                            }
+                        </span>
                         <span class="muted small">@Fmt.Time(d.At)</span>
                     </li>
                 }

@@ -39,6 +39,17 @@ test('Status renders health, alarms, GitHub activity, flags and cost', async ({ 
   await expect(flags.first()).toBeVisible();
   const flagName = await flags.first().getAttribute('data-flag');
   await expect(page.getByTestId(`flag-toggle-${flagName}`)).toBeVisible();
+  // A flag's description says what it does; it never just repeats the name.
+  for (const row of await flags.all()) {
+    const name = await row.getAttribute('data-flag');
+    await expect(row.locator('.muted'), `${name} description`).not.toHaveText(new RegExp(`^\\s*(${name})?\\s*$`));
+  }
+
+  // Deploys show the environment and the short commit SHA of the image, not the task definition.
+  const deploys = page.locator('[data-panel=deploys] [data-testid=deploy-entry]');
+  await expect(deploys.first()).toBeVisible();
+  await expect(deploys.first()).toContainText(/\b(prod|staging)\b/);
+  await expect(deploys.first().getByTestId('deploy-commit')).toHaveText(/^[0-9a-f]{7}$/);
 
   await expect(page.getByTestId('cost-mtd')).toHaveText(/\$\s?[\d,]+(\.\d+)?/);
   await expect(page.getByTestId('cost-today')).toHaveText(/\$\s?[\d,]+(\.\d+)?/);

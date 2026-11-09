@@ -117,7 +117,12 @@ public sealed record AlarmState(string Name, string State, string? Reason, DateT
 
 public sealed record LogLine(DateTimeOffset At, string Message, string? Stream);
 
-public sealed record DeployRecord(string Environment, string Version, string State, DateTimeOffset At, string? Url);
+/// <summary>A deployment of one service. <paramref name="Version"/> is the task definition (or app version);
+/// <paramref name="Commit"/> is the full commit SHA of the image, which is also its tag, when known.</summary>
+public sealed record DeployRecord(string Environment, string Version, string State, DateTimeOffset At, string? Url, string? Commit = null)
+{
+    public string? ShortCommit => Commit is { Length: > 7 } c ? c[..7] : Commit;
+}
 
 public sealed record CostSummary(decimal MonthToDate, decimal Today, string Currency, DateTimeOffset AsOf);
 

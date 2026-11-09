@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Amazon.ECS;
 using Amazon.ECS.Model;
 using Orders.Console.Domain;
@@ -11,17 +12,71 @@ public sealed class AwsDeployments(IAmazonECS ecs, ConsoleOptions options) : IDe
 
     public TimeSpan Interval => options.AwsPollInterval;
 
+    // Task definition revisions never change, so the commit each one runs is cached for good.
+    private readonly ConcurrentDictionary<string, string?> _commits = new(StringComparer.Ordinal);
+
     public async Task<IReadOnlyList<DeployRecord>> GetRecentDeploysAsync(CancellationToken ct)
     {
         var services = await DescribeAsync(ct);
-        return services.SelectMany(s => (s.Service.Deployments ?? []).Select(d => new DeployRecord(
-                s.Environment,
-                Revision(d.TaskDefinition),
-                d.RolloutState?.Value?.ToLowerInvariant() ?? d.Status?.ToLowerInvariant() ?? "unknown",
-                Utc(d.UpdatedAt ?? d.CreatedAt),
-                ServiceUrl(s.Service.ServiceName))))
+        var deployments = services.SelectMany(s => (s.Service.Deployments ?? []).Select(d => (s.Environment, s.Service, Deployment: d))).ToList();
+        foreach (var arn in deployments.Select(d => d.Deployment.TaskDefinition).OfType<string>().Distinct(StringComparer.Ordinal))
+        {
+            await CommitAsync(arn, ct);
+        }
+
+        return deployments.Select(x => new DeployRecord(
+                x.Environment,
+                Revision(x.Deployment.TaskDefinition),
+                x.Deployment.RolloutState?.Value?.ToLowerInvariant() ?? x.Deployment.Status?.ToLowerInvariant() ?? "unknown",
+                Utc(x.Deployment.UpdatedAt ?? x.Deployment.CreatedAt),
+                ServiceUrl(x.Service.ServiceName),
+                x.Deployment.TaskDefinition is { } arn ? _commits.GetValueOrDefault(arn) : null))
             .OrderByDescending(d => d.At)
             .ToList();
+    }
+
+    /// <summary>The commit SHA a task definition runs: its container image tag (release tags are the full SHA).</summary>
+    private async Task<string?> CommitAsync(string taskDefinitionArn, CancellationToken ct)
+    {
+        if (_commits.TryGetValue(taskDefinitionArn, out var known))
+        {
+            return known;
+        }
+
+        DescribeTaskDefinitionResponse response;
+        try
+        {
+            response = await ecs.DescribeTaskDefinitionAsync(new DescribeTaskDefinitionRequest { TaskDefinition = taskDefinitionArn }, ct);
+        }
+        catch (AmazonECSException)
+        {
+            // Show the task definition instead; try again on the next read.
+            return null;
+        }
+
+        var commit = (response.TaskDefinition?.ContainerDefinitions ?? [])
+            .Select(c => CommitFromImage(c.Image))
+            .FirstOrDefault(c => c is not null);
+        _commits[taskDefinitionArn] = commit;
+        return commit;
+    }
+
+    /// <summary>"…/orders-api:3f2c…" → the tag, when it is a commit SHA (7 to 40 hex characters); else null.</summary>
+    internal static string? CommitFromImage(string? image)
+    {
+        if (string.IsNullOrEmpty(image) || image.Contains('@', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var colon = image.LastIndexOf(':');
+        if (colon < 0 || colon < image.LastIndexOf('/'))
+        {
+            return null;
+        }
+
+        var tag = image[(colon + 1)..];
+        return tag.Length is >= 7 and <= 40 && tag.All(char.IsAsciiHexDigitLower) ? tag : null;
     }
 
     public async Task<IReadOnlyList<ConsoleEvent>> PollAsync(DateTimeOffset since, CancellationToken ct)
