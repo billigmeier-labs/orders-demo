@@ -26,6 +26,12 @@ jobs:
     env:
       ISSUE: ${{ github.event.issue.number }}
     steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
@@ -64,7 +70,7 @@ jobs:
       - name: Turn on auto-merge
         if: steps.work.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           RESULT: ${{ steps.work.outputs.structured_output }}
         run: |
           if [ "$(jq -r '.opened_pr // false' <<<"${RESULT:-{\}}")" != true ]; then echo "No PR opened."; exit 0; fi

@@ -15,6 +15,12 @@ jobs:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - id: meta
         uses: dependabot/fetch-metadata@v2
       - name: Turn on auto-merge for patch and minor package updates
@@ -23,6 +29,6 @@ jobs:
           (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
            steps.meta.outputs.update-type == 'version-update:semver-minor')
         env:
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto --squash

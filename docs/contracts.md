@@ -63,7 +63,7 @@ Env `TARGET_BASE_URL` (the task definition points it at production, `https://dem
 - Default branch `main`. Squash merge only. Merge queue on `main`.
 - Required status checks on `main`: **`ci-ok`** and **`ai-review`** (later phase). `ci.yml` runs on `pull_request`, `merge_group` and `push` to `main`.
 - Labels: `demo`, `agent`, `needs-human`, `incident`, `risk:low`, `risk:medium`, `risk:high`, `difficulty:low`, `difficulty:medium`, `difficulty:high`, `mutation`, `bypass:build`.
-- Secrets (repo): `ANTHROPIC_API_KEY`, `AUTOMATION_TOKEN` (fine-grained PAT), `CONSOLE_VERIFICATION_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. AWS access is OIDC, no keys.
+- Secrets (repo): `ANTHROPIC_API_KEY`, `AUTOMATION_APP_ID` + `AUTOMATION_APP_KEY` (the `orders-automation` GitHub App: workflows mint a short-lived token with `actions/create-github-app-token`, so labels, comments, issues and auto-merge show as `orders-automation[bot]`), `AUTOMATION_TOKEN` (fine-grained PAT, now only for the AWS alarm → `repository_dispatch` API destination and the console, which acts for the presenter), `CONSOLE_VERIFICATION_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. AWS access is OIDC, no keys.
 
 ## Images and hosts
 

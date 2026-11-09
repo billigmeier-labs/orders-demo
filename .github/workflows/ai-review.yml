@@ -27,6 +27,12 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - name: Merge queue reuses the PR's review
         if: github.event_name == 'merge_group'
         run: echo "This change was reviewed on its PR before it could enter the queue."
@@ -89,7 +95,7 @@ jobs:
         if: steps.review.outcome == 'success'
         env:
           RESULT: ${{ steps.review.outputs.structured_output }}
-          AUTOMATION: ${{ secrets.AUTOMATION_TOKEN }}
+          AUTOMATION: ${{ steps.app.outputs.token }}
           LABELS: ${{ steps.state.outputs.labels }}
         run: |
           verdict=$(jq -r .verdict <<<"$RESULT")

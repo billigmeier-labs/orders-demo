@@ -29,6 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
@@ -67,7 +73,7 @@ jobs:
       # Opened with the automation token so the new issues start triage (issues made with GITHUB_TOKEN don't).
       - name: Open issues for the weakest files
         env:
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           REPORT: ${{ steps.report.outputs.report }}
         run: |
           opened=0

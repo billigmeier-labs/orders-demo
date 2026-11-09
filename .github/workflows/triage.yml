@@ -27,6 +27,12 @@ jobs:
     env:
       ISSUE: ${{ github.event.issue.number || inputs.issue }}
     steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       # Strangers' issues on this public repo are never sent to an AI automatically. The author must have write
       # access (checked through the API, because private org membership doesn't show in the event payload).
       - name: Only issues from people with write access
@@ -73,7 +79,7 @@ jobs:
       - name: Label, explain, and route
         if: steps.gate.outputs.allowed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           RESULT: ${{ steps.score.outputs.structured_output }}
         run: |
           risk=$(jq -r .risk <<<"$RESULT"); difficulty=$(jq -r .difficulty <<<"$RESULT")

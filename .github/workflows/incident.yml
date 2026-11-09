@@ -33,8 +33,15 @@ jobs:
       STATE: ${{ github.event.client_payload.state || inputs.state }}
       REASON: ${{ github.event.client_payload.reason || 'manual test' }}
       AT: ${{ github.event.client_payload.time || github.event.repository.updated_at }}
-      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
     steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
+      - name: Use the app token in later steps
+        run: echo "GH_TOKEN=${{ steps.app.outputs.token }}" >> "$GITHUB_ENV"
       - name: Find the open issue for this alarm
         id: find
         run: |
