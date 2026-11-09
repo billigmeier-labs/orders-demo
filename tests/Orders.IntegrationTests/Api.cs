@@ -55,7 +55,10 @@ internal static class Api
         await (await client.Post("/api/orders", OrderBody(customerId, lines))).ReadAsync<OrderResponse>(HttpStatusCode.Created);
 
     public static object OrderBody(Guid customerId, params (Guid ProductId, int Quantity)[] lines) =>
-        new { customerId, lines = lines.Select(l => new { productId = l.ProductId, quantity = l.Quantity }) };
+        OrderBody(customerId, null, lines);
+
+    public static object OrderBody(Guid customerId, string? deliveryNotes, params (Guid ProductId, int Quantity)[] lines) =>
+        new { customerId, deliveryNotes, lines = lines.Select(l => new { productId = l.ProductId, quantity = l.Quantity }) };
 
     public static string UniqueSku() => $"T-{Guid.NewGuid():N}"[..14].ToUpperInvariant();
 }

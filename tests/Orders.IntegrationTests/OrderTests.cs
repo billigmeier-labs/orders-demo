@@ -36,6 +36,47 @@ public class OrderTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Create_WithDeliveryNotes_ReturnsThemOnGetAndInList()
+    {
+        var customer = await _client.CreateCustomerAsync();
+        var product = await _client.CreateProductAsync();
+        var notes = new string('x', 500);
+
+        var created = await (await _client.Post("/api/orders", Api.OrderBody(customer.Id, notes, (product.Id, 1))))
+            .ReadAsync<OrderResponse>(HttpStatusCode.Created);
+
+        Assert.Equal(notes, created.DeliveryNotes);
+        Assert.Equal(notes, (await (await _client.Get($"/api/orders/{created.Id}")).ReadAsync<OrderResponse>()).DeliveryNotes);
+        var list = await (await _client.Get($"/api/orders?customerId={customer.Id}")).ReadAsync<PagedResponse<OrderSummaryResponse>>();
+        Assert.Equal(notes, Assert.Single(list.Items).DeliveryNotes);
+    }
+
+    [Fact]
+    public async Task Create_WithoutDeliveryNotes_HasNullDeliveryNotes()
+    {
+        var customer = await _client.CreateCustomerAsync();
+        var product = await _client.CreateProductAsync();
+
+        var order = await _client.CreateOrderAsync(customer.Id, (product.Id, 1));
+
+        Assert.Null(order.DeliveryNotes);
+        Assert.Null((await (await _client.Get($"/api/orders/{order.Id}")).ReadAsync<OrderResponse>()).DeliveryNotes);
+    }
+
+    [Fact]
+    public async Task Create_DeliveryNotesOver500Characters_Returns400AndKeepsStock()
+    {
+        var customer = await _client.CreateCustomerAsync();
+        var product = await _client.CreateProductAsync(stock: 5);
+
+        var problem = await (await _client.Post("/api/orders", Api.OrderBody(customer.Id, new string('x', 501), (product.Id, 1))))
+            .ReadValidationProblemAsync();
+
+        Assert.Contains(problem.Errors.Keys, key => key.Equals("deliveryNotes", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(5, (await GetProductAsync(product.Id)).Stock);
+    }
+
+    [Fact]
     public async Task Create_NotEnoughStock_Returns409AndKeepsStock()
     {
         var customer = await _client.CreateCustomerAsync();

@@ -46,6 +46,7 @@ internal sealed class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
         modelBuilder.Entity<Order>(order =>
         {
             order.Property(o => o.Status).HasConversion<string>().HasMaxLength(20);
+            order.Property(o => o.DeliveryNotes).HasMaxLength(500);
             order.Property(o => o.Version).IsRowVersion();
             order.HasOne(o => o.Customer).WithMany().HasForeignKey(o => o.CustomerId).OnDelete(DeleteBehavior.Restrict);
             order.HasMany(o => o.Lines).WithOne().HasForeignKey("OrderId").OnDelete(DeleteBehavior.Cascade);

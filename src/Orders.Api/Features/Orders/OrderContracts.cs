@@ -5,14 +5,15 @@ namespace Orders.Api.Features.Orders;
 
 public sealed record CreateOrderRequest(
     Guid CustomerId,
-    [Required, MinLength(1), MaxLength(50)] List<CreateOrderLineRequest> Lines);
+    [Required, MinLength(1), MaxLength(50)] List<CreateOrderLineRequest> Lines,
+    [MaxLength(500)] string? DeliveryNotes = null);
 
 public sealed record CreateOrderLineRequest(Guid ProductId, [Range(1, 1000)] int Quantity);
 
 public sealed record ChangeStatusRequest([Required] OrderStatus? Status);
 
 public sealed record OrderSummaryResponse(
-    Guid Id, Guid CustomerId, string CustomerName, OrderStatus Status, decimal Total, int LineCount, DateTimeOffset CreatedAt);
+    Guid Id, Guid CustomerId, string CustomerName, OrderStatus Status, decimal Total, int LineCount, DateTimeOffset CreatedAt, string? DeliveryNotes);
 
 public sealed record OrderLineResponse(Guid ProductId, string Sku, string Name, int Quantity, decimal UnitPrice, decimal LineTotal);
 
@@ -23,7 +24,8 @@ public sealed record OrderResponse(
     OrderStatus Status,
     DateTimeOffset CreatedAt,
     IReadOnlyList<OrderLineResponse> Lines,
-    decimal Total)
+    decimal Total,
+    string? DeliveryNotes)
 {
     /// <summary>Maps an order loaded with its customer and line products.</summary>
     internal static OrderResponse From(Order order) => new(
@@ -33,7 +35,8 @@ public sealed record OrderResponse(
         order.Status,
         order.CreatedAt,
         [.. order.Lines.Select(l => new OrderLineResponse(l.ProductId, l.Product.Sku, l.Product.Name, l.Quantity, l.UnitPrice, l.LineTotal))],
-        order.Total);
+        order.Total,
+        order.DeliveryNotes);
 }
 
 public sealed record PagedResponse<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);

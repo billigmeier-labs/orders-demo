@@ -5,6 +5,15 @@ namespace Orders.UnitTests;
 public class StockTests
 {
     [Fact]
+    public void NewOrder_KeepsDeliveryNotes_AndDefaultsToNull()
+    {
+        var withNotes = new Order(Guid.NewGuid(), TestData.Customer(), DateTimeOffset.UnixEpoch, "Side door");
+
+        Assert.Equal("Side door", withNotes.DeliveryNotes);
+        Assert.Null(TestData.Order().DeliveryNotes);
+    }
+
+    [Fact]
     public void TryRemoveStock_Enough_ReducesStock()
     {
         var product = TestData.Product(stock: 5);

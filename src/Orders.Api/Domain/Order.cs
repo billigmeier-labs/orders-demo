@@ -4,13 +4,14 @@ internal sealed class Order
 {
     private readonly List<OrderLine> _lines = [];
 
-    public Order(Guid id, Customer customer, DateTimeOffset createdAt)
+    public Order(Guid id, Customer customer, DateTimeOffset createdAt, string? deliveryNotes = null)
     {
         Id = id;
         Customer = customer;
         CustomerId = customer.Id;
         CreatedAt = createdAt;
         Status = OrderStatus.Pending;
+        DeliveryNotes = deliveryNotes;
     }
 
     private Order()
@@ -23,6 +24,7 @@ internal sealed class Order
     public Customer Customer { get; private set; } = null!;
     public OrderStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+    public string? DeliveryNotes { get; private set; }
     public uint Version { get; private set; }
     public IReadOnlyList<OrderLine> Lines => _lines;
     public decimal Total => _lines.Sum(line => line.LineTotal);

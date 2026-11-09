@@ -47,7 +47,7 @@ internal static class OrderEndpoints
             .OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(o => new OrderSummaryResponse(
-                o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
+                o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt, o.DeliveryNotes))
             .ToListAsync(ct);
 
         return new PagedResponse<OrderSummaryResponse>(items, page, pageSize, totalCount);
@@ -83,7 +83,7 @@ internal static class OrderEndpoints
             return Problems.Invalid("lines", $"Unknown product(s): {string.Join(", ", unknown)}.");
         }
 
-        var order = new Order(Guid.CreateVersion7(), customer, clock.GetUtcNow());
+        var order = new Order(Guid.CreateVersion7(), customer, clock.GetUtcNow(), request.DeliveryNotes);
         var outOfStock = new List<string>();
         foreach (var (productId, quantity) in wanted)
         {

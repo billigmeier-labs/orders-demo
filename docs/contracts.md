@@ -29,7 +29,7 @@ Base path `/api`. JSON, camelCase. Errors are RFC 7807 problem details. IDs are 
 | `GET /api/products`, `GET /api/products/{id}`, `POST /api/products` | Products: `id, sku, name, price, stock` |
 | `GET /api/orders?status=&customerId=&page=&pageSize=` | List orders, newest first, paged (default 20, max 100) |
 | `GET /api/orders/{id}` | One order with lines and total |
-| `POST /api/orders` | Create: `{ customerId, lines: [{ productId, quantity }] }`; unit price copied from product; reduces stock; 409 if not enough stock |
+| `POST /api/orders` | Create: `{ customerId, lines: [{ productId, quantity }], deliveryNotes? }` (`deliveryNotes` optional, max 500 characters, else 400; returned as `deliveryNotes`, null when absent, on order reads and list items); unit price copied from product; reduces stock; 409 if not enough stock |
 | `POST /api/orders/{id}/status` | `{ status }`; allowed transitions only (below); 409 otherwise |
 | `GET /api/search?q=` | Products by name or SKU and orders by id prefix or customer name, max 20 each |
 

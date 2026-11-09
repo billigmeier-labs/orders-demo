@@ -36,7 +36,7 @@ internal static partial class SearchV2
             .ThenByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id)
             .Take(SearchEndpoints.MaxResults)
             .Select(o => new OrderSummaryResponse(
-                o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
+                o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt, o.DeliveryNotes))
             .ToListAsync(ct);
 
         return new SearchResponse(products, orders);
