@@ -47,6 +47,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.sha.outputs.sha }}
+          fetch-depth: 0
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -73,7 +74,19 @@ jobs:
           SHA: ${{ steps.sha.outputs.sha }}
         run: |
           wanted=(orders-api)
-          if [ -f src/Orders.Console/Dockerfile ]; then wanted+=(orders-console); echo "console=true" >>"$GITHUB_OUTPUT"; fi
+          # Redeploy the console only when its code changed since the running version: a restart mid-scenario
+          # would lose the presenter's run (and most merges during a demo are the demo's own PRs).
+          if [ -f src/Orders.Console/Dockerfile ]; then
+            running=$(aws ecs describe-services --cluster orders-demo --services console \
+              --query 'services[0].taskDefinition' --output text 2>/dev/null | xargs -r aws ecs describe-task-definition \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text --task-definition 2>/dev/null | sed -n 's/.*://p')
+            if [[ "$running" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$running^{commit}" 2>/dev/null &&
+               git diff --quiet "$running" "$SHA" -- src/Orders.Console Directory.Build.props Directory.Packages.props global.json; then
+              echo "Console unchanged since ${running::7}; not redeploying it."
+            else
+              wanted+=(orders-console); echo "console=true" >>"$GITHUB_OUTPUT"
+            fi
+          fi
           deadline=$(( $(date +%s) + 20 * 60 ))
           for repo in "${wanted[@]}"; do
             until aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$SHA" >/dev/null 2>&1; do
