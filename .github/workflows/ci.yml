@@ -47,6 +47,12 @@ jobs:
         with:
           global-json-file: global.json
       - uses: extractions/setup-just@v2
+        id: just1
+        continue-on-error: true  # GitHub release downloads sometimes 504
+      - if: steps.just1.outcome == 'failure'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - run: just lint
 
   unit:
@@ -60,6 +66,12 @@ jobs:
         with:
           global-json-file: global.json
       - uses: extractions/setup-just@v2
+        id: just2
+        continue-on-error: true  # GitHub release downloads sometimes 504
+      - if: steps.just2.outcome == 'failure'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - run: just build
       - run: just test
 
@@ -74,6 +86,12 @@ jobs:
         with:
           global-json-file: global.json
       - uses: extractions/setup-just@v2
+        id: just3
+        continue-on-error: true  # GitHub release downloads sometimes 504
+      - if: steps.just3.outcome == 'failure'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - run: just test-all
 
   security:

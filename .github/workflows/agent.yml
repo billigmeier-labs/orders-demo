@@ -31,6 +31,12 @@ jobs:
         with:
           global-json-file: global.json
       - uses: extractions/setup-just@v2
+        id: just1
+        continue-on-error: true  # GitHub release downloads sometimes 504
+      - if: steps.just1.outcome == 'failure'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Claude works the issue
         id: work
@@ -56,7 +62,7 @@ jobs:
             --json-schema '{"type":"object","required":["opened_pr"],"properties":{"opened_pr":{"type":"boolean"},"pr_number":{"type":"integer"},"summary":{"type":"string"}}}'
 
       - name: Turn on auto-merge
-        if: fromJSON(steps.work.outputs.structured_output).opened_pr
+        if: steps.work.outputs.structured_output != '' && fromJSON(steps.work.outputs.structured_output).opened_pr
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
           PR: ${{ fromJSON(steps.work.outputs.structured_output).pr_number }}
@@ -80,6 +86,12 @@ jobs:
         with:
           global-json-file: global.json
       - uses: extractions/setup-just@v2
+        id: just2
+        continue-on-error: true  # GitHub release downloads sometimes 504
+      - if: steps.just2.outcome == 'failure'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
