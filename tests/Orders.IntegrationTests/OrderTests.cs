@@ -1,4 +1,6 @@
 using System.Net;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Orders.Api.Domain;
 using Orders.Api.Features.Orders;
 using Orders.Api.Features.Products;
@@ -43,7 +45,7 @@ public class OrderTests(ApiFixture fixture)
         var problem = await (await _client.Post("/api/orders", Api.OrderBody(customer.Id, (plenty.Id, 1), (scarce.Id, 2))))
             .ReadProblemAsync(HttpStatusCode.Conflict);
 
-        Assert.Contains(scarce.Sku, problem.Detail, StringComparison.Ordinal);
+        Assert.Equal($"Not enough stock for {scarce.Sku}.", problem.Detail);
         Assert.Equal(10, (await GetProductAsync(plenty.Id)).Stock);
         Assert.Equal(1, (await GetProductAsync(scarce.Id)).Stock);
     }
@@ -53,9 +55,12 @@ public class OrderTests(ApiFixture fixture)
     {
         var product = await _client.CreateProductAsync();
 
-        var problem = await (await _client.Post("/api/orders", Api.OrderBody(Guid.NewGuid(), (product.Id, 1)))).ReadValidationProblemAsync();
+        var unknownCustomer = Guid.NewGuid();
+
+        var problem = await (await _client.Post("/api/orders", Api.OrderBody(unknownCustomer, (product.Id, 1)))).ReadValidationProblemAsync();
 
         Assert.Contains("customerId", problem.Errors.Keys);
+        Assert.Equal([$"Customer {unknownCustomer} does not exist."], problem.Errors["customerId"]);
     }
 
     [Fact]
@@ -63,9 +68,12 @@ public class OrderTests(ApiFixture fixture)
     {
         var customer = await _client.CreateCustomerAsync();
 
-        var problem = await (await _client.Post("/api/orders", Api.OrderBody(customer.Id, (Guid.NewGuid(), 1)))).ReadValidationProblemAsync();
+        var unknownProduct = Guid.NewGuid();
+
+        var problem = await (await _client.Post("/api/orders", Api.OrderBody(customer.Id, (unknownProduct, 1)))).ReadValidationProblemAsync();
 
         Assert.Contains("lines", problem.Errors.Keys);
+        Assert.Equal([$"Unknown product(s): {unknownProduct}."], problem.Errors["lines"]);
     }
 
     [Fact]
@@ -86,8 +94,47 @@ public class OrderTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Get_Unknown_Returns404Problem() =>
-        await (await _client.Get($"/api/orders/{Guid.NewGuid()}")).ReadProblemAsync(HttpStatusCode.NotFound);
+    public async Task Get_Unknown_Returns404Problem()
+    {
+        var id = Guid.NewGuid();
+
+        var problem = await (await _client.Get($"/api/orders/{id}")).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Order not found.", problem.Title);
+        Assert.Equal($"No order has id {id}.", problem.Detail);
+    }
+
+    [Fact]
+    public async Task List_SummaryTotalIsSumOfLines()
+    {
+        var customer = await _client.CreateCustomerAsync();
+        var lamp = await _client.CreateProductAsync(price: 24.99m);
+        var mug = await _client.CreateProductAsync(price: 5.50m);
+        await _client.CreateOrderAsync(customer.Id, (lamp.Id, 2), (mug.Id, 3));
+
+        var summary = Assert.Single((await ListAsync($"?customerId={customer.Id}")).Items);
+
+        Assert.Equal(66.48m, summary.Total);
+    }
+
+    [Fact]
+    public async Task List_EqualCreatedAt_OrdersByIdDescending()
+    {
+        await using var factory = fixture.Factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddSingleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.UtcNow))));
+        var client = factory.CreateClient();
+        var customer = await client.CreateCustomerAsync();
+        var product = await client.CreateProductAsync();
+        var created = new List<Guid>();
+        for (var i = 0; i < 4; i++)
+        {
+            created.Add((await client.CreateOrderAsync(customer.Id, (product.Id, 1))).Id);
+        }
+
+        var page = await (await client.Get($"/api/orders?customerId={customer.Id}")).ReadAsync<PagedResponse<OrderSummaryResponse>>();
+
+        Assert.Equal(created.OrderByDescending(id => id), page.Items.Select(o => o.Id));
+    }
 
     [Fact]
     public async Task List_FiltersByCustomerAndStatus_NewestFirstAndPaged()
@@ -145,7 +192,9 @@ public class OrderTests(ApiFixture fixture)
     {
         var order = await NewOrderAsync();
 
-        await (await PostStatusAsync(order.Id, "Shipped")).ReadProblemAsync(HttpStatusCode.Conflict);
+        var problem = await (await PostStatusAsync(order.Id, "Shipped")).ReadProblemAsync(HttpStatusCode.Conflict);
+
+        Assert.Equal("An order can't go from Pending to Shipped.", problem.Detail);
 
         Assert.Equal(OrderStatus.Pending, (await (await _client.Get($"/api/orders/{order.Id}")).ReadAsync<OrderResponse>()).Status);
     }
@@ -165,8 +214,15 @@ public class OrderTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task ChangeStatus_UnknownOrder_Returns404() =>
-        await (await PostStatusAsync(Guid.NewGuid(), "Paid")).ReadProblemAsync(HttpStatusCode.NotFound);
+    public async Task ChangeStatus_UnknownOrder_Returns404()
+    {
+        var id = Guid.NewGuid();
+
+        var problem = await (await PostStatusAsync(id, "Paid")).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Order not found.", problem.Title);
+        Assert.Equal($"No order has id {id}.", problem.Detail);
+    }
 
     [Theory]
     [InlineData(null)]
@@ -196,6 +252,11 @@ public class OrderTests(ApiFixture fixture)
 
     private async Task<ProductResponse> GetProductAsync(Guid id) =>
         await (await _client.Get($"/api/products/{id}")).ReadAsync<ProductResponse>();
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     /// <summary>Compares orders by value; records compare lists by reference.</summary>
     private sealed class OrderComparer : IEqualityComparer<OrderResponse>
