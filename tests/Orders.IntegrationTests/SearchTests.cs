@@ -1,11 +1,14 @@
 using System.Net;
 using Orders.Api.Features.Search;
+using Orders.Api.Infrastructure;
 
 namespace Orders.IntegrationTests;
 
 public class SearchTests(ApiFixture fixture)
 {
     private readonly HttpClient _client = fixture.Factory.CreateClient();
+
+    private static string Marker(string prefix) => $"{prefix}{Guid.NewGuid():N}"[..12];
 
     [Fact]
     public async Task Search_FindsProductsByNameAndSku()
@@ -42,6 +45,117 @@ public class SearchTests(ApiFixture fixture)
 
         Assert.Empty(result.Products);
         Assert.Empty(result.Orders);
+    }
+
+    [Fact]
+    public async Task Search_BlankQuery_ReportsTheQField()
+    {
+        var problem = await (await _client.Get("/api/search?q=%20%20")).ReadValidationProblemAsync();
+
+        var error = Assert.Single(problem.Errors);
+        Assert.Equal("q", error.Key);
+        Assert.Equal(["The q field is required."], error.Value);
+    }
+
+    [Fact]
+    public async Task Search_ProductsAreOrderedBySkuAndCappedAtTwenty()
+    {
+        var marker = Marker("po");
+        var skus = new List<string>();
+        for (var i = 0; i < 21; i++)
+        {
+            skus.Add((await _client.CreateProductAsync(name: $"Item {marker}")).Sku);
+        }
+
+        var result = await SearchAsync(marker);
+
+        Assert.Equal(skus.Order(StringComparer.Ordinal).Take(20), result.Products.Select(p => p.Sku));
+    }
+
+    [Fact]
+    public async Task Search_OrdersAreNewestFirstAndCappedAtTwenty()
+    {
+        var marker = Marker("oo");
+        var customer = await _client.CreateCustomerAsync($"Orderly {marker}");
+        var product = await _client.CreateProductAsync();
+
+        var ids = new List<Guid>();
+        for (var i = 0; i < 21; i++)
+        {
+            ids.Add((await _client.CreateOrderAsync(customer.Id, (product.Id, 1))).Id);
+        }
+
+        var result = await SearchAsync(marker);
+
+        Assert.Equal(Enumerable.Reverse(ids).Take(20), result.Orders.Select(o => o.Id));
+    }
+
+    [Fact]
+    public async Task Search_OrderSummaryHasTotalLineCountAndCustomerName()
+    {
+        var name = $"Solo {Marker("os")}";
+        var customer = await _client.CreateCustomerAsync(name);
+        var cheap = await _client.CreateProductAsync(price: 10.50m);
+        var dear = await _client.CreateProductAsync(price: 2.25m);
+        var order = await _client.CreateOrderAsync(customer.Id, (cheap.Id, 3), (dear.Id, 2));
+
+        var found = Assert.Single((await SearchAsync(name)).Orders);
+
+        Assert.Equal(order.Id, found.Id);
+        Assert.Equal(customer.Id, found.CustomerId);
+        Assert.Equal(name, found.CustomerName);
+        Assert.Equal(36.00m, found.Total);
+        Assert.Equal(2, found.LineCount);
+    }
+
+    [Theory]
+    [InlineData("%")]
+    [InlineData("_")]
+    [InlineData("\\")]
+    public async Task Search_LikeSpecialCharactersMatchOnlyThemselves(string special)
+    {
+        var marker = Marker("lk");
+        var literal = await _client.CreateProductAsync(name: $"{marker} a{special}b");
+        var other = await _client.CreateProductAsync(name: $"{marker} axb");
+        var customer = await _client.CreateCustomerAsync($"{marker} c{special}d");
+        var otherCustomer = await _client.CreateCustomerAsync($"{marker} cxd");
+        var product = await _client.CreateProductAsync();
+        var order = await _client.CreateOrderAsync(customer.Id, (product.Id, 1));
+        await _client.CreateOrderAsync(otherCustomer.Id, (product.Id, 1));
+
+        var products = await SearchAsync($"a{special}b");
+        var orders = await SearchAsync($"c{special}d");
+
+        Assert.Contains(literal.Id, products.Products.Select(p => p.Id));
+        Assert.DoesNotContain(other.Id, products.Products.Select(p => p.Id));
+        Assert.Contains(order.Id, orders.Orders.Select(o => o.Id));
+        Assert.DoesNotContain(otherCustomer.Id, orders.Orders.Select(o => o.CustomerId));
+    }
+
+    [Fact]
+    public async Task Search_WithSearchV2Off_MatchesInsideWords()
+    {
+        var marker = Marker("zv");
+        var product = await _client.CreateProductAsync(name: $"{marker}kettle");
+
+        var result = await SearchAsync(marker[3..9]);
+
+        Assert.Equal([product.Id], result.Products.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task Search_WithSearchV2On_MatchesWordPrefixesOnly()
+    {
+        await using var factory = fixture.Factory.WithFlags(new FakeFeatureFlags().Set(Flags.SearchV2, true));
+        var client = factory.CreateClient();
+        var marker = Marker("zw");
+        var product = await client.CreateProductAsync(name: $"{marker}kettle");
+
+        var middle = await (await client.Get($"/api/search?q={marker[3..9]}")).ReadAsync<SearchResponse>();
+        var prefix = await (await client.Get($"/api/search?q={marker[..8]}")).ReadAsync<SearchResponse>();
+
+        Assert.Empty(middle.Products);
+        Assert.Equal([product.Id], prefix.Products.Select(p => p.Id));
     }
 
     [Theory]
