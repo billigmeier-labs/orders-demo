@@ -18,6 +18,8 @@ public sealed record CreateProductRequest(
     [Required, Money] decimal? Price,
     [Required, Range(0, 1_000_000)] int? Stock);
 
+public sealed record RestockRequest([property: Required, Range(1, 10_000)] int? Quantity);
+
 internal static class ProductEndpoints
 {
     public static void MapProducts(this IEndpointRouteBuilder api)
@@ -26,6 +28,7 @@ internal static class ProductEndpoints
         products.MapGet("/", List);
         products.MapGet("/{id:guid}", Get);
         products.MapPost("/", Create);
+        products.MapPost("/{id:guid}/restock", Restock);
     }
 
     private static async Task<Ok<List<ProductResponse>>> List(OrdersDbContext db, CancellationToken ct) =>
@@ -52,5 +55,24 @@ internal static class ProductEndpoints
         db.Products.Add(product);
         await db.SaveChangesAsync(ct);
         return TypedResults.Created($"/api/products/{product.Id}", ProductResponse.From(product));
+    }
+
+    /// <summary>Adds stock with one atomic UPDATE, so parallel restocks (and order changes) never overwrite each other.</summary>
+    private static async Task<Results<Ok<ProductResponse>, ProblemHttpResult>> Restock(
+        Guid id, RestockRequest request, OrdersDbContext db, CancellationToken ct)
+    {
+        var quantity = request.Quantity!.Value;
+        var updated = await db.Products
+            .Where(p => p.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Stock, p => p.Stock + quantity), ct);
+        if (updated == 0)
+        {
+            return Problems.NotFound("Product", id);
+        }
+
+        var product = await db.Products.AsNoTracking().Where(p => p.Id == id)
+            .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
+            .SingleOrDefaultAsync(ct);
+        return product is null ? Problems.NotFound("Product", id) : TypedResults.Ok(product);
     }
 }

@@ -48,6 +48,55 @@ public class ProductTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Restock_AddsToStockAndReturnsProduct()
+    {
+        var product = await _client.CreateProductAsync(stock: 3);
+
+        var restocked = await (await _client.Post($"/api/products/{product.Id}/restock", new { quantity = 97 })).ReadAsync<ProductResponse>();
+
+        Assert.Equal(product with { Stock = 100 }, restocked);
+        Assert.Equal(restocked, await (await _client.Get($"/api/products/{product.Id}")).ReadAsync<ProductResponse>());
+    }
+
+    [Fact]
+    public async Task Restock_Unknown_Returns404Problem() =>
+        await (await _client.Post($"/api/products/{Guid.NewGuid()}/restock", new { quantity = 5 })).ReadProblemAsync(HttpStatusCode.NotFound);
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(10_001)]
+    public async Task Restock_QuantityOutOfRange_Returns400(int quantity)
+    {
+        var product = await _client.CreateProductAsync(stock: 3);
+
+        var problem = await (await _client.Post($"/api/products/{product.Id}/restock", new { quantity })).ReadValidationProblemAsync();
+
+        Assert.Contains(problem.Errors.Keys, k => k.Equals("Quantity", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(3, (await (await _client.Get($"/api/products/{product.Id}")).ReadAsync<ProductResponse>()).Stock);
+    }
+
+    [Fact]
+    public async Task Restock_MissingQuantity_Returns400()
+    {
+        var product = await _client.CreateProductAsync();
+
+        await (await _client.Post($"/api/products/{product.Id}/restock", new { })).ReadValidationProblemAsync();
+    }
+
+    [Fact]
+    public async Task Restock_Concurrent_DoesNotLoseUpdates()
+    {
+        var product = await _client.CreateProductAsync(stock: 0);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 20)
+            .Select(_ => _client.Post($"/api/products/{product.Id}/restock", new { quantity = 7 })));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(140, (await (await _client.Get($"/api/products/{product.Id}")).ReadAsync<ProductResponse>()).Stock);
+    }
+
+    [Fact]
     public async Task Create_DuplicateSku_Returns409()
     {
         var sku = Api.UniqueSku();
