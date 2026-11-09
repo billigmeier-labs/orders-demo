@@ -8,20 +8,31 @@ locals {
   github_oidc_host         = "token.actions.githubusercontent.com"
   github_oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
   # GitHub issues this org's OIDC tokens with the immutable subject format (owner and repo IDs),
-  # e.g. repo:billigmeier-labs@354132701/orders-demo@1450435209:ref:refs/heads/main.
+  # e.g. repo:billigmeier-labs@354132701/orders-demo@1450435209:ref:refs/heads/main. A job that names
+  # a GitHub environment gets repo:<owner@id>/<repo@id>:environment:<name> instead of the ref.
   repo_sub = "repo:${var.github_repo_immutable}"
+  env_sub  = "${local.repo_sub}:environment"
 }
 
+# Roles that can change what runs (push release images, update services) trust only GitHub
+# environments, never a branch: any workflow on main gets ref:refs/heads/main, including the
+# issue-triggered agent and triage workflows where an AI runs shell commands. Each environment's
+# deployment branch policy (GitHub side) decides which refs may use it:
+#   staging, production, preview-reaper: main only
+#   release: main and gh-readonly-queue/main/* (the merge queue builds the release images)
 data "aws_iam_policy_document" "trust" {
   for_each = {
+    # deploy.yml / deploy-service.yml: staging and production (the console deploys as production).
     deploy = [
-      "${local.repo_sub}:ref:refs/heads/main",
-      "${local.repo_sub}:ref:refs/heads/gh-readonly-queue/main/*",
+      "${local.env_sub}:staging",
+      "${local.env_sub}:production",
     ]
-    # pull_request: per-PR previews. main: the nightly / manual preview reaper.
+    # ci.yml release image job (merge queue, push to main) and deploy.yml's Prepare job.
+    release = ["${local.env_sub}:release"]
+    # pull_request: per-PR previews. preview-reaper: the nightly / manual reaper on main.
     preview = [
       "${local.repo_sub}:pull_request",
-      "${local.repo_sub}:ref:refs/heads/main",
+      "${local.env_sub}:preview-reaper",
     ]
     readonly = ["${local.repo_sub}:*"]
   }
@@ -49,20 +60,21 @@ data "aws_iam_policy_document" "trust" {
 }
 
 locals {
-  ecr_repo_arns = [for r in aws_ecr_repository.this : r.arn]
-  cluster_arn   = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:cluster/${local.cluster_name}"
-  service_arns  = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:service/${local.cluster_name}"
-  ssm_arn       = "arn:${local.partition}:ssm:${var.region}:${local.account_id}:parameter/orders-demo/*"
-  log_group_arn = "arn:${local.partition}:logs:${var.region}:${local.account_id}:log-group:/ecs/orders-demo/*"
-  elb_prefix    = "arn:${local.partition}:elasticloadbalancing:${var.region}:${local.account_id}"
-  role_prefix   = "arn:${local.partition}:iam::${local.account_id}:role/${local.ecs_role_prefix}"
+  ecr_repo_arns   = [for r in aws_ecr_repository.this : r.arn]
+  ecr_preview_arn = aws_ecr_repository.preview.arn
+  cluster_arn     = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:cluster/${local.cluster_name}"
+  service_arns    = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:service/${local.cluster_name}"
+  ssm_arn         = "arn:${local.partition}:ssm:${var.region}:${local.account_id}:parameter/orders-demo/*"
+  log_group_arn   = "arn:${local.partition}:logs:${var.region}:${local.account_id}:log-group:/ecs/orders-demo/*"
+  elb_prefix      = "arn:${local.partition}:elasticloadbalancing:${var.region}:${local.account_id}"
+  role_prefix     = "arn:${local.partition}:iam::${local.account_id}:role/${local.ecs_role_prefix}"
 }
 
 # ---------------------------------------------------------------- deploy ----
 
 resource "aws_iam_role" "deploy" {
   name                 = "orders-demo-deploy"
-  description          = "GitHub Actions on main / merge queue: push images, deploy ECS"
+  description          = "GitHub Actions environments staging/production: deploy ECS services"
   assume_role_policy   = data.aws_iam_policy_document.trust["deploy"].json
   max_session_duration = 3600
 }
@@ -74,19 +86,16 @@ data "aws_iam_policy_document" "deploy" {
     resources = ["*"]
   }
 
+  # Read only: release images are pushed by the release role, deploys only point at them.
   statement {
-    sid = "EcrPushPull"
+    sid = "EcrRead"
     actions = [
       "ecr:BatchCheckLayerAvailability",
       "ecr:BatchGetImage",
-      "ecr:CompleteLayerUpload",
       "ecr:DescribeImages",
       "ecr:DescribeRepositories",
       "ecr:GetDownloadUrlForLayer",
-      "ecr:InitiateLayerUpload",
       "ecr:ListImages",
-      "ecr:PutImage",
-      "ecr:UploadLayerPart",
     ]
     resources = local.ecr_repo_arns
   }
@@ -197,11 +206,65 @@ resource "aws_iam_role_policy" "deploy" {
   policy = data.aws_iam_policy_document.deploy.json
 }
 
+# --------------------------------------------------------------- release ----
+
+resource "aws_iam_role" "release" {
+  name                 = "orders-demo-release"
+  description          = "GitHub Actions environment release: push release images, read deploy preflight"
+  assume_role_policy   = data.aws_iam_policy_document.trust["release"].json
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "release" {
+  statement {
+    sid       = "EcrLogin"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  # Release repositories are IMMUTABLE (orders-loadgen except :latest), so a pushed SHA tag stays put.
+  statement {
+    sid = "EcrPushRelease"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:CompleteLayerUpload",
+      "ecr:DescribeImages",
+      "ecr:DescribeRepositories",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:InitiateLayerUpload",
+      "ecr:ListImages",
+      "ecr:PutImage",
+      "ecr:UploadLayerPart",
+    ]
+    resources = local.ecr_repo_arns
+  }
+
+  # deploy.yml Prepare: is the environment up, which console version is running.
+  statement {
+    sid       = "ReadDeployConfig"
+    actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+    resources = [local.ssm_arn]
+  }
+
+  statement {
+    sid       = "EcsRead"
+    actions   = ["ecs:DescribeServices", "ecs:DescribeTaskDefinition"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "release" {
+  name   = "release"
+  role   = aws_iam_role.release.id
+  policy = data.aws_iam_policy_document.release.json
+}
+
 # --------------------------------------------------------------- preview ----
 
 resource "aws_iam_role" "preview" {
   name                 = "orders-demo-preview"
-  description          = "GitHub Actions on pull_request: pr-* images and pr-* ECS services"
+  description          = "GitHub Actions on pull_request (and env preview-reaper): orders-api-preview images, pr-* ECS services"
   assume_role_policy   = data.aws_iam_policy_document.trust["preview"].json
   max_session_duration = 3600
 }
@@ -213,10 +276,9 @@ data "aws_iam_policy_document" "preview" {
     resources = ["*"]
   }
 
-  # ECR has no IAM condition key for image tags, so "only pr-* tags" cannot be
-  # enforced here; the workflow tags pr-<N> and the lifecycle policy expires them.
+  # Only the preview repository: a PR can never overwrite a release image.
   statement {
-    sid = "EcrPush"
+    sid = "EcrPushPreview"
     actions = [
       "ecr:BatchCheckLayerAvailability",
       "ecr:BatchGetImage",
@@ -227,7 +289,7 @@ data "aws_iam_policy_document" "preview" {
       "ecr:PutImage",
       "ecr:UploadLayerPart",
     ]
-    resources = local.ecr_repo_arns
+    resources = [local.ecr_preview_arn]
   }
 
   statement {

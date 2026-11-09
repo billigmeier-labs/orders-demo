@@ -22,6 +22,8 @@ jobs:
   find:
     name: Find stale previews
     runs-on: ubuntu-latest
+    # orders-demo-preview trusts pull_request and this environment, not every workflow on main.
+    environment: preview-reaper
     permissions:
       id-token: write
       pull-requests: read
@@ -83,3 +85,4 @@ jobs:
       pull-requests: write
     with:
       pr: ${{ matrix.pr }}
+      environment: preview-reaper

@@ -64,11 +64,12 @@ Env `TARGET_BASE_URL` (the task definition points it at production, `https://dem
 - Required status checks on `main`: **`ci-ok`** and **`ai-review`**, both pinned to GitHub Actions (app 15368) so no other app can report them. `ci.yml` runs on `pull_request`, `merge_group` and `push` to `main`.
 - Labels: `demo`, `agent`, `needs-human`, `incident`, `risk:low`, `risk:medium`, `risk:high`, `difficulty:low`, `difficulty:medium`, `difficulty:high`, `mutation`, `bypass:build`.
 - Secrets (repo): `ANTHROPIC_API_KEY`, `AUTOMATION_APP_ID` + `AUTOMATION_APP_KEY` (the `orders-automation` GitHub App: workflows mint a short-lived token with `actions/create-github-app-token`, so labels, comments, issues and auto-merge show as `orders-automation[bot]`), `AUTOMATION_TOKEN` (fine-grained PAT, now only for the AWS alarm → `repository_dispatch` API destination and the console, which acts for the presenter), `CONSOLE_VERIFICATION_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. AWS access is OIDC, no keys.
+- GitHub environments (the AWS roles trust them, not branches): `staging` and `production` (deploy jobs, role `orders-demo-deploy`; main only), `release` (merge-queue release image job and deploy Prepare, role `orders-demo-release`; main and `gh-readonly-queue/main/*`), `preview-reaper` (nightly reaper, role `orders-demo-preview`; main only). PR previews assume `orders-demo-preview` with the `pull_request` subject.
 
 ## Images and hosts
 
-- ECR repositories `orders-api`, `orders-console`, `orders-loadgen`.
-- Release image tag: the commit SHA from the `merge_group` run (equal to the commit that lands on `main`). Preview tag: `pr-<N>`.
+- ECR repositories `orders-api`, `orders-console`, `orders-loadgen` (release images, tags immutable; `orders-loadgen:latest` is the one mutable tag), and `orders-api-preview` (PR images, mutable, expire after 7 days).
+- Release image tag: the commit SHA from the `merge_group` run (equal to the commit that lands on `main`). Preview tag: `orders-api-preview:pr-<N>`.
 - Hosts: `demo.joshb.app` (prod), `staging.demo.joshb.app`, `pr-<N>.demo.joshb.app`, `console.demo.joshb.app`.
 
 ## Console events

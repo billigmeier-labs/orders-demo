@@ -10,6 +10,10 @@ on:
         description: Pull request number
         type: number
         required: true
+      environment:
+        description: GitHub environment for the AWS role (preview-reaper from the reaper); empty on pull_request
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -22,6 +26,7 @@ jobs:
     name: Remove preview
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: ${{ inputs.environment }}
     permissions:
       id-token: write
       pull-requests: write

@@ -151,6 +151,9 @@ jobs:
     name: Release image
     if: github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04-arm
+    # The release environment (main and gh-readonly-queue/main/* only) is what lets this job assume
+    # orders-demo-release; other workflows on main cannot push release images.
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -160,7 +163,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-deploy
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-release
           aws-region: us-east-1
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -196,7 +199,8 @@ jobs:
           build orders-api src/Orders.Api/Dockerfile
           build orders-console src/Orders.Console/Dockerfile
           build orders-loadgen src/Orders.LoadGenerator/Dockerfile
-          # The load generator runs as a one-off task from a fixed task definition that uses :latest.
+          # The load generator runs as a one-off task from a fixed task definition that uses :latest
+          # (the one tag orders-loadgen leaves mutable).
           if aws ecr describe-images --repository-name orders-loadgen --image-ids imageTag="$SHA" >/dev/null 2>&1; then
             docker buildx imagetools create -t "$REGISTRY/orders-loadgen:latest" "$REGISTRY/orders-loadgen:$SHA"
           fi

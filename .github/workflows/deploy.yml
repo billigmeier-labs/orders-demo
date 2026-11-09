@@ -27,6 +27,9 @@ jobs:
     name: Prepare
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Read-only preflight with orders-demo-release (SSM, ECR, ECS describe); the deploy role is only
+    # for the staging and production environments.
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -51,7 +54,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-deploy
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-release
           aws-region: us-east-1
 
       - name: Is the environment up?
@@ -112,6 +115,7 @@ jobs:
       id-token: write
     with:
       label: Staging
+      environment: staging
       service: api-staging
       repository: orders-api
       sha: ${{ needs.prepare.outputs.sha }}
@@ -127,6 +131,7 @@ jobs:
       id-token: write
     with:
       label: Production
+      environment: production
       service: api-prod
       repository: orders-api
       sha: ${{ needs.prepare.outputs.sha }}
@@ -142,6 +147,7 @@ jobs:
       id-token: write
     with:
       label: Console
+      environment: production
       service: console
       repository: orders-console
       sha: ${{ needs.prepare.outputs.sha }}

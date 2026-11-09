@@ -8,7 +8,7 @@ Every resource is tagged `project=orders-demo`.
 
 | Layer | State key | Holds | Lifetime |
 | --- | --- | --- | --- |
-| `terraform/base` | `orders-demo/base.tfstate` | ACM cert for `demo.joshb.app` + `*.demo.joshb.app` (DNS-validated); ECR repos `orders-api`, `orders-console`, `orders-loadgen`; GitHub OIDC roles `orders-demo-deploy`, `orders-demo-preview`, `orders-demo-incident-readonly`; AppConfig app `orders-demo` (envs `prod`, `staging`, `preview`, profile `feature-flags`) | Kept between demos |
+| `terraform/base` | `orders-demo/base.tfstate` | ACM cert for `demo.joshb.app` + `*.demo.joshb.app` (DNS-validated); ECR repos `orders-api`, `orders-console`, `orders-loadgen` (immutable tags), `orders-api-preview`; GitHub OIDC roles `orders-demo-deploy`, `orders-demo-release`, `orders-demo-preview`, `orders-demo-incident-readonly`; AppConfig app `orders-demo` (envs `prod`, `staging`, `preview`, profile `feature-flags`) | Kept between demos |
 | `terraform/env` | `orders-demo/env.tfstate` | ECS cluster `orders-demo` and services `api-prod`, `api-staging`, `console`; one-off task definitions `orders-demo-migrate-prod`, `orders-demo-migrate-staging`, `orders-demo-loadgen`; ALB + Route 53 records; RDS `orders-prod`, `orders-nonprod`; alarms; EventBridge alarm → GitHub `repository_dispatch`; SSM parameters under `/orders-demo/` | Torn down after each demo |
 
 `env` reads `base` outputs through `terraform_remote_state`, so base must be applied first.

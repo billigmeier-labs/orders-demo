@@ -1,7 +1,7 @@
 name: Preview
 
 # Each open PR from this repo gets its own copy of the API at https://pr-<N>.demo.joshb.app:
-# image orders-api:pr-<N>, database pr_<N> on the non-prod instance, ECS service pr-<N>.
+# image orders-api-preview:pr-<N>, database pr_<N> on the non-prod instance, ECS service pr-<N>.
 # Closing the PR removes the service, listener rule, target group and task definitions
 # (the database stays). Forks, Dependabot and release-please PRs get no preview.
 on:
@@ -63,7 +63,7 @@ jobs:
         if: steps.env.outputs.up == 'true'
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push orders-api:pr-${{ env.PR }} (linux/arm64)
+      - name: Build and push orders-api-preview:pr-${{ env.PR }} (linux/arm64)
         id: image
         if: steps.env.outputs.up == 'true'
         env:
@@ -71,10 +71,10 @@ jobs:
         run: |
           docker buildx build --platform linux/arm64 -f src/Orders.Api/Dockerfile \
             --label "org.opencontainers.image.revision=$HEAD_SHA" \
-            -t "$REGISTRY/orders-api:$NAME" --push .
-          digest=$(aws ecr describe-images --repository-name orders-api --image-ids imageTag="$NAME" \
+            -t "$REGISTRY/orders-api-preview:$NAME" --push .
+          digest=$(aws ecr describe-images --repository-name orders-api-preview --image-ids imageTag="$NAME" \
             --query 'imageDetails[0].imageDigest' --output text)
-          echo "image=$REGISTRY/orders-api@$digest" | tee -a "$GITHUB_OUTPUT"
+          echo "image=$REGISTRY/orders-api-preview@$digest" | tee -a "$GITHUB_OUTPUT"
 
       - name: Read environment settings
         id: cfg
@@ -272,7 +272,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Environment | preview \`$NAME\` |"
             echo "| URL | https://$HOST |"
-            echo "| Image | \`orders-api:$NAME\` (\`${IMAGE##*@}\`) |"
+            echo "| Image | \`orders-api-preview:$NAME\` (\`${IMAGE##*@}\`) |"
             echo "| Commit | \`${HEAD_SHA::7}\` |"
             echo "| Database | \`pr_$PR\` |"
             echo "| Result | $STATUS |"

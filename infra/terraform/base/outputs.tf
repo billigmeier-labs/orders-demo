@@ -11,12 +11,16 @@ output "domain" {
 }
 
 output "ecr_repository_urls" {
-  value = { for k, r in aws_ecr_repository.this : k => r.repository_url }
+  value = merge(
+    { for k, r in aws_ecr_repository.this : k => r.repository_url },
+    { (aws_ecr_repository.preview.name) = aws_ecr_repository.preview.repository_url },
+  )
 }
 
 output "github_role_arns" {
   value = {
     deploy            = aws_iam_role.deploy.arn
+    release           = aws_iam_role.release.arn
     preview           = aws_iam_role.preview.arn
     incident_readonly = aws_iam_role.incident_readonly.arn
   }

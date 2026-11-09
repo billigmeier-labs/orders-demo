@@ -9,6 +9,10 @@ on:
         description: Name for messages and the summary (Staging, Production, Console)
         type: string
         required: true
+      environment:
+        description: GitHub environment (staging or production); its OIDC subject is what orders-demo-deploy trusts
+        type: string
+        required: true
       service:
         description: ECS service; its task definition family is orders-demo-<service>, its container <service>
         type: string
@@ -52,6 +56,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 55
+    environment: ${{ inputs.environment }}
     permissions:
       id-token: write
     outputs:
