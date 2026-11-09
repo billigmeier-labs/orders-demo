@@ -132,7 +132,7 @@ public sealed class FakeWorldTests
         var store = new EventStore();
         var options = new ConsoleOptions { Fakes = true, FakeStep = TimeSpan.FromSeconds(3) };
         var status = new StatusService(_world, _world, _world, _world, _world, _world, _world, store, new SourceHealth(), options, _time);
-        var actions = new ScenarioActions(_world, _world, _world, new ScoreboardService(_world, _world, store, _time), status);
+        var actions = new ScenarioActions(_world, _world, _world, new ScoreboardService(_world, _world, _time), status);
         var conditions = new ConditionEvaluator(_world);
         var catalog = new ScenarioCatalog(
             ScenarioCatalog.LoadDirectory(Path.Combine(AppContext.BaseDirectory, "Scenarios", "Definitions")),

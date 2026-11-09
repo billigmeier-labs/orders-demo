@@ -1,6 +1,4 @@
 using System.Globalization;
-using Orders.Console.Domain;
-using Orders.Console.Events;
 using Orders.Console.Integrations;
 
 namespace Orders.Console.Status;
@@ -10,7 +8,7 @@ public sealed record ScoreRow(string Id, string Name, string Value, string Hint)
 public sealed record Scoreboard(IReadOnlyList<ScoreRow> Rows, DateTimeOffset At);
 
 /// <summary>Delivery metrics for the scoreboard scenario.</summary>
-public sealed class ScoreboardService(IGitHubService github, ICostService cost, EventStore events, TimeProvider time)
+public sealed class ScoreboardService(IGitHubService github, ICostService cost, TimeProvider time)
 {
     public async Task<Scoreboard> GetAsync(CancellationToken ct)
     {
@@ -25,20 +23,15 @@ public sealed class ScoreboardService(IGitHubService github, ICostService cost, 
             // Cost is optional on the scoreboard.
         }
 
-        var since = time.GetUtcNow().AddDays(-30);
-        var rollbacks = Math.Max(
-            events.Count(EventKinds.DeployRolledBack, since),
-            stats.DeployRuns.Count(r => r.Conclusion is "failure"));
-
         var rows = new List<ScoreRow>
         {
             new("ci-p50", "CI duration, median", Format(Percentile(stats.CiDurations, 0.5)), $"{stats.CiDurations.Count} recent CI runs"),
             new("ci-p90", "CI duration, p90", Format(Percentile(stats.CiDurations, 0.9)), "9 in 10 runs finish faster"),
             new("pr-to-merge", "PR open to merge, median", Format(Percentile(stats.OpenToMerge, 0.5)), $"{stats.OpenToMerge.Count} merged PRs"),
-            new("agent-clean", "Agent PRs merged without changes",
-                stats.AgentPullsMerged == 0 ? "none yet" : $"{stats.AgentPullsMergedWithoutChanges} of {stats.AgentPullsMerged}",
-                "No review asked for changes"),
-            new("rollbacks", "Rollbacks, last 30 days", rollbacks.ToString(CultureInfo.InvariantCulture), "Deploys undone automatically"),
+            new("agent-clean", "Agent PRs merged without an AI-review block",
+                stats.AgentPullsMerged == 0 ? "none yet" : $"{stats.AgentPullsMergedWithoutBlock} of {stats.AgentPullsMerged}",
+                "Never labeled ai-review:blocked, and no review asked for changes"),
+            new("rollbacks", "Prod rollbacks, last 30 days", stats.ProdRollbacks.ToString(CultureInfo.InvariantCulture), "Production deploys ECS rolled back"),
             new("cost", "Cost, month to date", spend is null ? "unavailable" : Money(spend.MonthToDate), spend is null ? "" : $"{Money(spend.Today)} today"),
         };
         return new Scoreboard(rows, time.GetUtcNow());

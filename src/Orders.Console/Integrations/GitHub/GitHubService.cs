@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
@@ -12,6 +13,11 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
     : IGitHubService, IEventSource
 {
     private readonly string _repo = $"/repos/{options.GitHubRepository}";
+    private const string AiReviewBlockedLabel = "ai-review:blocked";
+    private const string ProdJobPrefix = "Production";
+    private const string ProdRollbackMessage = "Production rolled back to the previous version";
+
+    private readonly ConcurrentDictionary<(long Run, DateTimeOffset UpdatedAt), bool> _rollbacks = new();
     private (DateTimeOffset Until, DeliveryStats Stats)? _stats;
 
     public string Name => "github";
@@ -130,17 +136,68 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
         var clean = 0;
         foreach (var p in agentMerged)
         {
-            var reviews = await GetArrayAsync($"{_repo}/pulls/{p.GetProperty("number").GetInt32()}/reviews?per_page=100", ct);
-            if (!reviews.Any(r => r.GetProperty("state").GetString() == "CHANGES_REQUESTED"))
+            if (!await NeededChangesAsync(p, ct))
             {
                 clean++;
             }
         }
 
         var deploys = await WorkflowRunsAsync(options.DeployWorkflow, 30, ct);
-        var stats = new DeliveryStats(ci, openToMerge, agentMerged.Count, clean, deploys);
+        var rollbacks = 0;
+        foreach (var run in deploys.Where(r => r.Conclusion == "failure" && r.Id != 0 && r.StartedAt >= now.AddDays(-30)))
+        {
+            if (await ProdRolledBackAsync(run, ct))
+            {
+                rollbacks++;
+            }
+        }
+
+        var stats = new DeliveryStats(ci, openToMerge, agentMerged.Count, clean, deploys, rollbacks);
         _stats = (now + TimeSpan.FromMinutes(5), stats);
         return stats;
+    }
+
+    /// <summary>The AI review blocked the PR (it labels it <c>ai-review:blocked</c>, and the label stays after the fix),
+    /// or a person's review asked for changes.</summary>
+    private async Task<bool> NeededChangesAsync(JsonElement pull, CancellationToken ct)
+    {
+        if (pull.TryGetProperty("labels", out var labels) && labels.ValueKind == JsonValueKind.Array
+            && labels.EnumerateArray().Any(l => l.GetProperty("name").GetString() == AiReviewBlockedLabel))
+        {
+            return true;
+        }
+
+        var reviews = await GetArrayAsync($"{_repo}/pulls/{pull.GetProperty("number").GetInt32()}/reviews?per_page=100", ct);
+        return reviews.Any(r => r.GetProperty("state").GetString() == "CHANGES_REQUESTED");
+    }
+
+    /// <summary>A failed deploy run whose Production job reported that ECS rolled the service back
+    /// (deploy-service.yml's "::error::Production rolled back to the previous version" annotation).
+    /// Completed runs don't change until re-run, so the answer is cached per run attempt.</summary>
+    private async Task<bool> ProdRolledBackAsync(WorkflowRunSummary run, CancellationToken ct)
+    {
+        var key = (run.Id, run.UpdatedAt);
+        if (_rollbacks.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        var jobs = await GetAsync($"{_repo}/actions/runs/{run.Id.ToString(CultureInfo.InvariantCulture)}/jobs?per_page=100", ct);
+        var rolledBack = false;
+        foreach (var job in jobs.GetProperty("jobs").EnumerateArray().Where(j =>
+            (j.GetProperty("name").GetString() ?? "").StartsWith(ProdJobPrefix, StringComparison.Ordinal)
+            && j.GetProperty("conclusion").ValueKind == JsonValueKind.String && j.GetProperty("conclusion").GetString() == "failure"))
+        {
+            var annotations = await GetArrayAsync($"{_repo}/check-runs/{job.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture)}/annotations?per_page=50", ct);
+            if (annotations.Any(a => a.TryGetProperty("message", out var m) && (m.GetString() ?? "").Contains(ProdRollbackMessage, StringComparison.Ordinal)))
+            {
+                rolledBack = true;
+                break;
+            }
+        }
+
+        _rollbacks[key] = rolledBack;
+        return rolledBack;
     }
 
     public async Task<IReadOnlyList<ConsoleEvent>> PollAsync(DateTimeOffset since, CancellationToken ct)
@@ -264,7 +321,8 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             r.GetProperty("head_branch").GetString() ?? "",
             r.GetProperty("html_url").GetString() ?? "",
             r.TryGetProperty("run_started_at", out var started) && started.ValueKind == JsonValueKind.String ? started.GetDateTimeOffset() : Date(r, "created_at"),
-            Date(r, "updated_at"))).ToList();
+            Date(r, "updated_at"),
+            r.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number ? id.GetInt64() : 0)).ToList();
     }
 
     private static IssueSummary ToIssue(JsonElement i) => new(

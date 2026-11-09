@@ -143,7 +143,9 @@ public sealed class FakeWorld :
             merged.Select(p => p.MergedAt!.Value - p.CreatedAt).ToList(),
             agentMerged.Count,
             agentMerged.Count(p => !p.ChangesRequested),
-            _runs.Where(r => r.Workflow == "deploy").ToList());
+            _runs.Where(r => r.Workflow == "deploy").ToList(),
+            // Every failed fake deploy is a prod rollback (the bad-deploy scenario).
+            _runs.Count(r => r.Workflow == "deploy" && r.Conclusion == "failure" && r.StartedAt >= Now.AddDays(-30)));
     });
 
     // ---- AWS-side fakes ----

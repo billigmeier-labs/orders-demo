@@ -92,7 +92,7 @@ public sealed record PullRequestSummary(int Number, string Title, string Author,
 
 public sealed record IssueWithPulls(IssueSummary Issue, IReadOnlyList<PullRequestSummary> Pulls);
 
-public sealed record WorkflowRunSummary(string Workflow, string Status, string? Conclusion, string Title, string Branch, string Url, DateTimeOffset StartedAt, DateTimeOffset UpdatedAt)
+public sealed record WorkflowRunSummary(string Workflow, string Status, string? Conclusion, string Title, string Branch, string Url, DateTimeOffset StartedAt, DateTimeOffset UpdatedAt, long Id = 0)
 {
     public TimeSpan? Duration => Status == "completed" ? UpdatedAt - StartedAt : null;
 }
@@ -109,8 +109,9 @@ public sealed record DeliveryStats(
     IReadOnlyList<TimeSpan> CiDurations,
     IReadOnlyList<TimeSpan> OpenToMerge,
     int AgentPullsMerged,
-    int AgentPullsMergedWithoutChanges,
-    IReadOnlyList<WorkflowRunSummary> DeployRuns);
+    int AgentPullsMergedWithoutBlock,
+    IReadOnlyList<WorkflowRunSummary> DeployRuns,
+    int ProdRollbacks);
 
 public sealed record EnvironmentHealth(string Environment, string Url, bool Ready, string Detail, string? Version, string? Commit, TimeSpan? Latency);
 

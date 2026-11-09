@@ -7,7 +7,7 @@
     {
       "id": "show",
       "title": "The numbers",
-      "narration": "CI duration, time from PR to merge, agent PRs merged without changes, rollbacks, and what the demo costs.",
+      "narration": "CI duration, time from PR to merge, agent PRs merged without an AI-review block, prod rollbacks, and what the demo costs.",
       "explain": "scoreboard",
       "action": { "label": "Show the scoreboard", "kind": "scoreboard.show" }
     }
