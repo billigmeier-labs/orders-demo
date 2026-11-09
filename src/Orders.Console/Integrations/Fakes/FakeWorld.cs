@@ -162,18 +162,45 @@ public sealed class FakeWorld :
         var now = Now;
         var lines = new List<LogLine>
         {
-            new(now.AddMinutes(-42), "{\"level\":\"Warning\",\"message\":\"Slow query on /api/search (812 ms)\",\"traceId\":\"1-6a2f0c1e\"}", "orders-api/prod/7d1c"),
+            new(now.AddMinutes(-42), LogJson(now.AddMinutes(-42), "Warning", "Microsoft.EntityFrameworkCore.Database.Command", "Slow query on /api/search (812 ms)", null), "orders-api/prod/7d1c"),
         };
         if (_alarms.TryGetValue(ErrorAlarm, out var alarm) && alarm.State == "ALARM")
         {
             for (var i = 4; i >= 0; i--)
             {
-                lines.Add(new LogLine(now.AddSeconds(-i * 7), "{\"level\":\"Error\",\"message\":\"GET /api/search failed: PostgresException 42601: syntax error in tsquery\",\"status\":500}", "orders-api/prod/" + (i % 2 == 0 ? "7d1c" : "93be")));
+                var at = now.AddSeconds(-i * 7);
+                lines.Add(new LogLine(at, LogJson(at, "Error", "Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", "An unhandled exception has occurred while executing the request.", SearchException), "orders-api/prod/" + (i % 2 == 0 ? "7d1c" : "93be")));
             }
         }
 
         return lines.OrderByDescending(l => l.At).ToList();
     });
+
+    private const string SearchException =
+        "Npgsql.PostgresException (0x80004005): 42601: syntax error in tsquery: \"alan turing:*\"\n" +
+        "   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)\n" +
+        "   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)\n" +
+        "   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)\n" +
+        "   at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)\n" +
+        "   at Orders.Api.Features.Search.SearchEndpoints.SearchAsync(String q, OrdersDbContext db, CancellationToken ct)\n" +
+        "  Exception data:\n    Severity: ERROR\n    SqlState: 42601\n    MessageText: syntax error in tsquery: \"alan turing:*\"";
+
+    /// <summary>A log line in the API's JSON format (Orders.Api Infrastructure/Logging.cs).</summary>
+    private string LogJson(DateTimeOffset at, string level, string category, string message, string? exception) =>
+        System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["Timestamp"] = at.ToString("O", CultureInfo.InvariantCulture),
+            ["LogLevel"] = level,
+            ["Category"] = category,
+            ["EventId"] = exception is null ? 0 : 1,
+            ["Message"] = message,
+            ["Exception"] = exception,
+            ["AppVersion"] = Version,
+            ["AppCommit"] = _commit,
+            ["AppEnvironment"] = "prod",
+            ["TraceId"] = "4bf92f3577b34da6a3ce929d0e0e4736",
+            ["Scopes"] = new object[] { new Dictionary<string, string> { ["RequestId"] = "0HN8V1K2Q3R4S:00000001", ["RequestPath"] = "/api/search" } },
+        });
 
     public Task<IReadOnlyList<DeployRecord>> GetRecentDeploysAsync(CancellationToken ct) =>
         Locked<IReadOnlyList<DeployRecord>>(() => _deploys.OrderByDescending(d => d.At).Take(8).ToList());

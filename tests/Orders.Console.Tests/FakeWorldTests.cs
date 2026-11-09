@@ -81,7 +81,9 @@ public sealed class FakeWorldTests
         await _world.OpenPullRequestAsync(new NewPullRequest(FakeWorld.CannedBugBranch, "main", "perf: cache prices", ""), Ct);
         await AdvanceAsync(4);
         Assert.Contains(await _world.GetAlarmsAsync(Ct), a => a.State == "ALARM");
-        Assert.NotEmpty(await _world.GetRecentErrorsAsync(Ct));
+        var errors = await _world.GetRecentErrorsAsync(Ct);
+        Assert.Contains(errors, l => LogSummary.Summarize(l.Message) == "/api/search — PostgresException 42601: syntax error in tsquery: \"alan turing:*\"");
+        Assert.Contains(errors, l => l.Message.Contains("   at Npgsql.", StringComparison.Ordinal));
         await AdvanceAsync(4);
 
         var kinds = NewEvents().Select(e => e.Kind).ToList();

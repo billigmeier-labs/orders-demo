@@ -176,9 +176,12 @@
         {
             @if (lines.Count == 0) { <p class="muted">No errors in the last 30 minutes.</p> }
             <ul class="log">
-                @foreach (var l in lines)
+                @foreach (var l in lines.Take(8))
                 {
-                    <li><span class="muted">@Fmt.Time(l.At)</span> <span class="mono">@l.Message</span></li>
+                    <li data-testid="error-line">
+                        <div class="log-summary"><span class="muted">@Fmt.Time(l.At)</span> <span class="mono" data-testid="error-summary">@LogSummary.Summarize(l.Message)</span></div>
+                        <details class="log-raw" data-keep-open="error-@l.At.ToUnixTimeMilliseconds()-@l.Stream"><summary class="muted small">Full log line</summary><pre class="mono small">@l.Message</pre></details>
+                    </li>
                 }
             </ul>
         }

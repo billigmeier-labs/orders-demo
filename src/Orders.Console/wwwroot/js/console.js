@@ -19,7 +19,10 @@
       const res = await fetch(el.dataset.pollUrl, { headers: fetchHeaders, cache: 'no-store' });
       if (res.status === 401) { location.reload(); return; }
       if (!res.ok) { el.dataset.pollError = String(res.status); return; }
+      // Keep expanded <details data-keep-open="key"> open across the refresh.
+      const open = new Set(Array.from(el.querySelectorAll('details[data-keep-open][open]')).map(d => d.dataset.keepOpen));
       el.innerHTML = await res.text();
+      el.querySelectorAll('details[data-keep-open]').forEach(d => { if (open.has(d.dataset.keepOpen)) d.open = true; });
       delete el.dataset.pollError;
       el.dataset.pollAt = new Date().toISOString();
       localTimes(el);
