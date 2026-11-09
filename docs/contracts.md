@@ -46,6 +46,9 @@ Seed data (development, staging, preview, and prod since this is a demo): 20 cus
 | `SEED_DATA` | `true` to seed on startup when empty |
 | `APPCONFIG_APPLICATION`, `APPCONFIG_ENVIRONMENT`, `APPCONFIG_PROFILE` | Feature flags from AppConfig (polled every 15 s); unset means flags come from `FeatureFlags__<name>` (or `FeatureFlags__<name>__enabled` plus `FeatureFlags__<name>__percent`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Turns on OpenTelemetry traces and metrics over OTLP; unset means off |
+| `OTEL_SERVICE_NAME` | Service name on traces (default `orders-api`); ECS sets `orders-api-prod`, `orders-api-staging`, `orders-api-preview` |
+
+In ECS every API task (prod, staging, previews) runs an `otel-collector` sidecar (ADOT collector, non-essential) next to the API container; the API sends OTLP to `http://localhost:4317` and the collector forwards traces to X-Ray. Metrics stay on the ALB.
 
 Feature flags: `searchV2` (ranked full-text search), `faultSlowSearch` (adds 2 s to `percent`% of searches), `faultFailOrders` (`percent`% of order creates return 500). A fault that fires logs a `FaultInjected` warning with the flag and percent.
 

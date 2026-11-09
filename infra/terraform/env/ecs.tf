@@ -47,6 +47,13 @@ locals {
     }
   }
 
+  # API tasks run an ADOT collector sidecar that takes OTLP traces on localhost:4317 and
+  # sends them to X-Ray (the task role has AWSXRayDaemonWriteAccess, iam.tf). Traces only:
+  # the bundled ecs-xray.yaml has no metrics pipeline, so the API's OTLP metrics are refused
+  # and dropped; the alarms use ALB metrics.
+  otel_collector_image = "public.ecr.aws/aws-observability/aws-otel-collector:v0.51.0"
+  otel_services        = toset([for k, s in local.services : k if s.repo == "orders-api"])
+
   service_tag = { for k, s in local.services : k => (s.tag != "" ? s.tag : local.bootstrap_tag) }
 
   service_env = {
@@ -64,6 +71,10 @@ locals {
         [{ name = "SEED_DATA", value = "true" }],
       ),
       k == "console" ? local.console_env : [],
+      contains(local.otel_services, k) ? [
+        { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://localhost:4317" },
+        { name = "OTEL_SERVICE_NAME", value = "orders-${k}" },
+      ] : [],
     )
   }
 
@@ -110,7 +121,7 @@ resource "aws_ecs_task_definition" "svc" {
     cpu_architecture        = "ARM64"
   }
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name         = each.key
       image        = "${local.ecr[each.value.repo]}:${local.service_tag[each.key]}"
@@ -122,7 +133,20 @@ resource "aws_ecs_task_definition" "svc" {
       ]
       logConfiguration = local.log_config[each.key]
     }
-  ])
+    ], contains(local.otel_services, each.key) ? [
+    {
+      # Non-essential: if the collector dies the API keeps serving, it just stops exporting.
+      name              = "otel-collector"
+      image             = local.otel_collector_image
+      essential         = false
+      cpu               = 32
+      memory            = 128
+      memoryReservation = 64
+      command           = ["--config=/etc/ecs/ecs-xray.yaml"]
+      environment       = [{ name = "AWS_REGION", value = var.region }]
+      logConfiguration  = local.log_config[each.key]
+    }
+  ] : []))
 }
 
 resource "aws_ecs_service" "svc" {
