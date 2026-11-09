@@ -28,7 +28,7 @@ If `dotnet` isn't installed, the `just` recipes run it in the official .NET SDK 
 3. Keep PRs small: one issue, ideally under 400 changed lines.
 4. Every behaviour change has tests. New endpoints get an integration test.
 5. Run `just ci` and fix everything before opening the PR.
-6. Database changes are EF Core migrations that work with both the old and new code (add first, remove later).
+6. Database changes are EF Core migrations that work with both the old and new code (add first, remove later). You may create a new migration for your change (`just migration <Name>`); CODEOWNERS makes a person review it before it can merge.
 
 ## What you must not do
 

@@ -8,14 +8,14 @@
       "id": "issue",
       "stage": "issue",
       "title": "Ask for a database change",
-      "narration": "Schema changes are risky: they touch production data and must work with the old and new code at the same time.",
+      "narration": "Schema changes are risky: they touch production data and must work with the old and new code at the same time. This one adds a column.",
       "action": {
         "label": "Create the migration issue",
         "kind": "github.createIssue",
         "args": {
-          "title": "Add an index on orders.customer_id",
+          "title": "Add optional delivery notes to orders",
           "labels": "demo",
-          "body": "Listing a customer's orders is slow. Add an EF Core migration that creates an index on `orders.customer_id`.\n\n_Opened by the demo console risky-change scenario._"
+          "body": "Customers want to leave delivery instructions (\"leave it at the side door\").\n\n## Acceptance criteria\n\n- [ ] Orders get an optional `deliveryNotes` field (max 500 characters), accepted by `POST /api/orders` and returned when an order is read\n- [ ] Over 500 characters returns 400 with a problem details body\n- [ ] A new additive EF Core migration adds a nullable `DeliveryNotes` column (create it in this PR; it must work with the old and new code)\n- [ ] Covered by unit and integration tests\n\n_Opened by the demo console risky-change scenario._"
         }
       },
       "wait": [
