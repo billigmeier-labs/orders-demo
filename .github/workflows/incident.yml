@@ -87,6 +87,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.
+          allowed_bots: "orders-automation,orders-automation[bot],claude,claude[bot]"
           prompt: |
             You are the incident investigator for this repository's production environment on AWS (read-only access).
             CloudWatch alarm `${{ env.ALARM }}` went into ALARM at ${{ env.AT }}. Reason from AWS: ${{ env.REASON }}

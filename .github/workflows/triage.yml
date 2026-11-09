@@ -55,6 +55,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.
+          allowed_bots: "orders-automation,orders-automation[bot],claude,claude[bot]"
           prompt: |
             You are the triager for this repository. Read AGENTS.md and docs/contracts.md, then read issue #${{ env.ISSUE }}
             with `gh issue view ${{ env.ISSUE }} --comments`. Look at the code it would touch.

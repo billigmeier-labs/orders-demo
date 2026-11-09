@@ -49,6 +49,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.
+          allowed_bots: "orders-automation,orders-automation[bot],claude,claude[bot]"
           prompt: |
             You are the coding agent for this repository. Read AGENTS.md and docs/contracts.md first and follow them exactly.
             Your task is issue #${{ env.ISSUE }}: read it and its comments with `gh issue view ${{ env.ISSUE }} --comments`.
@@ -103,6 +105,8 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.
+          allowed_bots: "orders-automation,orders-automation[bot],claude,claude[bot]"
           prompt: |
             You are the coding agent for this repository. Read AGENTS.md first.
             The AI review blocked PR #${{ env.PR }}. Read its findings with `gh pr view ${{ env.PR }} --comments`

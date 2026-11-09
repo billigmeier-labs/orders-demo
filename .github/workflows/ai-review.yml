@@ -75,7 +75,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Agent and Dependabot PRs are opened by bots; they're reviewed like everyone else's.
-          allowed_bots: "claude,claude[bot],dependabot,dependabot[bot]"
+          allowed_bots: "claude,claude[bot],dependabot,dependabot[bot],orders-automation,orders-automation[bot]"
           prompt: |
             You are the code reviewer for this repository. Read AGENTS.md. Review PR #${{ env.PR }}:
             `gh pr view ${{ env.PR }}` for the description and linked issue (`gh issue view <n>` for the issue),
