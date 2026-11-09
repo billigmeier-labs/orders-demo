@@ -55,4 +55,34 @@ public class ProductTests(ApiFixture fixture)
 
         await (await _client.Post("/api/products", new { sku, name = "Second", price = 1m, stock = 1 })).ReadProblemAsync(HttpStatusCode.Conflict);
     }
+
+    private async Task<ProductResponse> CreateWithStock(string sku, int stock) =>
+        await (await _client.Post("/api/products", new { sku, name = "Low Stock Item", price = 1m, stock })).ReadAsync<ProductResponse>(HttpStatusCode.Created);
+
+    private async Task<List<ProductResponse>> LowStockWithPrefix(string url, string prefix) =>
+        (await (await _client.Get(url)).ReadAsync<List<ProductResponse>>())
+            .Where(p => p.Sku.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+
+    [Fact]
+    public async Task LowStock_DefaultAndExplicitThreshold_FiltersAndOrders()
+    {
+        var prefix = Api.UniqueSku();
+        var two = await CreateWithStock($"{prefix}-B", 2);
+        var twoFirst = await CreateWithStock($"{prefix}-A", 2);
+        var four = await CreateWithStock($"{prefix}-C", 4);
+        var five = await CreateWithStock($"{prefix}-D", 5);
+
+        Assert.Equal([twoFirst, two, four], await LowStockWithPrefix("/api/products/low-stock", prefix));
+        Assert.Equal([twoFirst, two, four, five], await LowStockWithPrefix("/api/products/low-stock?threshold=6", prefix));
+    }
+
+    [Fact]
+    public async Task LowStock_ThresholdZero_ReturnsEmptyList() =>
+        Assert.Empty(await (await _client.Get("/api/products/low-stock?threshold=0")).ReadAsync<List<ProductResponse>>());
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("abc")]
+    public async Task LowStock_InvalidThreshold_Returns400Problem(string threshold) =>
+        await (await _client.Get($"/api/products/low-stock?threshold={threshold}")).ReadProblemAsync(HttpStatusCode.BadRequest);
 }
