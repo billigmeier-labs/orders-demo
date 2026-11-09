@@ -57,7 +57,7 @@
       "id": "override",
       "stage": "checks",
       "title": "A person overrides the review",
-      "narration": "To show what happens when a bug gets past every check, an admin overrides the AI review on purpose. Only admins can, and the override is on the PR for everyone to see.",
+      "narration": "To show what happens when a bug gets past every check, an admin overrides the AI review on purpose. Only a repository admin's override counts, and it's on the PR for everyone to see.",
       "explain": "ai-review",
       "action": {
         "label": "Override the AI review",
