@@ -20,7 +20,13 @@ jobs:
     steps:
       - name: Re-run if the failure was a timeout
         run: |
-          if gh run view "$RUN" -R "$GITHUB_REPOSITORY" --log-failed | grep -qE 'Unexpected HTTP response: 50[234]|HTTP (error )?50[234]|returned error: 50[234]|CannotPullContainerError|i/o timeout'; then
+          # A run that failed before any job started (GitHub couldn't start the workflow) is also worth a retry.
+          jobs=$(gh run view "$RUN" -R "$GITHUB_REPOSITORY" --json jobs --jq '.jobs | length')
+          if [ "$jobs" = 0 ]; then
+            echo "Run $RUN failed before starting any job; re-running it."
+            sleep 30
+            gh run rerun "$RUN" -R "$GITHUB_REPOSITORY"
+          elif gh run view "$RUN" -R "$GITHUB_REPOSITORY" --log-failed | grep -qE 'Unexpected HTTP response: 50[234]|HTTP (error )?50[234]|returned error: 50[234]|CannotPullContainerError|i/o timeout'; then
             echo "Transient download failure; re-running failed jobs of run $RUN."
             sleep 30
             gh run rerun "$RUN" -R "$GITHUB_REPOSITORY" --failed
