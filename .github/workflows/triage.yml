@@ -51,6 +51,16 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.gate.outputs.allowed == 'true'
 
+      # Only the issue itself (its author passed the gate above); comments can come from anyone.
+      - name: The issue to score
+        if: steps.gate.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo ".triage-issue.md" >> .git/info/exclude
+          gh issue view "$ISSUE" -R "$GITHUB_REPOSITORY" --json title,body,author \
+            --jq '"# #\(env.ISSUE): \(.title)\n\n_Opened by \(.author.login)_\n\n\(.body)"' > .triage-issue.md
+
       - name: Score the issue
         id: score
         if: steps.gate.outputs.allowed == 'true'
@@ -61,7 +71,7 @@ jobs:
           allowed_bots: "orders-automation,orders-automation[bot],claude,claude[bot]"
           prompt: |
             You are the triager for this repository. Read AGENTS.md and docs/contracts.md, then read issue #${{ env.ISSUE }}
-            with `gh issue view ${{ env.ISSUE }} --comments`. Look at the code it would touch.
+            from the file `.triage-issue.md` (don't fetch it yourself). Look at the code it would touch.
 
             Score it:
             - risk: "low" if it only touches application code and tests in normal ways — this includes ADDING a new
@@ -77,7 +87,7 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 15
-            --allowedTools "Read,Glob,Grep,Bash(gh issue view:*)"
+            --allowedTools "Read,Glob,Grep"
             --json-schema '{"type":"object","required":["risk","difficulty","reasons"],"properties":{"risk":{"enum":["low","medium","high"]},"difficulty":{"enum":["low","medium","high"]},"reasons":{"type":"string"},"acceptance_criteria":{"type":"string"}}}'
 
       - name: Label, explain, and route

@@ -55,7 +55,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          since=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA" --jq .commit.committer.date)
+          # When GitHub first saw this commit (its first check suite), not the commit's own date, which the author sets.
+          since=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-suites" --jq '[.check_suites[].created_at] | min')
           for who in $(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
               --jq ".[] | select(.created_at > \"$since\" and (.body | startswith(\"/override-ai-review\"))) | .user.login" | sort -u); do
             if [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$who/permission" --jq .permission 2>/dev/null)" = admin ]; then
