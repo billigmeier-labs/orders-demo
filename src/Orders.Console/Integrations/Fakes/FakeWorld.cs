@@ -363,7 +363,7 @@ public sealed class FakeWorld :
     {
         var sha = Sha(pull.Number);
         _deploys.Add(new DeployRecord("staging", $"1.4.{_patch + 1}", "succeeded", Now, null, sha));
-        Emit(EventKinds.DeployStarted, "prod", $"{sha}: {pull.Title}", RunUrl(++_runId));
+        Emit(EventKinds.DeployStarted, "prod", $"{sha}: {pull.Title} (#{pull.Number})", RunUrl(++_runId));
         if (pull.Bad)
         {
             After(1, () => FireAlarm(ErrorAlarm, "5xx rate 22% over 1 minute (threshold 2%)"));
@@ -383,7 +383,7 @@ public sealed class FakeWorld :
             _commit = sha;
             AddRun("deploy", "success", pull.Title, "main", TimeSpan.FromSeconds(486));
             _deploys.Add(new DeployRecord("prod", Version, "succeeded", Now, null, sha));
-            Emit(EventKinds.DeploySucceeded, "prod", $"{sha}: {Version} is live", RunUrl(_runId));
+            Emit(EventKinds.DeploySucceeded, "prod", $"{sha}: {pull.Title} (#{pull.Number}) is live as {Version}", RunUrl(_runId));
             if (pull.FixesIncident)
             {
                 _faultFixed = true;

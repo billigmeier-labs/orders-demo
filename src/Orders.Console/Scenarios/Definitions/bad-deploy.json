@@ -101,7 +101,10 @@
         {
           "kind": "deploy.started",
           "subject": "prod",
-          "description": "A deploy to production starts"
+          "description": "A deploy to production starts",
+          "detailContains": [
+            "#{pr}"
+          ]
         }
       ],
       "timeoutSeconds": 1200

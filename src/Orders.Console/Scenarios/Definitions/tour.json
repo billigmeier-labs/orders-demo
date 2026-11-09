@@ -78,7 +78,7 @@
       "title": "Merging is deploying",
       "narration": "The image CI already built goes to staging, passes smoke tests, then rolls out to production. If the new version is unhealthy, AWS rolls it back on its own.",
       "wait": [
-        { "kind": "deploy.succeeded", "subject": "prod", "description": "The new version is live in production" }
+        { "kind": "deploy.succeeded", "subject": "prod", "detailContains": ["#{pr}"], "description": "The new version is live in production" }
       ],
       "failOn": [
         { "kind": "deploy.rolledback", "subject": "prod", "description": "Production rolled the release back" }

@@ -104,7 +104,10 @@
         {
           "kind": "deploy.succeeded",
           "subject": "prod",
-          "description": "The fix is live in production"
+          "description": "The fix is live in production",
+          "detailContains": [
+            "#{pr}"
+          ]
         }
       ],
       "failOn": [
