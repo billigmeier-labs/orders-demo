@@ -47,6 +47,47 @@ public sealed class ScenarioEngineTests
     }
 
     [Fact]
+    public async Task The_tour_keeps_waiting_when_the_ai_review_blocks_once_and_fails_only_on_needs_human()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "Scenarios", "Definitions");
+        var tour = ScenarioCatalog.LoadDirectory(dir).Single(d => d.Id == "tour");
+        var h = new EngineHarness(tour);
+        h.Actions.Handlers["github.createIssue"] = _ => new ActionOutcome(new Dictionary<string, string> { ["issue"] = "42" }, []);
+        await h.Engine.RunActionAsync("tour", "issue", Ct);
+        h.Emit(EventKinds.IssueOpened, "issue#42");
+        h.Emit(EventKinds.IssueLabeled, "issue#42", "agent");
+        h.Emit(EventKinds.PrOpened, "pr#57", "claude[bot]: feat: low stock (refs #42)");
+        await h.TickAsync();
+        Assert.Equal(StepStates.Waiting, h.State("checks"));
+
+        // First review blocks; the agent fixes it and the second review passes.
+        h.Emit(EventKinds.CheckCompleted, "pr#57", "ai-review: failure");
+        await h.TickAsync();
+        Assert.Equal(StepStates.Waiting, h.State("checks"));
+        h.Emit(EventKinds.CheckCompleted, "pr#57", "ci-ok: success");
+        h.Emit(EventKinds.CheckCompleted, "pr#57", "ai-review: success");
+        await h.TickAsync();
+        Assert.Equal(StepStates.Done, h.State("checks"));
+    }
+
+    [Fact]
+    public async Task The_tour_fails_when_the_agent_pr_is_handed_to_a_person()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "Scenarios", "Definitions");
+        var tour = ScenarioCatalog.LoadDirectory(dir).Single(d => d.Id == "tour");
+        var h = new EngineHarness(tour);
+        h.Actions.Handlers["github.createIssue"] = _ => new ActionOutcome(new Dictionary<string, string> { ["issue"] = "42" }, []);
+        await h.Engine.RunActionAsync("tour", "issue", Ct);
+        h.Emit(EventKinds.IssueOpened, "issue#42");
+        h.Emit(EventKinds.IssueLabeled, "issue#42", "agent");
+        h.Emit(EventKinds.PrOpened, "pr#57", "claude[bot]: feat: low stock (refs #42)");
+        h.Emit(EventKinds.CheckCompleted, "pr#57", "ai-review: failure");
+        h.Emit(EventKinds.IssueLabeled, "pr#57", "needs-human");
+        await h.TickAsync();
+        Assert.Equal(StepStates.Failed, h.State("checks"));
+    }
+
+    [Fact]
     public async Task Ignores_events_for_a_different_issue_or_pr()
     {
         var h = new EngineHarness(Defs.Flow());

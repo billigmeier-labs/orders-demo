@@ -51,14 +51,14 @@
       "id": "checks",
       "stage": "checks",
       "title": "Every check runs on every PR, in parallel",
-      "narration": "Build, tests, security scans and an AI review all run at once. A preview copy of the app is live for this PR alone. Nothing merges unless everything is green.",
+      "narration": "Build, tests, security scans and an AI review all run at once. A preview copy of the app is live for this PR alone. If the AI review finds a problem, the agent fixes it and the checks run again. Nothing merges unless everything is green.",
       "wait": [
         { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: success"], "description": "Required check ci-ok passes" },
         { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ai-review: success"], "description": "Required check ai-review passes" }
       ],
       "failOn": [
         { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: failure"], "description": "ci-ok failed" },
-        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ai-review: failure"], "description": "AI review blocked the PR" }
+        { "kind": "issue.labeled", "subject": "pr#{pr}", "detailContains": ["needs-human"], "description": "The AI review blocked the PR twice, so it waits for a person" }
       ],
       "timeoutSeconds": 1800
     },

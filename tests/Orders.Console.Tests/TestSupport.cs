@@ -13,7 +13,8 @@ public sealed class RecordingActions : IScenarioActions
 
     public Dictionary<string, Func<IReadOnlyDictionary<string, string>, ActionOutcome>> Handlers { get; } = new();
 
-    public IReadOnlySet<string> Kinds { get; } = new HashSet<string> { "test.issue", "test.noop", "test.fail", "test.cleanup" };
+    // Test actions plus the real kinds, so shipped scenario files can run in the harness.
+    public IReadOnlySet<string> Kinds { get; } = new HashSet<string>(ScenarioActions.KnownKinds) { "test.issue", "test.noop", "test.fail", "test.cleanup" };
 
     public Task<ActionOutcome> ExecuteAsync(string kind, IReadOnlyDictionary<string, string> args, CancellationToken ct)
     {

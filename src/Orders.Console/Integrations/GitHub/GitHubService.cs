@@ -155,12 +155,20 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
 
         foreach (var e in await GetArrayAsync($"{_repo}/issues/events?per_page=100", ct))
         {
-            if (!e.TryGetProperty("issue", out var issue) || issue.ValueKind != JsonValueKind.Object || issue.TryGetProperty("pull_request", out _))
+            if (!e.TryGetProperty("issue", out var issue) || issue.ValueKind != JsonValueKind.Object)
             {
                 continue;
             }
 
-            var subject = ConsoleEvent.IssueSubject(issue.GetProperty("number").GetInt32());
+            // Pull requests are issues too; their label events get a pr#N subject (e.g. needs-human after a second AI block).
+            var number = issue.GetProperty("number").GetInt32();
+            var isPull = issue.TryGetProperty("pull_request", out _);
+            if (isPull && e.GetProperty("event").GetString() != "labeled")
+            {
+                continue;
+            }
+
+            var subject = isPull ? ConsoleEvent.PullSubject(number) : ConsoleEvent.IssueSubject(number);
             var url = issue.GetProperty("html_url").GetString();
             switch (e.GetProperty("event").GetString())
             {
