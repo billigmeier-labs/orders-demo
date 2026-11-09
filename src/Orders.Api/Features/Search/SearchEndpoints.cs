@@ -14,6 +14,9 @@ internal static class SearchEndpoints
 {
     internal const int MaxResults = 20;
 
+    // Npgsql emits ESCAPE '' (no escape character) unless one is given, so EscapeLike would have no effect.
+    private const string LikeEscape = @"\";
+
     public static void MapSearch(this IEndpointRouteBuilder api) =>
         api.MapGet("/search", Search).WithTags("Search");
 
@@ -43,14 +46,14 @@ internal static class SearchEndpoints
         var contains = $"%{EscapeLike(term)}%";
 
         var products = await db.Products
-            .Where(p => EF.Functions.ILike(p.Name, contains) || EF.Functions.ILike(p.Sku, contains))
+            .Where(p => EF.Functions.ILike(p.Name, contains, LikeEscape) || EF.Functions.ILike(p.Sku, contains, LikeEscape))
             .OrderBy(p => p.Sku)
             .Take(MaxResults)
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct);
 
         var orders = await db.Orders
-            .Where(o => o.Id.ToString().StartsWith(term) || EF.Functions.ILike(o.Customer.Name, contains))
+            .Where(o => o.Id.ToString().StartsWith(term) || EF.Functions.ILike(o.Customer.Name, contains, LikeEscape))
             .OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id)
             .Take(MaxResults)
             .Select(o => new OrderSummaryResponse(
