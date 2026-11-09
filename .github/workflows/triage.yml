@@ -43,6 +43,14 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.gate.outputs.allowed == 'true'
 
+      - name: TEMP key check
+        env:
+          K: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "key length ${#K}"
+          curl -s https://api.anthropic.com/v1/messages -H "x-api-key: $K" -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' \
+            -d '{"model":"claude-sonnet-5-5","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}' | jq -c '{type, err: .error.message}'
+
       - name: Score the issue
         id: score
         if: steps.gate.outputs.allowed == 'true'
