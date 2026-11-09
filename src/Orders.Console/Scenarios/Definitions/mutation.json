@@ -9,7 +9,7 @@
       "title": "Weak spots and the agent PRs fixing them",
       "narration": "A mutation tester changes the code on purpose. If no test fails, the tests are weak there, and an issue labeled mutation is opened for an agent.",
       "explain": "mutation-testing",
-      "action": { "label": "List mutation issues", "kind": "github.listIssues", "args": { "label": "mutation" } }
+      "action": { "label": "List mutation issues", "kind": "github.listIssues", "args": { "label": "mutation", "state": "all" } }
     }
   ]
 }

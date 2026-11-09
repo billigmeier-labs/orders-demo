@@ -123,9 +123,10 @@ public sealed class FakeWorld :
         return new GitHubActivity(byLabel, open.Count, agentPulls, latest);
     });
 
-    public Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct) => Locked<IReadOnlyList<IssueWithPulls>>(() =>
-        _issues.Where(i => i.Open && i.Labels.Contains(label))
+    public Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct, string state = "open") => Locked<IReadOnlyList<IssueWithPulls>>(() =>
+        _issues.Where(i => (state == "all" || i.Open) && i.Labels.Contains(label))
             .OrderByDescending(i => i.CreatedAt)
+            .Take(state == "all" ? 6 : 50)
             .Select(i => new IssueWithPulls(IssueSummary(i), _pulls.Where(p => p.Issue == i.Number).Select(Summary).ToList()))
             .ToList());
 
@@ -474,7 +475,7 @@ public sealed class FakeWorld :
         }
     }
 
-    private IssueSummary IssueSummary(FakeIssue i) => new(i.Number, i.Title, i.Labels.ToList(), i.Author, IssueUrl(i.Number), i.CreatedAt);
+    private IssueSummary IssueSummary(FakeIssue i) => new(i.Number, i.Title, i.Labels.ToList(), i.Author, IssueUrl(i.Number), i.CreatedAt, i.Open ? "open" : "closed");
 
     private PullRequestSummary Summary(FakePull p) => new(p.Number, p.Title, p.Author, p.State, PullUrl(p.Number), p.CreatedAt, p.MergedAt);
 

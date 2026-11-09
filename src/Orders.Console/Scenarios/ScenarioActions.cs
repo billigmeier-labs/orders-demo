@@ -74,16 +74,18 @@ public sealed class ScenarioActions(
             case "github.listIssues":
                 {
                     var label = Arg("label");
-                    var issues = await github.ListIssuesAsync(label, ct);
+                    var state = ArgOr("state", "open");
+                    var issues = await github.ListIssuesAsync(label, ct, state);
                     var lines = new List<ActionLine>();
                     if (issues.Count == 0)
                     {
-                        lines.Add(new ActionLine($"No open issues labeled {label}."));
+                        lines.Add(new ActionLine(state == "all" ? $"No issues labeled {label} yet." : $"No open issues labeled {label}."));
                     }
 
                     foreach (var item in issues)
                     {
-                        lines.Add(new ActionLine($"#{item.Issue.Number} {item.Issue.Title}", item.Issue.Url));
+                        var closed = item.Issue.State == "closed" ? " (closed)" : "";
+                        lines.Add(new ActionLine($"#{item.Issue.Number} {item.Issue.Title}{closed}", item.Issue.Url));
                         if (item.Pulls.Count == 0)
                         {
                             lines.Add(new ActionLine("    no agent PR yet"));

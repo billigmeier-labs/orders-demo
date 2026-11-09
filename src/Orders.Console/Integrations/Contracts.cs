@@ -31,7 +31,8 @@ public interface IGitHubService
     Task<GitHubActivity> GetActivityAsync(CancellationToken ct);
 
     /// <summary>Open issues with the label, each with the open or merged PRs that reference it.</summary>
-    Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct);
+    /// <param name="state">"open" (default) or "all" (recent issues, newest first, closed ones included).</param>
+    Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct, string state = "open");
 
     /// <summary>Open PRs that are waiting on a human review.</summary>
     Task<IReadOnlyList<PullRequestSummary>> ListAwaitingReviewAsync(CancellationToken ct);
@@ -85,7 +86,7 @@ public sealed record NewPullRequest(string Head, string Base, string Title, stri
 
 public sealed record PullRequestRef(int Number, string Url);
 
-public sealed record IssueSummary(int Number, string Title, IReadOnlyList<string> Labels, string Author, string Url, DateTimeOffset CreatedAt);
+public sealed record IssueSummary(int Number, string Title, IReadOnlyList<string> Labels, string Author, string Url, DateTimeOffset CreatedAt, string State = "open");
 
 public sealed record PullRequestSummary(int Number, string Title, string Author, string State, string Url, DateTimeOffset CreatedAt, DateTimeOffset? MergedAt);
 

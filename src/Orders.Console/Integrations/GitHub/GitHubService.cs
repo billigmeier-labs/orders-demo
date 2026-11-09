@@ -91,10 +91,11 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
         return new GitHubActivity(labels, issues.Count, agentPulls, runs);
     }
 
-    public async Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct)
+    public async Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct, string state = "open")
     {
-        var issues = (await GetArrayAsync($"{_repo}/issues?state=open&labels={Uri.EscapeDataString(label)}&per_page=50", ct))
-            .Where(i => !i.TryGetProperty("pull_request", out _)).ToList();
+        var issueState = state == "all" ? "all" : "open";
+        var issues = (await GetArrayAsync($"{_repo}/issues?state={issueState}&labels={Uri.EscapeDataString(label)}&sort=created&direction=desc&per_page=50", ct))
+            .Where(i => !i.TryGetProperty("pull_request", out _)).Take(issueState == "all" ? 6 : 50).ToList();
         var pulls = await GetArrayAsync($"{_repo}/pulls?state=all&sort=created&direction=desc&per_page=100", ct);
         return issues.Select(i =>
         {
@@ -272,7 +273,8 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
         i.GetProperty("labels").EnumerateArray().Select(l => l.GetProperty("name").GetString()!).ToList(),
         Login(i),
         i.GetProperty("html_url").GetString() ?? "",
-        Date(i, "created_at"));
+        Date(i, "created_at"),
+        i.TryGetProperty("state", out var st) ? st.GetString() ?? "open" : "open");
 
     private static PullRequestSummary ToPull(JsonElement p)
     {
