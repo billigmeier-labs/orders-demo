@@ -1,0 +1,29 @@
+name: Retry transient failures
+
+# When a workflow fails because a download from GitHub or elsewhere timed out (HTTP 502/503/504),
+# re-run its failed jobs, up to 3 attempts. Real failures (tests, review findings) are left alone.
+on:
+  workflow_run:
+    workflows: [Triage, Agent, Incident, AI review, CI, Deploy, Preview]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN: ${{ github.event.workflow_run.id }}
+    steps:
+      - name: Re-run if the failure was a timeout
+        run: |
+          if gh run view "$RUN" -R "$GITHUB_REPOSITORY" --log-failed | grep -qE 'Unexpected HTTP response: 50[234]|HTTP (error )?50[234]|returned error: 50[234]'; then
+            echo "Transient download failure; re-running failed jobs of run $RUN."
+            sleep 30
+            gh run rerun "$RUN" -R "$GITHUB_REPOSITORY" --failed
+          else
+            echo "Not a transient failure; leaving it."
+          fi
