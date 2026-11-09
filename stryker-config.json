@@ -27,7 +27,10 @@
     ],
     "mutate": [
       "!**/Data/Migrations/**/*.cs",
-      "!**/Program.cs"
+      "!**/Program.cs",
+      "!**/Data/SeedData.cs",
+      "!**/Data/OrdersDbContext.cs",
+      "!**/Infrastructure/Logging.cs"
     ]
   }
 }
