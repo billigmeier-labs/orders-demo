@@ -65,6 +65,41 @@ public class AppConfigFeatureFlagTests
         Assert.ThrowsAny<JsonException>(() => AppConfigFeatureFlags.Parse(json));
 
     [Fact]
+    public void Parse_NotAnObject_SaysWhy()
+    {
+        var ex = Assert.Throws<JsonException>(() => AppConfigFeatureFlags.Parse("[]"));
+
+        Assert.Equal("Feature flag content must be a JSON object.", ex.Message);
+    }
+
+    [Fact]
+    public void Parse_FlagsWithoutValues_TreatsTheRootAsTheFlags()
+    {
+        var flags = AppConfigFeatureFlags.Parse("""{ "flags": { "enabled": true }, "other": { "enabled": true } }""");
+
+        Assert.True(flags["flags"].Enabled);
+        Assert.True(flags["other"].Enabled);
+    }
+
+    [Fact]
+    public void Parse_ValuesWithoutFlags_TreatsTheRootAsTheFlags()
+    {
+        var flags = AppConfigFeatureFlags.Parse("""{ "values": { "enabled": true }, "other": { "enabled": true } }""");
+
+        Assert.True(flags["values"].Enabled);
+        Assert.True(flags["other"].Enabled);
+    }
+
+    [Fact]
+    public void Parse_FlagsThatIsNotAnObject_TreatsTheRootAsTheFlags()
+    {
+        var flags = AppConfigFeatureFlags.Parse("""{ "flags": 1, "values": { "enabled": true } }""");
+
+        Assert.Single(flags);
+        Assert.True(flags["values"].Enabled);
+    }
+
+    [Fact]
     public void GetFlag_BeforeFirstPollOrUnknown_IsOff()
     {
         var flags = new AppConfigFeatureFlags();
@@ -91,6 +126,16 @@ public class AppConfigFeatureFlagTests
         Assert.Null(AppConfigSettings.From(new ConfigurationBuilder().Build()));
 
     [Fact]
+    public void Settings_OnlyApplication_UsesDefaults()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["APPCONFIG_APPLICATION"] = "orders-demo" })
+            .Build();
+
+        Assert.Equal(new AppConfigSettings("orders-demo", "prod", "feature-flags"), AppConfigSettings.From(configuration));
+    }
+
+    [Fact]
     public void Settings_FromEnvironmentNames()
     {
         var configuration = new ConfigurationBuilder()
@@ -98,10 +143,10 @@ public class AppConfigFeatureFlagTests
             {
                 ["APPCONFIG_APPLICATION"] = "orders-demo",
                 ["APPCONFIG_ENVIRONMENT"] = "staging",
-                ["APPCONFIG_PROFILE"] = "feature-flags",
+                ["APPCONFIG_PROFILE"] = "custom-flags",
             })
             .Build();
 
-        Assert.Equal(new AppConfigSettings("orders-demo", "staging", "feature-flags"), AppConfigSettings.From(configuration));
+        Assert.Equal(new AppConfigSettings("orders-demo", "staging", "custom-flags"), AppConfigSettings.From(configuration));
     }
 }
