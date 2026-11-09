@@ -50,7 +50,7 @@ public static class TourContent
         ["issue"] = new(["repo"], ["You, in a browser", "Issue saved in the repository"], D(
             ("repo", [new("Issue #{issue}", "The demo issue, labeled demo")]))),
         ["triage"] = new(["repo", "runner", "claude"], ["New issue", "Actions starts a triage job on a runner", "Claude scores it", "Labels written back to the issue"], D(
-            ("repo", [new("Issue #{issue}", "Labeled risk:*, difficulty:*; assigned to the agent")]),
+            ("repo", [new("Issue #{issue}", "Labeled risk:*, difficulty:*, and agent when it is safe for one")]),
             ("runner", [new("Job: triage", "A fresh Linux machine, deleted when the job ends")]),
             ("claude", [new("1 request", "Reads the issue, returns risk, difficulty and reasons")]))),
         ["agent"] = new(["repo", "runner", "claude"], ["Issue assigned", "Actions starts the agent on a runner", "Claude writes code and tests", "Branch pushed to the repository"], D(
@@ -59,10 +59,10 @@ public static class TourContent
             ("claude", [new("Many requests", "Plans, edits files, reads test output, fixes")]))),
         ["checks"] = new(["repo", "runner", "ecr", "ecs", "rds"], ["PR opened", "Runners build and test in parallel", "Image pushed to ECR", "Preview runs on ECS with its own database"], D(
             ("repo", [new("PR #{pr}", "Closes #{issue}; auto-merge on")]),
-            ("runner", [new("7 jobs at once", "One runner each: lint, unit, integration, build, security, PR rules, AI review"), new("Job: integration", "Starts its own throwaway Postgres container")]),
-            ("ecr", [new("orders-api:pr-{pr}", "A preview-only image, deleted with the preview")]),
-            ("ecs", [new("cluster demo › service pr-{pr}", "1 task: one copy of the container, 0.25 vCPU"), new("pr-{pr}.demo.joshb.app", "Its own address, removed when the PR closes")]),
-            ("rds", [new("Non-prod instance › db pr_{pr}", "Created for this PR, migrated, seeded")]))),
+            ("runner", [new("6 jobs at once", "One runner each: lint, build and unit tests, integration, security, PR rules, AI review"), new("Job: integration", "Starts its own throwaway Postgres container")]),
+            ("ecr", [new("orders-api:pr-{pr}", "A preview-only image; ECR expires it after 7 days")]),
+            ("ecs", [new("cluster orders-demo › service pr-{pr}", "1 task: one copy of the container, 0.25 vCPU"), new("pr-{pr}.demo.joshb.app", "Its own address, removed when the PR closes")]),
+            ("rds", [new("orders-nonprod › db pr_{pr}", "Created for this PR, migrated, seeded")]))),
         ["queue"] = new(["repo", "runner", "queue"], ["PR joins the queue", "Re-tested on a runner against latest main", "Squash-merged into main"], D(
             ("queue", [new("#{pr}", "Tested on top of everything ahead of it")]),
             ("runner", [new("Job: CI on the merge group", "The same checks on the exact commit main will get"), new("Release image", "Built here and tagged with that commit; never rebuilt")]),
@@ -70,11 +70,11 @@ public static class TourContent
         ["deploy"] = new(["runner", "ecr", "ecs", "rds"], ["Runner signs in to AWS, no stored keys", "ECS pulls the image from ECR", "Migrations run on RDS", "Staging, then production"], D(
             ("runner", [new("Job: deploy", "Gets short-lived AWS credentials through OIDC")]),
             ("ecr", [new("orders-api:<commit>", "The image the merge queue built and tested")]),
-            ("ecs", [new("task: migrate", "Runs once against the database, then exits"), new("service staging", "1 task, replaced with the new version"), new("service prod", "2 tasks, replaced one at a time")]),
-            ("rds", [new("Prod instance › db orders", "Migration applied before the new code starts")]))),
+            ("ecs", [new("task: migrate", "Runs once against the database, then exits"), new("service api-staging", "1 task, replaced with the new version"), new("service api-prod", "2 tasks, replaced one at a time")]),
+            ("rds", [new("orders-prod › db orders", "Migration applied before the new code starts")]))),
         ["monitor"] = new(["ecs", "cw", "runner", "claude", "repo"], ["App on ECS", "CloudWatch logs and alarms", "Alarm starts the incident agent on a runner", "Claude investigates", "Issue opened"], D(
-            ("ecs", [new("service prod", "2 tasks sending logs and metrics")]),
-            ("cw", [new("log group /ecs/orders-api/prod", "Every request, as structured JSON"), new("alarms", "Error rate, p95 latency, health checks")]),
+            ("ecs", [new("service api-prod", "2 tasks sending logs and metrics")]),
+            ("cw", [new("log group /ecs/orders-demo/api-prod", "Every request, as structured JSON"), new("alarms", "5xx count and p95 latency, per service")]),
             ("runner", [new("Job: incident", "Starts only when an alarm fires")]),
             ("claude", [new("On an alarm", "Reads logs, recent deploys and commits")]),
             ("repo", [new("New issue", "Opened with the evidence; triage takes it from there")]))),
