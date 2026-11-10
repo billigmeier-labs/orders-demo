@@ -104,17 +104,18 @@ jobs:
           td=$(aws ecs register-task-definition --cli-input-json "$input" --query taskDefinition.taskDefinitionArn --output text)
           echo "Registered $td"
 
+          # --propagate-tags: the task carries the definition's project and demo-run tags (cost, leftovers).
           run=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$td" --launch-type FARGATE \
-            --started-by "deploy-$GITHUB_RUN_ID" \
+            --started-by "deploy-$GITHUB_RUN_ID" --propagate-tags TASK_DEFINITION \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}")
           task=$(jq -r '.tasks[0].taskArn // empty' <<<"$run")
           if [ -z "$task" ]; then echo "::error::RunTask failed: $(jq -c .failures <<<"$run")"; exit 1; fi
           echo "Migration task $task"
 
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 240); do
             status=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --query 'tasks[0].lastStatus' --output text)
             [ "$status" = STOPPED ] && break
-            sleep 10
+            sleep 5
           done
           desc=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task")
           exit_code=$(jq -r '.tasks[0].containers[] | select(.name == "migrate") | .exitCode // "none"' <<<"$desc")
@@ -167,7 +168,8 @@ jobs:
 
           # Success: our deployment is PRIMARY and COMPLETED (after the alarm bake time).
           # Rollback: our deployment FAILED, or another task definition became PRIMARY.
-          for _ in $(seq 1 180); do
+          # Poll every 5 s: the job ends as soon as ECS marks the rollout COMPLETED (after the bake time).
+          for _ in $(seq 1 360); do
             svc=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
             ours=$(jq -c --arg id "$deployment" '.deployments[] | select(.id == $id)' <<<"$svc")
             [ -n "$ours" ] || ours='{}'
@@ -186,7 +188,7 @@ jobs:
               echo "::error::$LABEL rolled back to the previous version"
               exit 1
             fi
-            sleep 10
+            sleep 5
           done
           echo "::error::$LABEL deployment did not finish in 30 minutes"; exit 1
 
@@ -196,13 +198,13 @@ jobs:
           CHECK_VERSION: ${{ inputs.check-version }}
           SHORT: ${{ steps.cfg.outputs.short }}
         run: |
-          curl -fsS --retry 12 --retry-delay 5 --retry-all-errors --max-time 10 "$URL$HEALTH"; echo
+          curl -fsS --retry 12 --retry-delay 2 --retry-all-errors --max-time 10 "$URL$HEALTH"; echo
           if [ "$CHECK_VERSION" = true ]; then
-            for _ in $(seq 1 12); do
+            for _ in $(seq 1 30); do
               version=$(curl -fsS --max-time 10 "$URL/api/version" || true)
               echo "$version"
               [ "$(jq -r '.commit // empty' <<<"$version" 2>/dev/null)" = "$SHORT" ] && exit 0
-              sleep 5
+              sleep 2
             done
             echo "::error::$URL/api/version does not report commit $SHORT"; exit 1
           fi

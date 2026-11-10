@@ -37,6 +37,8 @@ jobs:
       up: ${{ steps.env.outputs.up }}
       sha: ${{ steps.sha.outputs.sha }}
       console: ${{ steps.images.outputs.console }}
+      migrate_staging: ${{ steps.migrations.outputs.api_staging }}
+      migrate_prod: ${{ steps.migrations.outputs.api_prod }}
     steps:
       - name: Resolve the commit
         id: sha
@@ -106,6 +108,29 @@ jobs:
             for repo in "${wanted[@]}"; do echo "- \`$repo:$SHA\`"; done
           } >>"$GITHUB_STEP_SUMMARY"
 
+      # The migration task costs about a minute per environment (Fargate start, image pull), so it runs only
+      # when the migrations differ from the version the environment runs now, or that version is unknown
+      # (first deploy after `just env up`). The bundle is idempotent, so running it needlessly is harmless.
+      - name: Do the databases need migrating?
+        id: migrations
+        if: steps.env.outputs.up == 'true'
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          for svc in api-staging api-prod; do
+            running=$(aws ecs describe-services --cluster orders-demo --services "$svc" \
+              --query 'services[0].taskDefinition' --output text 2>/dev/null | xargs -r aws ecs describe-task-definition \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text --task-definition 2>/dev/null | sed -n 's/.*://p')
+            if [[ "$running" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$running^{commit}" 2>/dev/null &&
+               git diff --quiet "$running" "$SHA" -- src/Orders.Api/Data/Migrations; then
+              echo "$svc: migrations unchanged since ${running::7}, skipping the migration task"
+              echo "${svc//-/_}=false" >>"$GITHUB_OUTPUT"
+            else
+              echo "$svc: running ${running:-nothing}; migrating"
+              echo "${svc//-/_}=true" >>"$GITHUB_OUTPUT"
+            fi
+          done
+
   staging:
     name: Staging
     needs: prepare
@@ -119,7 +144,7 @@ jobs:
       service: api-staging
       repository: orders-api
       sha: ${{ needs.prepare.outputs.sha }}
-      migrate-family: orders-demo-migrate-staging
+      migrate-family: ${{ needs.prepare.outputs.migrate_staging != 'false' && 'orders-demo-migrate-staging' || '' }}
       url: https://staging.demo.joshb.app
 
   prod:
@@ -135,7 +160,7 @@ jobs:
       service: api-prod
       repository: orders-api
       sha: ${{ needs.prepare.outputs.sha }}
-      migrate-family: orders-demo-migrate-prod
+      migrate-family: ${{ needs.prepare.outputs.migrate_prod != 'false' && 'orders-demo-migrate-prod' || '' }}
       url: https://demo.joshb.app
 
   console:

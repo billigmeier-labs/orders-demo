@@ -138,26 +138,72 @@ _playwright *args:
         "mcr.microsoft.com/playwright:v${version}-noble" \
         bash -c 'npm ci --no-audit --no-fund --loglevel=error && npx playwright test "$@"' playwright {{ args }}
 
-# Put an environment straight back on the previous release (no staging, no rebuild), e.g. `just rollback` or `just rollback staging`
+# Put an environment back on the previous release now (no staging, no rebuild, no bake), e.g. `just rollback` or `just rollback staging`
 rollback env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
-    svc="api-{{ env }}"; family="orders-demo-api-{{ env }}"
-    current=$(aws ecs describe-services --cluster orders-demo --services "$svc" --query 'services[0].taskDefinition' --output text)
-    image=$(aws ecs describe-task-definition --task-definition "$current" --query 'taskDefinition.containerDefinitions[0].image' --output text)
-    # The newest earlier revision that runs a different image is the previous release.
-    target=""
-    for td in $(aws ecs list-task-definitions --family-prefix "$family" --sort DESC --status ACTIVE --query 'taskDefinitionArns' --output text); do
-        [ "$td" = "$current" ] && continue
-        other=$(aws ecs describe-task-definition --task-definition "$td" --query 'taskDefinition.containerDefinitions[0].image' --output text)
-        if [ "$other" != "$image" ]; then target="$td"; break; fi
+    export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+    case "{{ env }}" in prod|staging) ;; *) echo "env must be prod or staging"; exit 1 ;; esac
+    cluster=orders-demo svc="api-{{ env }}" family="orders-demo-api-{{ env }}"
+    start=$(date +%s)
+    image() { aws ecs describe-task-definition --task-definition "$1" --query 'taskDefinition.containerDefinitions[0].image' --output text; }
+    service() { aws ecs describe-services --cluster "$cluster" --services "$svc" --query 'services[0]' --output json; }
+
+    # Releases are revisions whose image tag is a commit SHA (Terraform's own revisions run :bootstrap).
+    # The newest one is the release to undo; the target is the newest older revision with a different image.
+    # Deciding from the newest release rather than from what runs makes a re-run (or a rollback after ECS
+    # already rolled back by itself) a no-op instead of a step further back.
+    newest="" newest_image="" target=""
+    for td in $(aws ecs list-task-definitions --family-prefix "$family" --sort DESC --status ACTIVE --max-items 40 \
+        --query 'taskDefinitionArns[]' --output text | tr '\t' '\n' | grep -E "/$family:[0-9]+$"); do
+      img=$(image "$td")
+      [[ "${img##*:}" =~ ^[0-9a-f]{40}$ ]] || continue
+      if [ -z "$newest" ]; then newest=$td newest_image=$img; continue; fi
+      if [ "$img" != "$newest_image" ]; then target=$td; break; fi
     done
     [ -n "$target" ] || { echo "No earlier release found for $svc."; exit 1; }
-    echo "Rolling $svc back: ${image##*:} -> $(aws ecs describe-task-definition --task-definition "$target" --query 'taskDefinition.containerDefinitions[0].image' --output text | sed 's/.*://')"
-    aws ecs update-service --cluster orders-demo --service "$svc" --task-definition "$target" --query 'service.serviceName' --output text >/dev/null
-    start=$(date +%s)
-    aws ecs wait services-stable --cluster orders-demo --services "$svc"
-    echo "$svc is back on the previous release ($(( $(date +%s) - start )) s). Note: the next merge to main deploys again."
+    target_image=$(image "$target")
+
+    # Manual rollbacks skip the bake and the deployment alarms (an alarm still in ALARM from the bad version
+    # would otherwise roll the rollback back); the service's configured values are restored afterwards
+    # without starting another deployment. The bake length comes from the service's bake_minutes tag (Terraform).
+    svc_json=$(service)
+    bake=$(aws ecs list-tags-for-resource --resource-arn "$(jq -r .serviceArn <<<"$svc_json")" \
+      --query "tags[?key=='bake_minutes'].value | [0]" --output text)
+    [[ "$bake" =~ ^[0-9]+$ ]] || bake=$(jq -r '.deploymentConfiguration.bakeTimeInMinutes // 0' <<<"$svc_json")
+    configured=$(jq -c --argjson bake "$bake" '.deploymentConfiguration | .bakeTimeInMinutes = $bake | .alarms.enable = true' <<<"$svc_json")
+    fast=$(jq -c '.bakeTimeInMinutes = 0 | .alarms.enable = false' <<<"$configured")
+
+    primary=$(jq -r '.deployments[] | select(.status == "PRIMARY") | .taskDefinition' <<<"$svc_json")
+    if [ "$(image "$primary")" = "$target_image" ]; then
+      echo "$svc already runs the previous release ${target_image##*:} (${target##*/}); not starting another rollback."
+    else
+      echo "Rolling $svc back: ${newest_image##*:} -> ${target_image##*:} (${target##*/})"
+      aws ecs update-service --cluster "$cluster" --service "$svc" --task-definition "$target" \
+        --deployment-configuration "$fast" --query 'service.serviceName' --output text >/dev/null
+    fi
+
+    # Wait for the target to be PRIMARY and COMPLETED (bake 0: as soon as the new tasks are healthy and the old drained).
+    for _ in $(seq 1 120); do
+      svc_json=$(service)
+      dep=$(jq -c '.deployments[] | select(.status == "PRIMARY")' <<<"$svc_json")
+      state=$(jq -r '.rolloutState' <<<"$dep")
+      echo "$(date '+%-I:%M:%S %p') rollout=$state running=$(jq .runningCount <<<"$dep")/$(jq .desiredCount <<<"$dep")"
+      if [ "$(image "$(jq -r .taskDefinition <<<"$dep")")" = "$target_image" ] && [ "$state" = COMPLETED ] \
+         && [ "$(jq '.deployments | length' <<<"$svc_json")" = 1 ]; then
+        break
+      fi
+      [ "$state" = FAILED ] && { echo "The rollback deployment failed: $(jq -r .rolloutStateReason <<<"$dep")"; exit 1; }
+      sleep 5
+    done
+    [ "$state" = COMPLETED ] || { echo "Rollback did not finish in 10 minutes; re-run just rollback {{ env }} to keep waiting."; exit 1; }
+
+    if [ "$(jq -c '.deploymentConfiguration | {b: .bakeTimeInMinutes, a: .alarms.enable}' <<<"$svc_json")" != "$(jq -c '{b: .bakeTimeInMinutes, a: .alarms.enable}' <<<"$configured")" ]; then
+      aws ecs update-service --cluster "$cluster" --service "$svc" --deployment-configuration "$configured" \
+        --query 'service.serviceName' --output text >/dev/null
+      echo "Restored the $bake-minute bake and the deployment alarms."
+    fi
+    echo "$svc is on ${target_image##*:} after $(( $(date +%s) - start )) s. The next merge to main deploys again (just prod pause holds production)."
 
 # AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`
 mod env "infra/infra.just"
