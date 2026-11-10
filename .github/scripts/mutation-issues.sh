@@ -8,13 +8,13 @@
 #
 #   mutation-issues.sh <mutation-report.json> [--dry-run]
 #
-# Env: GH_TOKEN, GITHUB_REPOSITORY, MIN_SURVIVORS (3), MAX_ISSUES (new issues per run, 2), SCORE_THRESHOLD
+# Env: GH_TOKEN, GITHUB_REPOSITORY, MIN_SURVIVORS (1), MAX_ISSUES (new issues per run, 10; a safety cap), SCORE_THRESHOLD
 # (default: stryker-config.json thresholds.low), RUN_URL. --dry-run prints what it would do without calling GitHub.
 set -euo pipefail
 report=${1:?usage: mutation-issues.sh <mutation-report.json> [--dry-run]}
 dry=false; [ "${2:-}" = --dry-run ] && dry=true
-min=${MIN_SURVIVORS:-3}
-max_new=${MAX_ISSUES:-2}
+min=${MIN_SURVIVORS:-1}
+max_new=${MAX_ISSUES:-10}
 threshold=${SCORE_THRESHOLD:-$(jq -r '."stryker-config".thresholds.low' stryker-config.json)}
 run_url=${RUN_URL:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}}
 repo=${GITHUB_REPOSITORY:-local/dry-run}

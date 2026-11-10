@@ -15,7 +15,7 @@ on:
     inputs:
       max-issues:
         description: Most new issues to open in this run (existing ones are always updated)
-        default: "2"
+        default: "10"
 
 permissions:
   contents: read
@@ -25,8 +25,11 @@ concurrency:
 
 env:
   DOTNET_IN_DOCKER: "1"
-  MAX_ISSUES: ${{ inputs.max-issues || '2' }}
-  MIN_SURVIVORS: 3
+  # The spec: one issue per file with any surviving mutant, so a single survivor is enough.
+  MIN_SURVIVORS: 1
+  # A safety valve, not a filter: it only stops a bad night (e.g. a broken test run that lets everything
+  # survive) from flooding the tracker and the agent queue. Files over the cap get their issue on a later night.
+  MAX_ISSUES: ${{ inputs.max-issues || '10' }}
 
 jobs:
   mutation:
