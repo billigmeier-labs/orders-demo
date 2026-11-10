@@ -156,15 +156,15 @@ format:
 # Secret scan, vulnerable packages, and the API image scan
 security: secrets vulnerable image-scan
 
-# Secret scan of the whole git history (gitleaks)
+# Secret scan of this branch's whole history (gitleaks; other branches are scanned on their own PRs)
 secrets:
     #!/usr/bin/env bash
     set -euo pipefail
     # Same paths inside the container, plus the shared git dir, so it also works in a git worktree.
     common=$(cd "$(git rev-parse --git-common-dir)" && pwd)
-    if ! docker run --rm -v "$PWD:$PWD" -v "$common:$common" -w "$PWD" {{ gitleaks_image }} git "$PWD" --redact --no-banner; then
+    if ! docker run --rm -v "$PWD:$PWD" -v "$common:$common" -w "$PWD" {{ gitleaks_image }} git "$PWD" --redact --no-banner --log-opts=HEAD --config .gitleaks.toml; then
         echo "Fix: remove the secret (rotate it if it was real: it's in git history now). If it's a false positive," >&2
-        echo "     add its fingerprint (shown above) to .gitleaksignore; a human reviews that file." >&2
+        echo "     add its fingerprint (shown above) to .gitleaksignore, or a path allowlist to .gitleaks.toml; a human reviews both." >&2
         exit 1
     fi
 
