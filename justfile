@@ -85,19 +85,6 @@ dev:
     export ConnectionStrings__Orders="Host=$db_host;Port={{ db_port }};Database=orders;Username=orders;Password=orders"
     {{ dotnet }} run --project src/Orders.Api --no-launch-profile
 
-# Load generator against TARGET_BASE_URL (default the `just dev` API), e.g. `just load spike 5`
-load scenario="normal" minutes="1":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export SCENARIO={{ scenario }} DURATION_MINUTES={{ minutes }}
-    export TARGET_BASE_URL="${TARGET_BASE_URL:-http://localhost:{{ api_port }}}"
-    if ! command -v dotnet >/dev/null 2>&1; then
-        # In the SDK container, localhost is the container: reach the host's port instead.
-        TARGET_BASE_URL=$(sed -E 's#^(https?://)(localhost|127\.0\.0\.1)([:/]|$)#\1host.docker.internal\3#' <<<"$TARGET_BASE_URL")
-        export DOTNET_DOCKER_ARGS="-e TARGET_BASE_URL -e SCENARIO -e DURATION_MINUTES"
-    fi
-    {{ dotnet }} run --project src/Orders.LoadGenerator -c {{ configuration }}
-
 # Playwright suite against the console in fake mode, auth on (extra args go to `playwright test`)
 e2e *args:
     #!/usr/bin/env bash
@@ -205,8 +192,14 @@ rollback env="prod":
     fi
     echo "$svc is on ${target_image##*:} after $(( $(date +%s) - start )) s. The next merge to main deploys again (just prod pause holds production)."
 
-# AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`
+# AWS environment: `just env up`, `just env down`, `just env nuke`, `just env plan`, `just env status`, `just env leftovers`
 mod env "infra/infra.just"
+
+# Load scenarios on ECS: `just load start <scenario> --minutes <N>`, `just load stop`, `just load status`, `just load local ...`
+mod load "load.just"
+
+# Pause or resume production deploys: `just prod pause`, `just prod resume`
+mod prod "infra/prod.just"
 
 # Demo resets: `just demo reset` (or flags-off, bad-deploy, incident, cleanup)
 mod demo "demo.just"
