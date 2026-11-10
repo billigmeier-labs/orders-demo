@@ -42,14 +42,21 @@ public class FeatureManagementTests
     public async Task DefaultPercentFilter_RollsAcrossTheWholeRange()
     {
         var filter = new PercentFilter();
-        var full = PercentFilter.Configuration(100);
-        var none = PercentFilter.Configuration(0);
+        var half = PercentFilter.Configuration(50);
+        var context = new FeatureFilterEvaluationContext { FeatureName = "f", Parameters = half.Parameters! };
 
-        for (var i = 0; i < 100; i++)
+        // A roll in [0, 100) is on for roughly half the calls at 50%. A roll scaled to [0, 1) would make every call on.
+        var on = 0;
+        const int runs = 400;
+        for (var i = 0; i < runs; i++)
         {
-            Assert.True(await filter.EvaluateAsync(new FeatureFilterEvaluationContext { FeatureName = "f", Parameters = full.Parameters! }));
-            Assert.False(await filter.EvaluateAsync(new FeatureFilterEvaluationContext { FeatureName = "f", Parameters = none.Parameters! }));
+            if (await filter.EvaluateAsync(context))
+            {
+                on++;
+            }
         }
+
+        Assert.InRange(on, 1, runs - 1);
     }
 
     [Fact]
