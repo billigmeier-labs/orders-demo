@@ -1,16 +1,20 @@
 name: Mutation
 
 # Nightly mutation testing with Stryker.NET. Stryker changes the API's code on purpose ("mutants"); a mutant that
-# no test notices "survives", which means the tests are weak there. For the files with the most survivors, this
-# opens an issue labelled `mutation`. Triage scores it like any other issue, and adding tests is low risk, so an
-# agent usually picks it up and strengthens the tests.
+# no test notices "survives", which means the tests are weak there. The results become work:
+#   - one issue per file with surviving mutants (written like the agent task form, labelled mutation, agent and
+#     risk:low, so the agent picks it up), updated in place on later runs and closed when none survive
+#   - the overall score as a `mutation-score` notice (the console reads it) and in the job summary
+#   - a needs-human issue when the score drops below thresholds.low in stryker-config.json
+# The run itself never fails on a low score (thresholds.break only marks the Stryker step), so the console
+# always has a latest successful run to read.
 on:
   schedule:
     - cron: "17 8 * * *" # 2:17 AM Central
   workflow_dispatch:
     inputs:
       max-issues:
-        description: Most issues to open in this run
+        description: Most new issues to open in this run (existing ones are always updated)
         default: "2"
 
 permissions:
@@ -20,6 +24,7 @@ concurrency:
   group: mutation
 
 env:
+  DOTNET_IN_DOCKER: "1"
   MAX_ISSUES: ${{ inputs.max-issues || '2' }}
   MIN_SURVIVORS: 3
 
@@ -36,32 +41,17 @@ jobs:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-      - uses: extractions/setup-just@v2
-        id: just1
-        continue-on-error: true # GitHub release downloads sometimes 504
-      - if: steps.just1.outcome == 'failure'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
+      - uses: ./.github/actions/setup
 
+      # Stryker exits non-zero when the score is under thresholds.break; that's reported below, not a failed run.
       - name: Run Stryker
+        id: stryker
+        continue-on-error: true
         run: just mutation
 
-      - name: Summary
+      - name: Find the report
         id: report
-        run: |
-          report=$(ls -t StrykerOutput/*/reports/mutation-report.json | head -1)
-          echo "report=$report" >> "$GITHUB_OUTPUT"
-          jq -r '
-            [.files[].mutants[]] as $m
-            | ($m | map(select(.status=="Killed" or .status=="Timeout")) | length) as $killed
-            | ($m | map(select(.status=="Survived" or .status=="NoCoverage")) | length) as $weak
-            | "### Mutation score: \(if ($killed+$weak) > 0 then ($killed*1000/($killed+$weak)|floor/10) else 0 end)%\n\n\($killed) mutants caught by tests, \($weak) not caught.\n\n| File | Not caught |\n| --- | --- |",
-              (.files | to_entries | map({f: .key, n: ([.value.mutants[] | select(.status=="Survived" or .status=="NoCoverage")] | length)})
-                | sort_by(-.n) | .[:10][] | select(.n > 0) | "| `\(.f)` | \(.n) |")' "$report" >> "$GITHUB_STEP_SUMMARY"
+        run: just mutation-report
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -70,40 +60,13 @@ jobs:
           path: StrykerOutput/*/reports/
           retention-days: 14
 
-      # Opened with the automation token so the new issues start triage (issues made with GITHUB_TOKEN don't).
-      - name: Open issues for the weakest files
+      # With the automation token so new issues start the agent (issues made with GITHUB_TOKEN start nothing).
+      - name: Score, and open, update or close issues
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPORT: ${{ steps.report.outputs.report }}
-        run: |
-          opened=0
-          while IFS=$'\t' read -r file count; do
-            [ "$opened" -ge "$MAX_ISSUES" ] && break
-            [ "$count" -lt "$MIN_SURVIVORS" ] && break
-            rel=$(sed -E 's#^.*/(src/)#\1#' <<<"$file")
-            title="Strengthen tests: $count mutants survive in $rel"
-            if gh issue list -R "$GITHUB_REPOSITORY" --label mutation --state open --search "\"$rel\" in:title" --json number --jq '.[0].number' | grep -q .; then
-              echo "Open mutation issue already exists for $rel"; continue
-            fi
-            {
-              echo "Nightly mutation testing changed the code in \`$rel\` on purpose, and **no test failed** for these changes."
-              echo "Each one is a behaviour the tests don't actually check."
-              echo
-              echo "| Line | What Stryker changed | Status |"
-              echo "| --- | --- | --- |"
-              jq -r --arg f "$file" '.files[$f].mutants[] | select(.status=="Survived" or .status=="NoCoverage")
-                | "| \(.location.start.line) | \(.mutatorName): `\(.replacement // "" | gsub("\n";" ") | gsub("\\|";"\\\\|") | .[0:80])` | \(.status) |"' "$REPORT" | head -25
-              echo
-              echo "## Acceptance criteria"
-              echo
-              echo "- [ ] New or improved unit or integration tests fail for each mutant above (re-run \`just mutation\` to check)"
-              echo "- [ ] No production code changes, unless a mutant shows a real bug (then say so in the PR)"
-              echo "- [ ] \`just ci\` passes"
-              echo
-              echo "_Opened by the nightly mutation run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID_"
-            } > body.md
-            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label mutation --body-file body.md
-            opened=$((opened + 1))
-          done < <(jq -r '.files | to_entries | map({f: .key, n: ([.value.mutants[] | select(.status=="Survived" or .status=="NoCoverage")] | length)})
-                    | sort_by(-.n) | .[] | "\(.f)\t\(.n)"' "$REPORT")
-          echo "Opened $opened issue(s)."
+        run: bash .github/scripts/mutation-issues.sh "$REPORT"
+
+      - name: Below the break threshold
+        if: steps.stryker.outcome == 'failure'
+        run: echo "::warning title=Mutation score below break::Stryker reported the score below thresholds.break in stryker-config.json (see the summary). Not failing the nightly run."
