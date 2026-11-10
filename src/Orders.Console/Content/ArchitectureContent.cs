@@ -77,9 +77,10 @@ public static class ArchitectureContent
             ], "load-balancer"),
             new("ECR", "The image registry. CI builds an image once and every environment runs that same image.",
             [
-                new("repository orders-api", "Release images by commit SHA; preview images by PR, kept 7 days"),
-                new("repository orders-console", "The console image"),
-                new("repository orders-loadgen", "The load generator image"),
+                new("repository orders-api", "Release images by commit SHA; tags are immutable"),
+                new("repository orders-api-preview", "PR images, pr-<N>; mutable tags, expired after 7 days"),
+                new("repository orders-console", "The console image; immutable tags"),
+                new("repository orders-loadgen", "The load generator image; immutable tags except latest"),
             ], "ecr"),
             new("RDS PostgreSQL", "Managed databases; AWS handles patching and backups.",
             [
@@ -103,7 +104,7 @@ public static class ArchitectureContent
             [
                 new("Alarm rule", "Alarm fires or recovers › starts incident.yml in GitHub"),
             ], "eventbridge"),
-            new("IAM roles", "Who may do what. GitHub Actions signs in with OIDC, so there are no AWS keys anywhere; the GitHub App key and a GitHub token live in repository secrets and Secrets Manager.",
+            new("IAM roles", "Who may do what. GitHub Actions signs in with OIDC, so there are no AWS keys anywhere. The only repository secrets are the Claude API key and the automation app's ID and key; the console's tokens live in Secrets Manager.",
             [
                 new("orders-demo-deploy", "deploy.yml on main: staging and prod"),
                 new("orders-demo-preview", "PR preview workflows; preview resources only"),

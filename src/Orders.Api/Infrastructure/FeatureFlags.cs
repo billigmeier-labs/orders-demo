@@ -30,7 +30,7 @@ public static class FeatureFlagExtensions
     public static bool IsEnabled(this IFeatureFlags flags, string flag) => flags.GetFlag(flag).Enabled;
 }
 
-/// <summary>Flag names shared with the AppConfig profile in infra/terraform/base/appconfig.tf.</summary>
+/// <summary>Flag names shared with the AppConfig profile in infra/terraform/env/appconfig.tf.</summary>
 public static class Flags
 {
     public const string SearchV2 = "searchV2";

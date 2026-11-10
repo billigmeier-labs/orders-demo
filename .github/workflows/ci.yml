@@ -82,9 +82,15 @@ jobs:
           fetch-depth: 0 # the coverage gate diffs against the PR's base
       - uses: ./.github/actions/setup
       - run: just test-all
+      # The gate a PR is judged by comes from the base branch, so a PR can't loosen the check it must pass
+      # (scripts/ is code-owned, but this result lands before anyone reviews).
       - name: New and changed lines are covered
         if: github.event_name == 'pull_request'
-        run: just coverage-gate ${{ github.event.pull_request.base.sha }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE:scripts/coverage-gate" > "$RUNNER_TEMP/coverage-gate"
+          bash "$RUNNER_TEMP/coverage-gate" "$BASE" artifacts/coverage
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -140,11 +146,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/setup
-        with:
-          nuget-cache: "false"
-      - run: just pr-rules ${{ github.event.pull_request.base.sha }}
+      # The base branch's rules, like the coverage gate: a PR can't edit the rules it's judged by.
+      # (This job has only a read-only GITHUB_TOKEN and no secrets; the point is the check's verdict. It runs
+      # nothing from the PR, not even the setup action: pr-rules needs only git and gh.)
+      - name: PR rules from the base branch
+        run: |
+          git show "$BASE:scripts/pr-rules" > "$RUNNER_TEMP/pr-rules"
+          bash "$RUNNER_TEMP/pr-rules" "$BASE"
         env:
+          BASE: ${{ github.event.pull_request.base.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}

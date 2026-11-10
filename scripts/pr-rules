@@ -10,7 +10,8 @@
 #   PR_BODY    must link an issue (Closes #123), except for the bots and branches listed below
 #   PR_AUTHOR  login of the PR's author
 #   PR_BRANCH  the PR's head branch
-# Always checked: no newly skipped or disabled tests, no deleted tests, thresholds not lowered.
+# Always checked: no newly skipped or disabled tests (xunit and Playwright), no new coverage exclusions
+# ([ExcludeFromCodeCoverage], [Obsolete], ...) under src/, no deleted tests, thresholds not lowered.
 set -euo pipefail
 export LC_ALL=C
 
@@ -106,6 +107,44 @@ done < <(git diff -U0 --no-color --no-ext-diff "${diff_range[@]}" -- 'tests/*.cs
     /^@@ / { split($3, n, ","); l = substr(n[1], 2); next }
     /^\+/ && f != "" { print f "\t" l "\t" substr($0, 2); l++ }')
 [ "$found_skip" = 1 ] || echo "  ok"
+
+# file<TAB>line<TAB>text for every line the change adds in the given paths.
+added_lines() {
+    git diff -U0 --no-color --no-ext-diff "${diff_range[@]}" -- "$@" | awk '
+        /^\+\+\+ / { f = substr($0, 7); next }
+        /^@@ / { split($3, n, ","); l = substr(n[1], 2); next }
+        /^\+/ && f != "" { print f "\t" l "\t" substr($0, 2); l++ }'
+}
+trimmed() { sed -E 's/^[[:space:]]+//' <<<"$1" | cut -c1-100; }
+
+# Playwright: test.skip / describe.skip / .fixme take a spec out of the e2e run. A skip guarded by
+# settings.live (the spec still runs in `just e2e`, only not against production) is allowed.
+section "No newly skipped Playwright specs"
+found_e2e=0
+while IFS=$'\t' read -r file line text; do
+    grep -Eq '^[[:space:]]*(//|/?\*)' <<<"$text" && continue # a comment
+    grep -Eq '\.(skip|fixme)[[:space:]]*\(' <<<"$text" || continue
+    grep -Eq '\btest\.skip[[:space:]]*\([[:space:]]*settings\.live[[:space:]]*(&&|,|\))' <<<"$text" && continue
+    error "$file" "$line" "adds a skipped Playwright spec: \`$(trimmed "$text")\`" \
+        "Don't skip e2e specs to get CI green. Fix the spec or the console. A spec that must not run against production can skip on settings.live only (e.g. test.skip(settings.live, '<why>'))."
+    found_e2e=1
+done < <(added_lines 'tests/Orders.E2E/*.ts' 'tests/Orders.E2E/**/*.ts' 'tests/Orders.E2E/*.js' 'tests/Orders.E2E/**/*.js')
+[ "$found_e2e" = 1 ] || echo "  ok"
+
+# tests/coverage.runsettings leaves code with these attributes out of coverage, so adding one hides
+# lines from the coverage gate.
+section "No new coverage exclusions in src/"
+found_excl=0
+while IFS=$'\t' read -r file line text; do
+    grep -Eq '^[[:space:]]*(//|/?\*)' <<<"$text" && continue # a comment
+    attr=$(grep -Eo '\[[^]]*\b(ExcludeFromCodeCoverage|Obsolete|GeneratedCode|CompilerGenerated)(Attribute)?\b' <<<"$text" \
+        | grep -Eo '(ExcludeFromCodeCoverage|Obsolete|GeneratedCode|CompilerGenerated)' | head -1 || true)
+    [ -n "$attr" ] || continue
+    error "$file" "$line" "adds [$attr], which tests/coverage.runsettings leaves out of coverage: \`$(trimmed "$text")\`" \
+        "Remove the attribute and cover the code with a test. If the code really can't be tested, say why in the PR; a human decides."
+    found_excl=1
+done < <(added_lines 'src/*.cs' 'src/**/*.cs' 'src/*.cshtml' 'src/**/*.cshtml')
+[ "$found_excl" = 1 ] || echo "  ok"
 
 # Quarantine is the one allowed way to take a test out of CI, and only for a test the nightly flaky run
 # has an open `flaky` issue for.

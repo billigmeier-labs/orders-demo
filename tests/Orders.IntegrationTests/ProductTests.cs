@@ -97,6 +97,46 @@ public class ProductTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task LowStock_FiltersBelowThreshold_OrderedByStockThenSku()
+    {
+        // Other data (seed, other tests) may also match, so assert on our own products.
+        var a = await _client.CreateProductAsync(stock: 0);
+        var b = await _client.CreateProductAsync(stock: 2);
+        var c = await _client.CreateProductAsync(stock: 2);
+        var atThreshold = await _client.CreateProductAsync(stock: 4);
+
+        var result = await (await _client.Get("/api/products/low-stock?threshold=4")).ReadAsync<List<ProductResponse>>();
+
+        Assert.DoesNotContain(atThreshold, result);
+        Assert.All(result, p => Assert.True(p.Stock < 4));
+        var mine = result.Where(p => new[] { a.Id, b.Id, c.Id }.Contains(p.Id)).ToList();
+        Assert.Equal(a, mine[0]);
+        Assert.Equal(new[] { b, c }.OrderBy(p => p.Sku, StringComparer.Ordinal), mine.Skip(1));
+    }
+
+    [Fact]
+    public async Task LowStock_DefaultThresholdIsFive()
+    {
+        var below = await _client.CreateProductAsync(stock: 4);
+        var equal = await _client.CreateProductAsync(stock: 5);
+
+        var result = await (await _client.Get("/api/products/low-stock")).ReadAsync<List<ProductResponse>>();
+
+        Assert.Contains(below, result);
+        Assert.DoesNotContain(equal, result);
+    }
+
+    [Fact]
+    public async Task LowStock_ZeroThreshold_ReturnsEmpty() =>
+        Assert.Empty(await (await _client.Get("/api/products/low-stock?threshold=0")).ReadAsync<List<ProductResponse>>());
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("abc")]
+    public async Task LowStock_InvalidThreshold_Returns400(string threshold) =>
+        await (await _client.Get($"/api/products/low-stock?threshold={threshold}")).ReadProblemAsync(HttpStatusCode.BadRequest);
+
+    [Fact]
     public async Task Create_DuplicateSku_Returns409()
     {
         var sku = Api.UniqueSku();

@@ -46,7 +46,7 @@ Issues carry the same tier (the task form asks for it; triage can raise it, neve
 ## Tests, coverage and flaky tests
 
 - **Coverage**: at least `changedLines`% (in `coverage-thresholds.json`) of the executable lines you add or change under `src/` must be run by a test, and overall coverage must stay above `overallLines`%. `just coverage-gate` lists every uncovered `file:line`.
-- **Never skip or remove tests.** PR rules fail on a new `Skip =`, `Assert.Skip*`, `Explicit = true`, `#if false`, a commented-out `[Fact]`, a deleted test method, or a lowered threshold.
+- **Never skip or remove tests.** PR rules fail on a new `Skip =`, `Assert.Skip*`, `Explicit = true`, `#if false`, a commented-out `[Fact]`, a Playwright `test.skip(` / `.skip(` / `.fixme(` (only a `test.skip(settings.live, ...)` guard for production runs is allowed), a deleted test method, or a lowered threshold. They also fail on a new `[ExcludeFromCodeCoverage]` or `[Obsolete]` under `src/`, since coverage leaves that code out.
 - **Flaky tests** (pass and fail on the same commit) are found by the nightly Flaky tests workflow, which opens a `flaky` issue for each. Quarantine one **within a day** if it can't be fixed right away: add `[Trait("Category", "Quarantine")]` to the test in a PR that links its `flaky` issue. Quarantined tests are left out of every required CI job but still run nightly. PR rules only accept a quarantine for a test with an open `flaky` issue. Then fix the cause and remove the trait.
 - **Retry-until-green is not allowed**: no retry loops, retry attributes, re-running CI hoping it passes, or sleeps to dodge timing problems.
 
