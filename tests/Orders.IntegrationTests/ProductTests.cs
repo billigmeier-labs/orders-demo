@@ -1,4 +1,7 @@
 using System.Net;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Orders.Api.Features.Products;
 
 namespace Orders.IntegrationTests;
@@ -143,5 +146,76 @@ public class ProductTests(ApiFixture fixture)
         await (await _client.Post("/api/products", new { sku, name = "First", price = 1m, stock = 1 })).ReadAsync<ProductResponse>(HttpStatusCode.Created);
 
         await (await _client.Post("/api/products", new { sku, name = "Second", price = 1m, stock = 1 })).ReadProblemAsync(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public void Endpoints_AreTaggedProducts_AndRoutedUnderApiProducts()
+    {
+        var endpoints = fixture.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(e => e.RoutePattern.RawText!.StartsWith("/api/products", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Equal(5, endpoints.Count);
+        Assert.All(endpoints, e => Assert.Equal(["Products"], e.Metadata.GetMetadata<ITagsMetadata>()!.Tags));
+        Assert.Equal(
+            ["GET /api/products/", "GET /api/products/low-stock", "GET /api/products/{id:guid}", "POST /api/products/", "POST /api/products/{id:guid}/restock"],
+            endpoints.Select(e => $"{e.Metadata.GetMetadata<IHttpMethodMetadata>()!.HttpMethods.Single()} {e.RoutePattern.RawText}").Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task List_IsOrderedBySkuAscending()
+    {
+        await _client.CreateProductAsync();
+        await _client.CreateProductAsync();
+
+        var all = await (await _client.Get("/api/products")).ReadAsync<List<ProductResponse>>();
+
+        Assert.True(all.Count >= 2);
+        Assert.Equal(all.OrderBy(p => p.Sku, StringComparer.Ordinal).Select(p => p.Id), all.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task LowStock_InvalidThreshold_NamesFieldAndMessage()
+    {
+        var problem = await (await _client.Get("/api/products/low-stock?threshold=-1")).ReadValidationProblemAsync();
+
+        var error = Assert.Single(problem.Errors);
+        Assert.Equal("threshold", error.Key);
+        Assert.Equal(["Threshold must be 0 or more."], error.Value);
+    }
+
+    [Fact]
+    public async Task Get_Unknown_ProblemNamesProductAndId()
+    {
+        var id = Guid.NewGuid();
+
+        var problem = await (await _client.Get($"/api/products/{id}")).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Product not found.", problem.Title);
+        Assert.Equal($"No product has id {id}.", problem.Detail);
+    }
+
+    [Fact]
+    public async Task Restock_Unknown_ProblemNamesProductAndId()
+    {
+        var id = Guid.NewGuid();
+
+        var problem = await (await _client.Post($"/api/products/{id}/restock", new { quantity = 5 })).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Product not found.", problem.Title);
+        Assert.Equal($"No product has id {id}.", problem.Detail);
+    }
+
+    [Fact]
+    public async Task Create_DuplicateSku_ProblemNamesNormalizedSku()
+    {
+        var sku = Api.UniqueSku();
+        await _client.Post("/api/products", new { sku, name = "First", price = 1m, stock = 1 });
+
+        var problem = await (await _client.Post("/api/products", new { sku = $" {sku.ToLowerInvariant()} ", name = "Second", price = 1m, stock = 1 }))
+            .ReadProblemAsync(HttpStatusCode.Conflict);
+
+        Assert.Equal($"A product with SKU {sku} already exists.", problem.Detail);
     }
 }
