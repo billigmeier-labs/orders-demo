@@ -28,15 +28,15 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
         id: just1
         continue-on-error: true  # GitHub release downloads sometimes 504
       - if: steps.just1.outcome == 'failure'
@@ -113,13 +113,13 @@ jobs:
     env:
       PR: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
         id: just2
         continue-on-error: true  # GitHub release downloads sometimes 504
       - if: steps.just2.outcome == 'failure'

@@ -29,7 +29,7 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
@@ -78,7 +78,7 @@ jobs:
           echo "::error::The AI review blocked this PR twice. A human needs to review it (or comment '/override-ai-review')."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true'
         with:
           fetch-depth: 0

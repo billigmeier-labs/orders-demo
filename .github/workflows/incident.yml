@@ -36,7 +36,7 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
@@ -67,14 +67,14 @@ jobs:
         run: |
           gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body "**Alarm again** at $AT: \`$ALARM\`. $REASON"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
         with:
           fetch-depth: 30
 
       - name: Read-only AWS access
         if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-incident-readonly
           aws-region: us-east-1

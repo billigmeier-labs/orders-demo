@@ -31,15 +31,15 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
         id: just1
         continue-on-error: true # GitHub release downloads sometimes 504
       - if: steps.just1.outcome == 'failure'
@@ -63,7 +63,7 @@ jobs:
               (.files | to_entries | map({f: .key, n: ([.value.mutants[] | select(.status=="Survived" or .status=="NoCoverage")] | length)})
                 | sort_by(-.n) | .[:10][] | select(.n > 0) | "| `\(.f)` | \(.n) |")' "$report" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: stryker-report
