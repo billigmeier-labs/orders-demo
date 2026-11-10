@@ -2,8 +2,9 @@ name: Preview
 
 # Each open PR from this repo gets its own copy of the API at https://pr-<N>.demo.joshb.app:
 # image orders-api-preview:pr-<N>, database pr_<N> on the non-prod instance, ECS service pr-<N>.
-# Closing the PR removes the service, listener rule, target group and task definitions
-# (the database stays). Forks, Dependabot and release-please PRs get no preview.
+# Closing the PR removes the service, listener rule, target group, task definitions and the
+# database. Everything is tagged project=orders-demo, preview=pr-<N> and demo-run=<N>.
+# Forks, Dependabot and release-please PRs get no preview.
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
@@ -81,7 +82,7 @@ jobs:
         if: steps.env.outputs.up == 'true'
         run: |
           names=(subnets vpc-id https-listener-arn preview/security-group preview/execution-role preview/task-role
-            preview/log-group preview/db-host preview/db-username preview/db-password-ref)
+            preview/log-group preview/db-host preview/db-username preview/db-password-ref demo-run)
           params=$(aws ssm get-parameters --names "${names[@]/#//orders-demo/}" --query 'Parameters[].[Name,Value]' --output json)
           for n in "${names[@]}"; do
             v=$(jq -r --arg n "/orders-demo/$n" '.[] | select(.[0] == $n) | .[1]' <<<"$params")
@@ -100,6 +101,7 @@ jobs:
           DB_PASSWORD_REF: ${{ steps.cfg.outputs.preview_db_password_ref }}
           EXECUTION_ROLE: ${{ steps.cfg.outputs.preview_execution_role }}
           TASK_ROLE: ${{ steps.cfg.outputs.preview_task_role }}
+          DEMO_RUN: ${{ steps.cfg.outputs.demo_run }}
         run: |
           # A copy of the staging API's definition, pointed at database pr_<N>, with the preview
           # execution and task roles (the only roles orders-demo-preview may pass: nonprod DB secret,
@@ -108,7 +110,7 @@ jobs:
           conn="Host=$DB_HOST;Port=5432;Database=pr_$PR;Username=$DB_USER;SSL Mode=Require"
           input=$(jq --arg family "orders-demo-$NAME" --arg img "$IMAGE" --arg conn "$conn" --arg name "$NAME" \
             --arg commit "${HEAD_SHA::7}" --arg group "$LOG_GROUP" --arg region "$AWS_REGION" --arg pw "$DB_PASSWORD_REF" \
-            --arg exec "$EXECUTION_ROLE" --arg task "$TASK_ROLE" '
+            --arg exec "$EXECUTION_ROLE" --arg task "$TASK_ROLE" --arg run "$DEMO_RUN" '
             def setenv($k; $v): [.[] | select(.name != $k)] + [{name: $k, value: $v}];
             .taskDefinition
             | .family = $family
@@ -127,13 +129,20 @@ jobs:
                         | setenv("APP_COMMIT"; $commit) | setenv("SEED_DATA"; "true")
                         | setenv("APPCONFIG_ENVIRONMENT"; "preview")
                         | setenv("OTEL_SERVICE_NAME"; "orders-api-preview")
-                        | setenv("ConnectionStrings__Orders"; $conn))
+                        | setenv("ConnectionStrings__Orders"; $conn)
+                        | setenv("OTEL_METRICS_EXPORTER"; "none"))
                     | .secrets = [{name: "PGPASSWORD", valueFrom: $pw}]
-                  else . end]
+                  else
+                    # Traces only: the bundled X-Ray config instead of the staging metrics pipeline. EMF
+                    # records name their own namespace and dimensions, so unreviewed code must not write them
+                    # (the preview task role has no access to the metrics log group either).
+                    .command = ["--config=/etc/ecs/ecs-xray.yaml"]
+                    | .environment = [(.environment // [])[] | select(.name != "AOT_CONFIG_CONTENT")]
+                  end]
             | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions,
                requiresCompatibilities, cpu, memory, runtimePlatform}
             | with_entries(select(.value != null))
-            | .tags = [{key: "preview", value: $name}, {key: "project", value: "orders-demo"}]' <<<"$staging")
+            | .tags = [{key: "preview", value: $name}, {key: "project", value: "orders-demo"}, {key: "demo-run", value: $run}]' <<<"$staging")
           td=$(aws ecs register-task-definition --cli-input-json "$input" --query taskDefinition.taskDefinitionArn --output text)
           echo "Registered $td"
           echo "arn=$td" >>"$GITHUB_OUTPUT"
@@ -145,11 +154,12 @@ jobs:
           SUBNETS: ${{ steps.cfg.outputs.subnets }}
           SG: ${{ steps.cfg.outputs.preview_security_group }}
           LOG_GROUP: ${{ steps.cfg.outputs.preview_log_group }}
+          DEMO_RUN: ${{ steps.cfg.outputs.demo_run }}
         run: |
           # Same image and definition, command swapped for the EF Core bundle, which creates
           # the database if it does not exist yet.
           run=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TD" --launch-type FARGATE \
-            --started-by "preview-$PR" --tags key=preview,value="$NAME" key=project,value=orders-demo \
+            --started-by "preview-$PR" --tags key=preview,value="$NAME" key=project,value=orders-demo key=demo-run,value="$DEMO_RUN" \
             --overrides '{"containerOverrides":[{"name":"api","command":["./efbundle"]}]}' \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}")
           task=$(jq -r '.tasks[0].taskArn // empty' <<<"$run")
@@ -176,6 +186,7 @@ jobs:
         env:
           VPC: ${{ steps.cfg.outputs.vpc_id }}
           LISTENER: ${{ steps.cfg.outputs.https_listener_arn }}
+          DEMO_RUN: ${{ steps.cfg.outputs.demo_run }}
         run: |
           tg=$(aws elbv2 describe-target-groups --names "$NAME" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
           if [ -z "$tg" ] || [ "$tg" = None ]; then
@@ -183,7 +194,7 @@ jobs:
               --target-type ip --health-check-path /health/ready --matcher HttpCode=200 \
               --health-check-interval-seconds 10 --health-check-timeout-seconds 5 \
               --healthy-threshold-count 2 --unhealthy-threshold-count 3 \
-              --tags Key=preview,Value="$NAME" Key=project,Value=orders-demo \
+              --tags Key=preview,Value="$NAME" Key=project,Value=orders-demo Key=demo-run,Value="$DEMO_RUN" \
               --query 'TargetGroups[0].TargetGroupArn' --output text)
             aws elbv2 modify-target-group-attributes --target-group-arn "$tg" \
               --attributes Key=deregistration_delay.timeout_seconds,Value=15 >/dev/null
@@ -203,7 +214,7 @@ jobs:
             rule=$(aws elbv2 create-rule --listener-arn "$LISTENER" --priority "$priority" \
               --conditions Field=host-header,Values="$HOST" \
               --actions Type=forward,TargetGroupArn="$tg" \
-              --tags Key=preview,Value="$NAME" Key=project,Value=orders-demo \
+              --tags Key=preview,Value="$NAME" Key=project,Value=orders-demo Key=demo-run,Value="$DEMO_RUN" \
               --query 'Rules[0].RuleArn' --output text)
             echo "Created rule $rule (priority $priority)"
           fi
@@ -215,6 +226,7 @@ jobs:
           TG: ${{ steps.lb.outputs.tg }}
           SUBNETS: ${{ steps.cfg.outputs.subnets }}
           SG: ${{ steps.cfg.outputs.preview_security_group }}
+          DEMO_RUN: ${{ steps.cfg.outputs.demo_run }}
         run: |
           status=$(aws ecs describe-services --cluster "$CLUSTER" --services "$NAME" --query 'services[0].status' --output text)
           if [ "$status" = DRAINING ]; then
@@ -233,7 +245,7 @@ jobs:
               --network-configuration "$network" --propagate-tags SERVICE \
               --load-balancers "targetGroupArn=$TG,containerName=api,containerPort=8080" \
               --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},minimumHealthyPercent=100,maximumPercent=200" \
-              --tags key=preview,value="$NAME" key=project,value=orders-demo >/dev/null
+              --tags key=preview,value="$NAME" key=project,value=orders-demo key=demo-run,value="$DEMO_RUN" >/dev/null
             echo "Created service $NAME"
           fi
           aws ecs wait services-stable --cluster "$CLUSTER" --services "$NAME"

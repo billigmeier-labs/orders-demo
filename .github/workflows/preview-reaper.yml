@@ -2,7 +2,8 @@ name: Preview reaper
 
 # Safety net for previews whose close event was missed (workflow failed, environment was down then up):
 # finds pr-<N> services, listener rules, target groups and task definitions whose PR is no longer open
-# and removes them with the same steps as closing the PR.
+# and removes them with the same steps as closing the PR, then drops every pr_<N> database on the
+# non-prod instance whose PR is not open (orders-demo-pr-dropdb task with KEEP=<open PRs>).
 on:
   schedule:
     - cron: "17 9 * * *" # 3:17 AM Central (CST), every night
@@ -86,3 +87,49 @@ jobs:
     with:
       pr: ${{ matrix.pr }}
       environment: preview-reaper
+
+  databases:
+    name: Drop stale databases
+    needs: find
+    runs-on: ubuntu-latest
+    environment: preview-reaper
+    permissions:
+      id-token: write
+      pull-requests: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-preview
+          aws-region: us-east-1
+
+      - name: Drop pr_<N> databases of PRs that are not open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          names=(subnets preview/security-group preview/dropdb-family preview/log-group demo-run)
+          params=$(aws ssm get-parameters --names "${names[@]/#//orders-demo/}" --query 'Parameters[].[Name,Value]' --output json)
+          get() { jq -r --arg n "/orders-demo/$1" '.[] | select(.[0] == $n) | .[1]' <<<"$params"; }
+          family=$(get preview/dropdb-family)
+          if [ -z "$family" ]; then echo "Environment is down; no databases to check"; exit 0; fi
+          keep=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json number --jq '[.[].number | tostring] | join(" ")')
+          echo "Open PRs (databases kept): ${keep:-none}"
+          overrides=$(jq -cn --arg keep "$keep" '{containerOverrides: [{name: "dropdb", environment: [{name: "KEEP", value: $keep}]}]}')
+          network="awsvpcConfiguration={subnets=[$(get subnets)],securityGroups=[$(get preview/security-group)],assignPublicIp=ENABLED}"
+          run=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$family" --launch-type FARGATE \
+            --started-by preview-reaper --network-configuration "$network" --overrides "$overrides" \
+            --tags key=preview,value=pr-reaper key=project,value=orders-demo key=demo-run,value="$(get demo-run)")
+          task=$(jq -r '.tasks[0].taskArn // empty' <<<"$run")
+          if [ -z "$task" ]; then echo "::error::RunTask failed: $(jq -c .failures <<<"$run")"; exit 1; fi
+          for _ in $(seq 1 120); do
+            [ "$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --query 'tasks[0].lastStatus' --output text)" = STOPPED ] && break
+            sleep 5
+          done
+          desc=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task")
+          exit_code=$(jq -r '.tasks[0].containers[] | select(.name == "dropdb") | .exitCode // "none"' <<<"$desc")
+          log=$(aws logs get-log-events --log-group-name "$(get preview/log-group)" --log-stream-name "dropdb/dropdb/${task##*/}" \
+            --start-from-head --query 'events[].message' --output text | tr '\t' '\n' || true)
+          echo "$log"
+          { echo "### Stale databases"; echo '```'; echo "${log:-no output}"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$exit_code" != 0 ]; then
+            echo "::error::The dropdb task failed (exit code $exit_code, $(jq -r '.tasks[0].stoppedReason // ""' <<<"$desc"))"; exit 1
+          fi

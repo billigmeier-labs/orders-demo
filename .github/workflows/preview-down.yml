@@ -1,8 +1,9 @@
 name: Preview down
 
-# Removes the preview of one PR: ECS service pr-<N>, its listener rule and target group, and every
-# revision of task definition orders-demo-pr-<N>. Database pr_<N> is left on the non-prod instance
-# (it goes with the environment on `just env down`). Called by preview.yml on close and by the reaper.
+# Removes the preview of one PR: ECS service pr-<N>, its listener rule and target group, every revision
+# of task definition orders-demo-pr-<N>, and database pr_<N> on the non-prod instance (a one-off
+# orders-demo-pr-dropdb task: postgres client, preview execution role and security group).
+# Called by preview.yml on close and by the reaper.
 on:
   workflow_call:
     inputs:
@@ -81,6 +82,34 @@ jobs:
             echo "Deleted target group $tg"
           fi
 
+      - name: Drop database pr_${{ env.PR }}
+        if: steps.env.outputs.up == 'true'
+        run: |
+          names=(subnets preview/security-group preview/dropdb-family demo-run)
+          params=$(aws ssm get-parameters --names "${names[@]/#//orders-demo/}" --query 'Parameters[].[Name,Value]' --output json)
+          get() { jq -r --arg n "/orders-demo/$1" '.[] | select(.[0] == $n) | .[1]' <<<"$params"; }
+          family=$(get preview/dropdb-family)
+          if [ -z "$family" ]; then echo "No dropdb task in this environment; database pr_$PR stays until \`just env down\`"; exit 0; fi
+          network="awsvpcConfiguration={subnets=[$(get subnets)],securityGroups=[$(get preview/security-group)],assignPublicIp=ENABLED}"
+          run=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$family" --launch-type FARGATE \
+            --started-by "preview-$PR" --network-configuration "$network" \
+            --tags key=preview,value="$NAME" key=project,value=orders-demo key=demo-run,value="$(get demo-run)" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"dropdb\",\"environment\":[{\"name\":\"PR\",\"value\":\"$PR\"}]}]}")
+          task=$(jq -r '.tasks[0].taskArn // empty' <<<"$run")
+          if [ -z "$task" ]; then echo "::error::RunTask failed: $(jq -c .failures <<<"$run")"; exit 1; fi
+          for _ in $(seq 1 120); do
+            [ "$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --query 'tasks[0].lastStatus' --output text)" = STOPPED ] && break
+            sleep 5
+          done
+          desc=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task")
+          exit_code=$(jq -r '.tasks[0].containers[] | select(.name == "dropdb") | .exitCode // "none"' <<<"$desc")
+          group=$(aws ssm get-parameter --name /orders-demo/preview/log-group --query Parameter.Value --output text)
+          aws logs get-log-events --log-group-name "$group" --log-stream-name "dropdb/dropdb/${task##*/}" \
+            --start-from-head --query 'events[].message' --output text | tr '\t' '\n' || true
+          if [ "$exit_code" != 0 ]; then
+            echo "::error::Dropping pr_$PR failed (exit code $exit_code, $(jq -r '.tasks[0].stoppedReason // ""' <<<"$desc"))"; exit 1
+          fi
+
       - name: Deregister task definitions
         run: |
           # --family-prefix orders-demo-pr-1 also matches pr-12, so keep the exact family only.
@@ -99,7 +128,7 @@ jobs:
             --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
           if [ -n "$id" ]; then
             body="$marker
-          Preview: removed (PR closed). Database \`pr_$PR\` was left on the non-prod instance."
+          Preview: removed (PR closed), database \`pr_$PR\` included."
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
           fi
 
@@ -114,7 +143,6 @@ jobs:
             echo "| | |"
             echo "| --- | --- |"
             echo "| Environment | preview \`$NAME\` |"
-            echo "| Removed | $([ "$UP" = true ] && echo "service, listener rule, target group, " || echo "(environment down) ")task definitions |"
-            echo "| Database | \`pr_$PR\` left on the non-prod instance |"
+            echo "| Removed | $([ "$UP" = true ] && echo "service, listener rule, target group, database \`pr_$PR\`, " || echo "(environment down) ")task definitions |"
             echo "| Result | $STATUS |"
           } >>"$GITHUB_STEP_SUMMARY"
