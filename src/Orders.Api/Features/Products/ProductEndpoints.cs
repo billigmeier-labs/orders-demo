@@ -26,6 +26,7 @@ internal static class ProductEndpoints
     {
         var products = api.MapGroup("/products").WithTags("Products");
         products.MapGet("/", List);
+        products.MapGet("/low-stock", LowStock);
         products.MapGet("/{id:guid}", Get);
         products.MapPost("/", Create);
         products.MapPost("/{id:guid}/restock", Restock);
@@ -36,6 +37,28 @@ internal static class ProductEndpoints
             .OrderBy(p => p.Sku)
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct));
+
+    internal const int DefaultLowStockThreshold = 5;
+
+    /// <summary>The threshold to use (default 5), or null when it is negative.</summary>
+    internal static int? ResolveLowStockThreshold(int? requested) =>
+        (requested ?? DefaultLowStockThreshold) is >= 0 and var limit ? limit : null;
+
+    /// <summary>Products with stock below the threshold (default 5), lowest stock first, ties by SKU.</summary>
+    private static async Task<Results<Ok<List<ProductResponse>>, ValidationProblem>> LowStock(
+        OrdersDbContext db, CancellationToken ct, int? threshold = null)
+    {
+        if (ResolveLowStockThreshold(threshold) is not { } limit)
+        {
+            return Problems.Invalid(nameof(threshold), "Threshold must be 0 or more.");
+        }
+
+        return TypedResults.Ok(await db.Products
+            .Where(p => p.Stock < limit)
+            .OrderBy(p => p.Stock).ThenBy(p => p.Sku)
+            .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
+            .ToListAsync(ct));
+    }
 
     private static async Task<Results<Ok<ProductResponse>, ProblemHttpResult>> Get(Guid id, OrdersDbContext db, CancellationToken ct) =>
         await db.Products.FindAsync([id], ct) is { } product

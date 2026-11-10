@@ -19,6 +19,14 @@ public class StockTests
     public void RestockRequest_MissingQuantity_IsInvalid() =>
         Assert.False(IsValid(new RestockRequest(null)));
 
+    [Theory]
+    [InlineData(null, 5)]
+    [InlineData(0, 0)]
+    [InlineData(12, 12)]
+    [InlineData(-1, null)]
+    public void LowStockThreshold_DefaultsToFive_AndRejectsNegative(int? requested, int? expected) =>
+        Assert.Equal(expected, ProductEndpoints.ResolveLowStockThreshold(requested));
+
     private static bool IsValid(object instance) =>
         Validator.TryValidateObject(instance, new ValidationContext(instance), null, validateAllProperties: true);
 

@@ -97,6 +97,53 @@ public class ProductTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task LowStock_ReturnsProductsBelowThresholdLowestFirst()
+    {
+        var low = await _client.CreateProductAsync(stock: 0);
+        var mid = await _client.CreateProductAsync(stock: 2);
+        var edge = await _client.CreateProductAsync(stock: 3);
+        var high = await _client.CreateProductAsync(stock: 100);
+
+        var result = await (await _client.Get("/api/products/low-stock?threshold=3")).ReadAsync<List<ProductResponse>>();
+
+        Assert.Contains(low, result);
+        Assert.Contains(mid, result);
+        Assert.DoesNotContain(edge, result);
+        Assert.DoesNotContain(high, result);
+        Assert.All(result, p => Assert.True(p.Stock < 3));
+        Assert.Equal(result.OrderBy(p => p.Stock).ThenBy(p => p.Sku, StringComparer.Ordinal).ToList(), result);
+        Assert.True(result.IndexOf(low) < result.IndexOf(mid));
+    }
+
+    [Fact]
+    public async Task LowStock_DefaultThresholdIsFive()
+    {
+        var four = await _client.CreateProductAsync(stock: 4);
+        var five = await _client.CreateProductAsync(stock: 5);
+
+        var result = await (await _client.Get("/api/products/low-stock")).ReadAsync<List<ProductResponse>>();
+
+        Assert.Contains(four, result);
+        Assert.DoesNotContain(five, result);
+    }
+
+    [Fact]
+    public async Task LowStock_ZeroThreshold_ReturnsEmptyList() =>
+        Assert.Empty(await (await _client.Get("/api/products/low-stock?threshold=0")).ReadAsync<List<ProductResponse>>());
+
+    [Fact]
+    public async Task LowStock_NegativeThreshold_Returns400Problem()
+    {
+        var problem = await (await _client.Get("/api/products/low-stock?threshold=-1")).ReadValidationProblemAsync();
+
+        Assert.Contains(problem.Errors.Keys, k => k.Equals("threshold", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task LowStock_NonIntegerThreshold_Returns400() =>
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.Get("/api/products/low-stock?threshold=abc")).StatusCode);
+
+    [Fact]
     public async Task Create_DuplicateSku_Returns409()
     {
         var sku = Api.UniqueSku();
