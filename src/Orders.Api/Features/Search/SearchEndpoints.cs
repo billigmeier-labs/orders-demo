@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FeatureManagement;
+using Npgsql;
 using Orders.Api.Data;
 using Orders.Api.Features.Orders;
 using Orders.Api.Features.Products;
@@ -46,14 +47,20 @@ internal static class SearchEndpoints
     {
         var contains = $"%{EscapeLike(term)}%";
 
-        var products = await db.Products
+        // The product and order lookups don't depend on each other, so run them side by side. A DbContext runs
+        // one query at a time, so the order lookup gets a second context on its own connection.
+        var connection = new NpgsqlConnection(db.Database.GetConnectionString());
+        await connection.OpenAsync(ct);
+        await using var ordersDb = new OrdersDbContext(new DbContextOptionsBuilder<OrdersDbContext>().UseNpgsql(connection).Options);
+
+        var products = db.Products
             .Where(p => EF.Functions.ILike(p.Name, contains, LikeEscape) || EF.Functions.ILike(p.Sku, contains, LikeEscape))
             .OrderBy(p => p.Sku)
             .Take(MaxResults)
             .Select(p => new ProductResponse(p.Id, p.Sku, p.Name, p.Price, p.Stock))
             .ToListAsync(ct);
 
-        var orders = await db.Orders
+        var orders = ordersDb.Orders
             .Where(o => o.Id.ToString().StartsWith(term) || EF.Functions.ILike(o.Customer.Name, contains, LikeEscape))
             .OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id)
             .Take(MaxResults)
@@ -61,7 +68,8 @@ internal static class SearchEndpoints
                 o.Id, o.CustomerId, o.Customer.Name, o.Status, Math.Round(o.Lines.Sum(l => l.UnitPrice * l.Quantity), 2), o.Lines.Count, o.CreatedAt))
             .ToListAsync(ct);
 
-        return new SearchResponse(products, orders);
+        await Task.WhenAll(products, orders);
+        return new SearchResponse(await products, await orders);
     }
 
     private static string EscapeLike(string value) =>
