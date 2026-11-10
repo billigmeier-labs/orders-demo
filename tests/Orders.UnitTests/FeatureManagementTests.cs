@@ -30,6 +30,7 @@ public class FeatureManagementTests
     [InlineData(40, 39.9, true)]
     [InlineData(40, 40, false)]
     [InlineData(0, 0, false)]
+    [InlineData(0, -1, false)]
     public async Task PercentAttribute_TurnsOnForThatShare(double percent, double roll, bool on)
     {
         _flags.Set("newCheckout", true, percent);
@@ -38,12 +39,27 @@ public class FeatureManagementTests
     }
 
     [Fact]
+    public async Task DefaultPercentFilter_RollsAcrossTheWholeRange()
+    {
+        var filter = new PercentFilter();
+        var full = PercentFilter.Configuration(100);
+        var none = PercentFilter.Configuration(0);
+
+        for (var i = 0; i < 100; i++)
+        {
+            Assert.True(await filter.EvaluateAsync(new FeatureFilterEvaluationContext { FeatureName = "f", Parameters = full.Parameters! }));
+            Assert.False(await filter.EvaluateAsync(new FeatureFilterEvaluationContext { FeatureName = "f", Parameters = none.Parameters! }));
+        }
+    }
+
+    [Fact]
     public void Define_OffHasNoFilters_OnIsAlwaysOn_FaultsArePercent()
     {
         Assert.Empty(FlagFeatureDefinitionProvider.Define(Flags.SearchV2, FeatureFlag.Off).EnabledFor);
         _flags.Set(Flags.SearchV2, true).Set(Flags.FaultSlowSearch, true);
 
-        Assert.Equal("AlwaysOn", Assert.Single(FlagFeatureDefinitionProvider.Define(Flags.SearchV2, _flags.GetFlag(Flags.SearchV2)).EnabledFor).Name);
+        var always = Assert.Single(FlagFeatureDefinitionProvider.Define(Flags.SearchV2, _flags.GetFlag(Flags.SearchV2)).EnabledFor);
+        Assert.Equal("AlwaysOn", always.Name);
         var fault = Assert.Single(FlagFeatureDefinitionProvider.Define(Flags.FaultSlowSearch, _flags.GetFlag(Flags.FaultSlowSearch)).EnabledFor);
         Assert.Equal(PercentFilter.Alias, fault.Name);
         Assert.Equal(FaultInjector.DefaultPercent, fault.Parameters.GetValue<double>("Value"));
