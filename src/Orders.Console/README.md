@@ -7,8 +7,8 @@ Design and content come from `docs/design/console-spike.dc.html`.
 
 | Mode | Path | What it shows |
 | --- | --- | --- |
-| Status | `/` (also `/status`) | Prod and staging health (`/health/ready`, `/api/version`), CloudWatch alarms, latest prod errors, GitHub activity (open issues by label, agent PRs, latest ci / ai-review / deploy runs), recent deploys, cost (month to date, today), feature flags with toggles, load generator controls, and every event the console has seen |
-| Present | `/present`, `/present?scenario=<id>` | The Tour (7 steps) and the scenario library, driven by real events |
+| Status | `/` (also `/status`) | Prod and staging health (`/health/ready`, `/api/version`) with requests, 5xx rate and p95 latency from the load balancer, CloudWatch alarms, latest prod errors, GitHub activity (open issues by triage label, agent PRs in flight, latest ci / ai-review / deploy runs), deploys and rollbacks, cost (month to date, today), feature flags with toggles, load generator controls (normal, peak, spike, soak, for N minutes), and every event the console has seen |
+| Present | `/present`, `/present?scenario=<id>` | The Tour (10 steps) and the scenario library, driven by real events |
 | Architecture | `/architecture` | The spike's diagram and component cards (static) |
 
 Every lifecycle stage and infrastructure term opens an explainer drawer: what it is, what it is built
@@ -27,8 +27,9 @@ docker run --rm -p 8080:8080 -e CONSOLE_FAKES=true -e CONSOLE_AUTH=off orders-co
 `CONSOLE_FAKES=true` swaps every GitHub and AWS dependency for `Integrations/Fakes/FakeWorld.cs`: realistic
 history plus a simulation that reacts to the console's actions one step (`CONSOLE_FAKE_STEP_SECONDS`, default 3)
 at a time. A new issue is triaged (`.github` or `migration` in the text goes to `needs-human`), an agent
-opens a PR, checks pass, the queue merges, the deploy succeeds; the `demo/canned-bug` PR deploys, alarms and
-rolls back; turning on `faultFailOrders` fires an alarm, opens an `incident` issue, and an agent's fix clears it.
+opens a PR, checks pass, the queue merges, staging then production succeed; the `demo/canned-bug` PR deploys, alarms and
+rolls back; the `demo/guardrails` PR fails PR rules and needs a code owner; turning on `searchV2` fires an alarm, opens an
+`incident` issue, and an agent's fix clears it. Load raises production's traffic, and the scoreboard keeps snapshots in memory.
 
 The Dockerfile is multi-stage, restores in locked mode from `packages.lock.json`, runs as the image's non-root
 `app` user on port 8080, and cross-publishes, so `--platform linux/arm64` builds on an amd64 host without emulation.
@@ -48,15 +49,18 @@ Build context: the repo root (like the API).
 | `GITHUB_REPOSITORY` | `billigmeier-labs/orders-demo` | |
 | `GITHUB_API_URL` | `https://api.github.com` | |
 | `AGENT_LOGIN` | `claude[bot]` | Author of agent PRs |
-| `GITHUB_WORKFLOWS` | `ci.yml,ai-review.yml,deploy.yml` | Workflows shown on Status; the first is used for CI duration |
-| `GITHUB_DEPLOY_WORKFLOW` | `deploy.yml` | Its runs become `deploy.started` / `deploy.succeeded` |
+| `GITHUB_WORKFLOWS` | `ci.yml,ai-review.yml,deploy.yml` | Workflows shown on Status; the first is used for CI duration (per run and per job) |
+| `GITHUB_DEPLOY_WORKFLOW` | `deploy.yml` | Its Staging and Production jobs become `deploy.started` / `deploy.succeeded` for `staging` / `prod` |
 | `PROD_URL`, `STAGING_URL` | `https://demo.joshb.app`, `https://staging.demo.joshb.app` | Health probes |
 | `AWS_REGION` | `us-east-1` | Cost Explorer always uses us-east-1. Credentials come from the default chain (ECS task role) |
 | `ECS_CLUSTER`, `ECS_PROD_SERVICE`, `ECS_STAGING_SERVICE` | `demo`, `prod`, `staging` | Deployments and rollbacks |
-| `ALARM_PREFIX` | `orders-` | Alarms shown and watched |
+| `ALARM_PREFIX` | `orders-` | Alarms shown and watched; the deploy alarms' `LoadBalancer`/`TargetGroup` dimensions (alarm names containing the ECS service names) say where to read each environment's ALB traffic |
 | `PROD_LOG_GROUP` | `/ecs/orders-api/prod` | Latest errors |
 | `ERROR_LOG_FILTER` | `?ERROR ?Error ?Exception` | CloudWatch Logs filter pattern |
-| `COST_PROJECT_TAG` | `orders-demo` | Cost Explorer filter on tag `project` |
+| `COST_PROJECT_TAG` | `orders-demo` | Cost Explorer filter on tag `project` (and `demo-run=<N>` for the run's cost) |
+| `DEMO_RUN_PARAMETER` | `/orders-demo/demo-run` | SSM parameter with the current demo run number |
+| `METRICS_BUCKET_PARAMETER`, `METRICS_BUCKET` | `/orders-demo/metrics-bucket`, unset | Where scoreboard snapshots go (`runs/<N>.json`); `METRICS_BUCKET` overrides the SSM lookup |
+| `MUTATION_SCORE_TARGET` | 60 | The scoreboard's mutation score target (Stryker's `low` threshold) |
 | `APPCONFIG_APPLICATION`, `APPCONFIG_ENVIRONMENT`, `APPCONFIG_PROFILE` | `orders-demo`, `prod`, `feature-flags` | Name or id of the feature-flag profile |
 | `APPCONFIG_DEPLOYMENT_STRATEGY` | `orders-demo-instant` | Name or id of the deployment strategy for flag toggles (see below) |
 | `LOADGEN_TASK_DEFINITION`, `LOADGEN_CONTAINER` | `loadgen`, `loadgen` | Started with env `SCENARIO` and `DURATION_MINUTES`, `startedBy=orders-console` |
@@ -87,10 +91,13 @@ loadgen task definition). Set `DATAPROTECTION_KEYS_PATH` to a mounted EFS direct
 than one task or should keep sign-ins across deploys. Health check path: `/health/live`. Google OAuth redirect URI:
 `https://console.demo.joshb.app/signin-oidc`.
 
-IAM the task role needs: `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory`, `logs:FilterLogEvents`,
-`ecs:DescribeServices`, `ecs:RunTask`, `ecs:TagResource` (on RunTask), `ecs:StopTask` (only tasks tagged `component=loadgen`), `ecs:ListTasks`, `ecs:DescribeTasks`, `iam:PassRole` (loadgen roles),
+IAM the task role needs: `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory`, `cloudwatch:GetMetricData`, `logs:FilterLogEvents`,
+`ecs:DescribeServices`, `ecs:DescribeTaskDefinition`, `ecs:ListServiceDeployments`, `ecs:DescribeServiceRevisions`, `ecs:RunTask`, `ecs:TagResource` (on RunTask), `ecs:StopTask` (only tasks tagged `component=loadgen`), `ecs:ListTasks`, `ecs:DescribeTasks`, `iam:PassRole` (loadgen roles),
 `appconfig:List*`, `appconfig:GetHostedConfigurationVersion`, `appconfig:CreateHostedConfigurationVersion`,
-`appconfig:StartDeployment`, `ce:GetCostAndUsage`.
+`appconfig:StartDeployment`, `ce:GetCostAndUsage`, `ssm:GetParameter` on `/orders-demo/demo-run` and `/orders-demo/metrics-bucket`,
+`s3:ListBucket` (prefix `runs/`) on the metrics bucket and `s3:GetObject` / `s3:PutObject` on `runs/*`. Without the ECS
+deployment-history permissions the deploy list falls back to the services' current deployments. For the run's cost, `demo-run`
+must be an activated cost allocation tag.
 
 ## How it works
 
@@ -99,8 +106,11 @@ IAM the task role needs: `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmH
   real ones (`Integrations/GitHub`, `Integrations/Aws`, `Integrations/Http`) or `FakeWorld` for all of them.
 - `Events/EventCollector.cs` polls every `IEventSource` and records events `{ at, kind, subject, detail, url }`
   (kinds from `docs/contracts.md`). Subjects: `issue#42`, `pr#57`, `prod`/`staging`, or an alarm name.
-  GitHub: issue events, issues, PRs, check runs of open PRs (`ci-ok`, `ai-review`), deploy workflow runs, all with ETags.
-  AWS: CloudWatch alarm history, ECS deployments that failed or rolled back.
+  GitHub: issue events, issues, PRs, check runs of open PRs (`ci-ok`, `ai-review`, `PR rules`, `Preview up`), the deploy
+  workflow's Staging and Production jobs, all with ETags. AWS: CloudWatch alarm history, ECS deployments that failed or rolled back.
+- `Status/ScoreboardService.cs` measures the spec's targets from GitHub (PRs, PR timelines for merge queue and review times,
+  Actions runs and jobs, the nightly mutation run's `mutation-score` annotation, `flaky` issues) and Cost Explorer, and saves
+  each run's snapshot to S3. Completed runs and merged PRs are read once and kept; the whole board is cached 5 minutes.
 - `Scenarios/ScenarioEngine.cs` runs one scenario at a time (in-memory lock, held until the run completes or is reset).
   A step with an action is `ready` until clicked; then it is `waiting` until every `wait` condition is seen, any
   `failOn` is seen (`failed`), or `timeoutSeconds` passes (`timedout`; "Keep waiting" extends it). Reset runs the
@@ -130,12 +140,16 @@ scoreboard). Add a file to add a scenario; the app refuses to start if one is in
 
 - Action kinds: `github.createIssue` (sets `{issue}`), `github.closeIssue`, `github.openPullRequest` (sets `{pr}`, turns on
   auto-merge), `github.closePullRequest`, `github.listIssues`, `github.listAwaitingReview`, `load.start`, `load.stop`,
-  `flags.set`, `scoreboard.show`.
+  `flags.set`, `scoreboard.show` (sets `{run}`, `{snapshot}`, `{snapshotUrl}`), `scoreboard.pastRuns`, `note.show`
+  (`text` lines, the last linked to `url`).
+- A step may have a `command` shown in a terminal box (the scoreboard's `just env down`).
 - A wait is an event (`kind`, optional `subject`, `detailContains`, and `capture` to store the number from the subject)
-  or a live `condition` (`alarms-ok`). `{agent}` is `AGENT_LOGIN`. `detailContains` is case-insensitive and `#4` does not
-  match `#42`.
-- Waits that name `{issue}`/`{pr}` accept events up to 60 s before the step started (clock skew); other waits only count
-  events after the previous step's evidence, so an old deploy or alarm cannot satisfy a new run.
+  or a live `condition`: `alarms-ok`, `prod-traffic` (production's latest minute has at least 100 requests),
+  `review-required` with `subject` `pr#{pr}` (GitHub's reviewDecision says it needs a review). `{agent}` is `AGENT_LOGIN`.
+  `detailContains` is case-insensitive and `#4` does not match `#42`.
+- Waits that name `{issue}`/`{pr}` accept events up to 60 s before the step started (clock skew), or since the run started
+  with `"sinceRunStart": true` (a preview can be up before the checks finish); other waits only count events after the
+  previous step's evidence, so an old deploy or alarm cannot satisfy a new run. Deploy waits name `#{pr}`.
 
 ## Hooks for the Playwright suite
 
@@ -145,10 +159,14 @@ scoreboard). Add a file to add a scenario; the app refuses to start if one is in
 | Fake mode badge | `[data-testid=fake-mode]`; also `body[data-fakes=true]` |
 | Signed-in identity | `[data-testid=identity]` |
 | Status panels | `[data-panel=health|alarms|deploys|cost|github|flags|load|errors|events]`; `[data-testid=panel-error]` when a source fails |
-| Environment health | `[data-env=prod][data-health=ready|down]`, `[data-testid=env-version]` |
+| Environment health | `[data-env=prod][data-health=ready|down]`, `[data-testid=env-version]`; traffic `[data-testid=traffic-prod|traffic-staging][data-latest-requests]` with `traffic-rate`, `traffic-errors`, `traffic-p95` |
+| GitHub activity | `[data-testid=open-issues]`, `[data-testid=triage-labels] [data-triage-label]`, `[data-testid=agent-in-flight]`, `[data-testid=agent-prs] [data-pr][data-pr-state]` |
+| Deploys | `[data-testid=rollback-count][data-rollbacks]`, `[data-testid=deploy-entry]`, `[data-testid=deploy-commit]` |
 | Alarms | `[data-alarm=<name>][data-alarm-state=OK|ALARM|INSUFFICIENT_DATA]` |
 | Feature flags | `[data-flag=<name>][data-flag-enabled=true|false]`, toggle `[data-testid=flag-toggle-<name>]` |
-| Load generator | `[data-testid=load-state][data-load-running]`, `[data-testid=load-start-normal]`, `load-start-spike`, `load-stop` |
+| Load generator | `[data-testid=load-state][data-load-running]`, `[data-testid=load-minutes]`, `[data-testid=load-start-normal]`, `load-start-peak`, `load-start-spike`, `load-start-soak`, `load-stop` |
+| Scoreboard | `[data-testid=scoreboard] [data-score-row=<id>][data-score-pass]`, `[data-testid=ci-jobs] [data-ci-job]`, `[data-testid=scoreboard-saved]`, `[data-testid=past-runs] [data-past-run]`, `[data-testid=step-command]` |
+| Live traffic (Tour) | `[data-testid=live-traffic]` |
 | Cost | `[data-testid=cost-mtd]`, `[data-testid=cost-today]` |
 | Event log | `[data-testid=event-log] [data-event-kind=<kind>]`; sources `[data-source][data-source-ok]` |
 | Scenario library | `[data-testid=scenario-library] [data-scenario=<id>]` (links) |
