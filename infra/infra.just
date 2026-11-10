@@ -192,7 +192,7 @@ down:
         ids=$(aws ecr list-images --repository-name "$r" --query 'imageIds[*].{imageDigest:imageDigest}' --output json 2>/dev/null || echo '[]')
         n=$(jq 'map(.imageDigest) | unique | length' <<<"$ids")
         [ "$n" = 0 ] && break
-        jq -c 'map({imageDigest}) | unique | _nwise(100)' <<<"$ids" | while read -r chunk; do
+        jq -c 'map({imageDigest}) | unique | . as $a | range(0; length; 100) | $a[.:.+100]' <<<"$ids" | while read -r chunk; do
           aws ecr batch-delete-image --repository-name "$r" --image-ids "$chunk" --query 'length(imageIds)' --output text \
             | xargs -I{} echo "Deleted {} images from $r"
         done
