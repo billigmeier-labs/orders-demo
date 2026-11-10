@@ -26,3 +26,7 @@
 
 # Sign-in and access control
 /src/Orders.Console/Auth/                   @jbilligmeier
+
+# Claude Code settings, hooks and MCP servers (loaded from the working tree)
+/.claude/                                   @jbilligmeier
+/.mcp.json                                  @jbilligmeier
