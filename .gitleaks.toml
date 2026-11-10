@@ -1,0 +1,7 @@
+# gitleaks: the default rules, plus reviewed false positives. Owned by the human (CODEOWNERS).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test platform settings: coverage attribute names (…CodeCoverage…) look like a Codecov token to the default rule"
+paths = ['''^tests/testconfig\.json$''']

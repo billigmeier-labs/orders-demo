@@ -120,9 +120,11 @@ public sealed record WorkflowRunSummary(string Workflow, string Status, string? 
 
 public sealed record LabelCount(string Label, int Count);
 
-public sealed record PullReviewState(int Number, string? ReviewDecision, string? MergeState)
+/// <param name="TouchesCodeOwned">The PR changes a path .github/CODEOWNERS gives to a person. GitHub doesn't ask the
+/// author to review their own PR, so a PR the code owner opened shows no review decision but still can't merge.</param>
+public sealed record PullReviewState(int Number, string? ReviewDecision, string? MergeState, bool TouchesCodeOwned = false)
 {
-    public bool ReviewRequired => ReviewDecision == "REVIEW_REQUIRED";
+    public bool ReviewRequired => ReviewDecision == "REVIEW_REQUIRED" || (TouchesCodeOwned && ReviewDecision != "APPROVED");
 }
 
 public sealed record EnvironmentTraffic(

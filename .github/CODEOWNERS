@@ -9,6 +9,7 @@
 /scripts/                                   @jbilligmeier
 /lefthook.yml                               @jbilligmeier
 /.gitleaksignore                            @jbilligmeier
+/.gitleaks.toml                              @jbilligmeier
 
 # Infrastructure and data
 /infra/                                     @jbilligmeier
