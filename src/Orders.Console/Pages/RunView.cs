@@ -1,5 +1,7 @@
 using Orders.Console.Content;
+using Orders.Console.Integrations;
 using Orders.Console.Scenarios;
+using Orders.Console.Status;
 
 namespace Orders.Console.Pages;
 
@@ -30,6 +32,15 @@ public sealed record RunView(
     public int ActiveIndex => Run is null ? 0 : Run.State == RunStates.Completed ? Steps.Count - 1 : Math.Max(0, Steps.ToList().FindIndex(s => s.Def.Id == Run.ActiveStepId));
 
     public IReadOnlyDictionary<string, string>? Vars => Run?.Vars;
+
+    /// <summary>The scoreboard last shown, for a scoreboard.show step.</summary>
+    public ScoreboardShown? Scoreboard { get; init; }
+
+    /// <summary>Saved runs last read, for a scoreboard.pastRuns step.</summary>
+    public IReadOnlyList<Scoreboard>? PastRuns { get; init; }
+
+    /// <summary>Live load balancer traffic, for a step on the traffic stage.</summary>
+    public Panel<IReadOnlyList<EnvironmentTraffic>>? Traffic { get; init; }
 
     public static RunView Build(ScenarioCatalog catalog, ScenarioDefinition scenario, RunSnapshot? current, string? view, DateTimeOffset now)
     {

@@ -52,3 +52,42 @@ for (const entry of library) {
     await resetFromPage(page);
   });
 }
+
+test('the scoreboard shows every number against its target, saves the run and compares past runs', async ({ page, request }) => {
+  const scenario = await getScenario(request, 'scoreboard');
+  await resetCurrentRun(request);
+  await page.goto('/present?scenario=scoreboard');
+
+  await driveStep(page, 'scoreboard', scenario.steps[0]);
+  await page.goto('/present?scenario=scoreboard&view=show');
+  const board = page.getByTestId('scoreboard');
+  await expect(board).toBeVisible();
+  for (const id of ['ci-p90', 'pr-size', 'pr-to-merge', 'merge-to-prod', 'change-failure', 'agent-clean', 'review-time', 'mutation']) {
+    const row = board.locator(`[data-score-row="${id}"]`);
+    await expect(row, id).toBeVisible();
+    await expect(row.locator('.pill'), `${id} verdict`).toHaveText(/^(met|missed|no data)$/);
+  }
+  for (const id of ['ci-p50', 'queue-wait', 'deploys', 'rollbacks', 'flaky', 'run-cost', 'cost']) {
+    await expect(board.locator(`[data-score-row="${id}"]`), id).toBeVisible();
+  }
+  await expect(board.getByTestId('ci-jobs').locator('[data-ci-job]').first()).toBeVisible();
+  if (!settings.live) {
+    await expect(board.getByTestId('scoreboard-saved')).toContainText('runs/');
+  }
+
+  await page.goto('/present?scenario=scoreboard');
+  await driveStep(page, 'scoreboard', scenario.steps[1]);
+  await page.goto('/present?scenario=scoreboard&view=past');
+  await expect(page.getByTestId('past-runs').locator('[data-past-run]').first()).toBeVisible();
+
+  await page.goto('/present?scenario=scoreboard');
+  await driveStep(page, 'scoreboard', scenario.steps[2]);
+  await page.goto('/present?scenario=scoreboard&view=teardown');
+  await expect(page.getByTestId('step-command')).toHaveText('just env down');
+  if (!settings.live) {
+    await expect(page.getByTestId('step-output-teardown')).toContainText('runs/');
+  }
+
+  await page.goto('/present?scenario=scoreboard');
+  await resetFromPage(page);
+});

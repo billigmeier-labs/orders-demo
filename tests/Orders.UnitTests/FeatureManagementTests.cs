@@ -1,0 +1,82 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.FeatureManagement;
+using Orders.Api.Infrastructure;
+
+namespace Orders.UnitTests;
+
+public class FeatureManagementTests
+{
+    private readonly FakeFeatureFlags _flags = new();
+
+    [Fact]
+    public async Task SearchV2_FollowsTheFlagWithNoPercent()
+    {
+        var features = Features.Manager(_flags, roll: 99.9);
+        Assert.False(await features.IsEnabledAsync(Flags.SearchV2, TestContext.Current.CancellationToken));
+
+        _flags.Set(Flags.SearchV2, true);
+        Assert.True(await features.IsEnabledAsync(Flags.SearchV2, TestContext.Current.CancellationToken));
+
+        _flags.Set(Flags.SearchV2, false);
+        Assert.False(await features.IsEnabledAsync(Flags.SearchV2, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task UnknownFeature_IsOff() =>
+        Assert.False(await Features.Manager(_flags).IsEnabledAsync("noSuchFlag", TestContext.Current.CancellationToken));
+
+    [Theory]
+    [InlineData(40, 39.9, true)]
+    [InlineData(40, 40, false)]
+    [InlineData(0, 0, false)]
+    public async Task PercentAttribute_TurnsOnForThatShare(double percent, double roll, bool on)
+    {
+        _flags.Set("newCheckout", true, percent);
+
+        Assert.Equal(on, await Features.Manager(_flags, roll).IsEnabledAsync("newCheckout", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Define_OffHasNoFilters_OnIsAlwaysOn_FaultsArePercent()
+    {
+        Assert.Empty(FlagFeatureDefinitionProvider.Define(Flags.SearchV2, FeatureFlag.Off).EnabledFor);
+        _flags.Set(Flags.SearchV2, true).Set(Flags.FaultSlowSearch, true);
+
+        Assert.Equal("AlwaysOn", Assert.Single(FlagFeatureDefinitionProvider.Define(Flags.SearchV2, _flags.GetFlag(Flags.SearchV2)).EnabledFor).Name);
+        var fault = Assert.Single(FlagFeatureDefinitionProvider.Define(Flags.FaultSlowSearch, _flags.GetFlag(Flags.FaultSlowSearch)).EnabledFor);
+        Assert.Equal(PercentFilter.Alias, fault.Name);
+        Assert.Equal(FaultInjector.DefaultPercent, fault.Parameters.GetValue<double>("Value"));
+    }
+
+    [Fact]
+    public async Task AllDefinitions_AreTheKnownFlags()
+    {
+        var names = new List<string>();
+        await foreach (var definition in new FlagFeatureDefinitionProvider(_flags).GetAllFeatureDefinitionsAsync())
+        {
+            names.Add(definition.Name);
+        }
+
+        Assert.Equal(Flags.All, names);
+    }
+
+    [Fact]
+    public async Task Registration_UsesTheFlagsNotConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection([KeyValuePair.Create<string, string?>("FeatureManagement:searchV2", "true")]).Build());
+        services.AddLogging();
+        services.AddSingleton<IFeatureFlags>(_flags);
+        services.AddAppFeatureManagement();
+        await using var provider = services.BuildServiceProvider();
+
+        var features = provider.GetRequiredService<IFeatureManager>();
+
+        Assert.IsType<FlagFeatureDefinitionProvider>(provider.GetRequiredService<IFeatureDefinitionProvider>());
+        Assert.False(await features.IsEnabledAsync(Flags.SearchV2));
+        _flags.Set(Flags.SearchV2, true);
+        Assert.True(await features.IsEnabledAsync(Flags.SearchV2));
+    }
+}

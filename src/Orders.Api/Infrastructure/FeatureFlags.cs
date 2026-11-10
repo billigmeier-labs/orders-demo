@@ -15,7 +15,8 @@ public sealed record FeatureFlag(bool Enabled, IReadOnlyDictionary<string, strin
 }
 
 /// <summary>
-/// Feature flags. In AWS they come from AppConfig (<see cref="AppConfigFeatureFlags"/>, used when APPCONFIG_APPLICATION
+/// Where flag values come from; the app reads features through Microsoft.FeatureManagement
+/// (<see cref="FlagFeatureDefinitionProvider"/>) and uses this directly only to log the values. In AWS they come from AppConfig (<see cref="AppConfigFeatureFlags"/>, used when APPCONFIG_APPLICATION
 /// is set); otherwise from configuration (<see cref="ConfigurationFeatureFlags"/>).
 /// </summary>
 public interface IFeatureFlags
@@ -35,6 +36,12 @@ public static class Flags
     public const string SearchV2 = "searchV2";
     public const string FaultSlowSearch = "faultSlowSearch";
     public const string FaultFailOrders = "faultFailOrders";
+
+    /// <summary>Every flag the API knows, in the order logs show them.</summary>
+    public static readonly IReadOnlyList<string> All = [SearchV2, FaultSlowSearch, FaultFailOrders];
+
+    /// <summary>Fault flags are on for a share of calls: their <c>percent</c> attribute, 20% when it is missing.</summary>
+    public static readonly IReadOnlySet<string> Faults = new HashSet<string>(StringComparer.Ordinal) { FaultSlowSearch, FaultFailOrders };
 }
 
 /// <summary>

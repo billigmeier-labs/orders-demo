@@ -557,6 +557,8 @@
           "AWSSDK.CloudWatchLogs": "[4.0.108.1, )",
           "AWSSDK.CostExplorer": "[4.0.101.9, )",
           "AWSSDK.ECS": "[4.0.110.2, )",
+          "AWSSDK.S3": "[4.0.104.11, )",
+          "AWSSDK.SimpleSystemsManagement": "[4.0.105, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.14, )"
         }
       },
@@ -602,6 +604,24 @@
         "requested": "[4.0.110.2, )",
         "resolved": "4.0.110.2",
         "contentHash": "PsFE1Xuvr/q0GbWT5t8RoeRbu6lTilwGlRyPzFNxwprmOvPCP7j3CbwfN8DdaMwLYBXJUm+K10/2JM8eT8DGng==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+        }
+      },
+      "AWSSDK.S3": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.104.11, )",
+        "resolved": "4.0.104.11",
+        "contentHash": "leP2ZC3gVaNHXZleKOMHmedex6fTrr6u1ZQFuezIGjT01oPwP0j6YI00jlPwlakTC0Uo5a0eOOY2Q/eYzsU9wg==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+        }
+      },
+      "AWSSDK.SimpleSystemsManagement": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.105, )",
+        "resolved": "4.0.105",
+        "contentHash": "ARyYdLn8cgmC2rUXGr10qRcItmPBmuESacIgWQpDZNntxCoStEXpn9TxRKHyjZAXtOiEw71yDP01vzd6hPu6gA==",
         "dependencies": {
           "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
         }

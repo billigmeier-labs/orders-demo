@@ -1,43 +1,45 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
+using Orders.Api.Features.Platform;
 using Orders.Api.Infrastructure;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace Orders.UnitTests;
 
 public class LoggingTests
 {
-    private static readonly AppJsonFormatterOptions Options = new()
-    {
-        IncludeScopes = true,
-        AppVersion = "1.2.3",
-        AppCommit = "abc1234",
-        AppEnvironment = "staging",
-    };
+    private static readonly AppInfo Info = new("1.2.3", "abc1234", "staging");
+
+    private readonly CapturingSink _sink = new();
+
+    private Logger Logger() => LoggingSetup.Configure(new LoggerConfiguration(), Info).WriteTo.Sink(_sink).CreateLogger();
 
     [Fact]
-    public void Write_AddsAppFieldsMessageAndState()
+    public void JsonLine_HasTheReleaseTheMessageAndTheProperties()
     {
-        var line = Format(LogLevel.Information, "Request {Method} {Path}", ["GET", "/api/orders"]);
+        using (var logger = Logger())
+        {
+            logger.ForContext("SourceContext", "Test").Information("Request {Method} {Path}", "GET", "/api/orders");
+        }
 
-        using var json = JsonDocument.Parse(line);
+        using var json = JsonDocument.Parse(_sink.Json.Single());
         var root = json.RootElement;
         Assert.Equal("1.2.3", root.GetProperty("AppVersion").GetString());
         Assert.Equal("abc1234", root.GetProperty("AppCommit").GetString());
         Assert.Equal("staging", root.GetProperty("AppEnvironment").GetString());
-        Assert.Equal("Information", root.GetProperty("LogLevel").GetString());
-        Assert.Equal("Test", root.GetProperty("Category").GetString());
-        Assert.Equal("Request GET /api/orders", root.GetProperty("Message").GetString());
-        Assert.Equal("/api/orders", root.GetProperty("State").GetProperty("Path").GetString());
-        Assert.False(root.TryGetProperty("Exception", out _));
-        Assert.EndsWith(Environment.NewLine, line, StringComparison.Ordinal);
-        Assert.Single(line.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal("Request \"GET\" \"/api/orders\"", root.GetProperty("@m").GetString());
+        Assert.Equal("/api/orders", root.GetProperty("Path").GetString());
+        Assert.Equal("Test", root.GetProperty("SourceContext").GetString());
+        Assert.False(root.TryGetProperty("@x", out _));
+        Assert.DoesNotContain('\n', _sink.Json.Single());
     }
 
     [Fact]
-    public void Write_Exception_IncludesTheStack()
+    public void Exception_IsOneLineWithTheStack()
     {
         Exception thrown;
         try
@@ -49,59 +51,102 @@ public class LoggingTests
             thrown = ex;
         }
 
-        using var json = JsonDocument.Parse(Format(LogLevel.Error, "Failed", [], thrown));
-
-        var exception = json.RootElement.GetProperty("Exception").GetString();
-        Assert.Contains("InvalidOperationException: boom", exception, StringComparison.Ordinal);
-        Assert.Contains(nameof(Write_Exception_IncludesTheStack), exception, StringComparison.Ordinal);
-    }
-
-    private static string Format(LogLevel level, string template, object?[] args, Exception? exception = null)
-    {
-        using var formatter = new AppJsonFormatter(new StaticOptions(Options));
-        var state = new TemplateState(template, args);
-        using var writer = new StringWriter(CultureInfo.InvariantCulture);
-        formatter.Write(
-            new LogEntry<TemplateState>(level, "Test", new EventId(1, "Test"), state, exception, (s, _) => s.ToString()),
-            new LoggerExternalScopeProvider(),
-            writer);
-        return writer.ToString();
-    }
-
-    /// <summary>A minimal structured state like the one LoggerMessage produces.</summary>
-    private sealed class TemplateState(string template, object?[] args) : IReadOnlyList<KeyValuePair<string, object?>>
-    {
-        private readonly List<KeyValuePair<string, object?>> _pairs = [.. Names(template).Zip(args, KeyValuePair.Create), new("{OriginalFormat}", template)];
-
-        public int Count => _pairs.Count;
-
-        public KeyValuePair<string, object?> this[int index] => _pairs[index];
-
-        public IEnumerator<KeyValuePair<string, object?>> GetEnumerator() => _pairs.GetEnumerator();
-
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-
-        public override string ToString()
+        using (var logger = Logger())
         {
-            var text = template;
-            foreach (var (key, value) in _pairs.Take(args.Length))
-            {
-                text = text.Replace($"{{{key}}}", Convert.ToString(value, CultureInfo.InvariantCulture), StringComparison.Ordinal);
-            }
-
-            return text;
+            logger.Error(thrown, "Failed");
         }
 
-        private static IEnumerable<string> Names(string template) =>
-            System.Text.RegularExpressions.Regex.Matches(template, @"\{(\w+)\}").Select(m => m.Groups[1].Value);
+        var line = _sink.Json.Single();
+        Assert.DoesNotContain('\n', line);
+        using var json = JsonDocument.Parse(line);
+        Assert.Equal("Error", json.RootElement.GetProperty("@l").GetString());
+        var exception = json.RootElement.GetProperty("@x").GetString();
+        Assert.Contains("InvalidOperationException: boom", exception, StringComparison.Ordinal);
+        Assert.Contains(nameof(Exception_IsOneLineWithTheStack), exception, StringComparison.Ordinal);
     }
 
-    private sealed class StaticOptions(AppJsonFormatterOptions value) : IOptionsMonitor<AppJsonFormatterOptions>
+    [Fact]
+    public void EfCoreCommandFailures_AreNotLogged()
     {
-        public AppJsonFormatterOptions CurrentValue => value;
+        using (var logger = Logger())
+        {
+            logger.ForContext("SourceContext", "Microsoft.EntityFrameworkCore.Database.Command").Error("Failed executing DbCommand");
+            logger.ForContext("SourceContext", "Microsoft.AspNetCore.Routing.EndpointMiddleware").Information("Executing endpoint");
+        }
 
-        public AppJsonFormatterOptions Get(string? name) => value;
+        Assert.Empty(_sink.Events);
+    }
 
-        public IDisposable? OnChange(Action<AppJsonFormatterOptions, string?> listener) => null;
+    [Fact]
+    public void DuringAnActivity_TraceIdAndSpanIdAreProperties()
+    {
+        using var activity = new Activity("test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using (var logger = Logger())
+        {
+            logger.Information("inside");
+        }
+
+        using var json = JsonDocument.Parse(_sink.Json.Single());
+        Assert.Equal(activity.TraceId.ToHexString(), json.RootElement.GetProperty("TraceId").GetString());
+        Assert.Equal(activity.SpanId.ToHexString(), json.RootElement.GetProperty("SpanId").GetString());
+    }
+
+    [Theory]
+    [InlineData(null, "none")]
+    [InlineData("  ", "none")]
+    [InlineData("create-order", "create-order")]
+    [InlineData("Search", "search")]
+    [InlineData("search?q=secret", "invalid")]
+    [InlineData("a b", "invalid")]
+    [InlineData("01234567890123456789012345678901234567890", "invalid")]
+    public void Journey_IsAShortSafeToken(string? header, string expected) =>
+        Assert.Equal(expected, LoggingSetup.Journey(header));
+
+    [Fact]
+    public void FlagValues_ListEveryFlagWithPercentForFaults()
+    {
+        var flags = new FakeFeatureFlags().Set(Flags.SearchV2, true).Set(Flags.FaultFailOrders, true, percent: 35);
+
+        var values = LoggingSetup.FlagValues(flags);
+
+        Assert.Equal(Flags.All.Order(StringComparer.Ordinal), values.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("on", values[Flags.SearchV2]);
+        Assert.Equal("on 35%", values[Flags.FaultFailOrders]);
+        Assert.Equal("off", values[Flags.FaultSlowSearch]);
+    }
+
+    [Fact]
+    public async Task RequestContext_IsOnEveryLineLoggedDuringTheRequest()
+    {
+        using var logger = Logger();
+        var flags = new FakeFeatureFlags().Set(Flags.SearchV2, true);
+        var middleware = new RequestLogContextMiddleware(_ => { logger.Information("handling"); return Task.CompletedTask; }, flags);
+        var context = new DefaultHttpContext { TraceIdentifier = "0HN8V1K2Q3R4S:00000001" };
+        context.Request.Headers[LoggingSetup.JourneyHeader] = "view-orders";
+
+        await middleware.InvokeAsync(context);
+        logger.Information("after");
+
+        var during = _sink.Events[0];
+        Assert.Equal("\"view-orders\"", during.Properties["Journey"].ToString());
+        Assert.Equal("\"0HN8V1K2Q3R4S:00000001\"", during.Properties["RequestId"].ToString());
+        using var json = JsonDocument.Parse(_sink.Json[0]);
+        Assert.Equal("on", json.RootElement.GetProperty("Flags").GetProperty(Flags.SearchV2).GetString());
+        Assert.False(_sink.Events[1].Properties.ContainsKey("Journey"));
+    }
+
+    private sealed class CapturingSink : ILogEventSink
+    {
+        public List<LogEvent> Events { get; } = [];
+
+        public List<string> Json { get; } = [];
+
+        public void Emit(LogEvent logEvent)
+        {
+            Events.Add(logEvent);
+            using var writer = new StringWriter(CultureInfo.InvariantCulture);
+            LoggingSetup.JsonFormatter.Format(logEvent, writer);
+            Json.Add(writer.ToString().TrimEnd('\r', '\n'));
+        }
     }
 }

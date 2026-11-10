@@ -32,9 +32,23 @@ public sealed class SwitchConditions : IConditionEvaluator
 {
     public bool AlarmsOk { get; set; }
 
-    public IReadOnlySet<string> Names { get; } = new HashSet<string> { "alarms-ok" };
+    /// <summary>Subjects review-required was asked about, and the answer it gives.</summary>
+    public List<string?> ReviewSubjects { get; } = [];
 
-    public Task<bool> EvaluateAsync(string name, CancellationToken ct) => Task.FromResult(AlarmsOk);
+    public bool ReviewRequired { get; set; }
+
+    public IReadOnlySet<string> Names { get; } = new HashSet<string> { "alarms-ok", "review-required", "prod-traffic" };
+
+    public Task<bool> EvaluateAsync(string name, string? subject, CancellationToken ct)
+    {
+        if (name == "review-required")
+        {
+            ReviewSubjects.Add(subject);
+            return Task.FromResult(ReviewRequired);
+        }
+
+        return Task.FromResult(AlarmsOk);
+    }
 }
 
 /// <summary>An engine wired to in-memory parts and a controllable clock.</summary>

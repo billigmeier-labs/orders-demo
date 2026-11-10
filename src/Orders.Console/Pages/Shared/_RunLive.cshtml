@@ -72,6 +72,10 @@
             <div class="eyebrow accent">@stageName</div>
             <h1 class="narration-title" data-testid="step-title">@step.Def.Title</h1>
             <p class="narration-text">@step.Def.Narration</p>
+            @if (step.Def.Command is { } command)
+            {
+                <div class="cmd" data-testid="step-command">@command</div>
+            }
             @if (explain is not null)
             {
                 <button type="button" class="explain-link" data-explain="@explain.Id" data-testid="explain-current">
@@ -180,6 +184,31 @@
                         <a class="chip" href="https://pr-@(pr).demo.joshb.app" target="_blank" rel="noopener">Preview pr-@pr</a>
                     }
                 </div>
+            }
+
+            @if (v.Traffic is { } traffic)
+            {
+                <div class="traffic-row" data-testid="live-traffic">
+                    @if (traffic.Value is { } envs)
+                    {
+                        foreach (var t in envs)
+                        {
+                            <div class="traffic-card"><div class="sub-head">@(t.Environment == "prod" ? "Production" : "Staging")</div><partial name="_Traffic" model="t" /></div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="error" data-testid="panel-error">@traffic.Error</p>
+                    }
+                </div>
+            }
+            @if (v.Scoreboard is { } shown)
+            {
+                <partial name="_Scoreboard" model="shown" />
+            }
+            @if (v.PastRuns is { } past)
+            {
+                <partial name="_PastRuns" model="past" />
             }
 
             <ol class="steps" data-testid="steps">

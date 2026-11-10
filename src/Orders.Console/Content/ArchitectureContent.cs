@@ -61,12 +61,12 @@ public static class ArchitectureContent
         [
             new("ECS cluster: orders-demo", "Runs every container. A service keeps tasks running; a task is one running copy of a container.",
             [
-                new("service api-prod", "2 tasks of the API"),
-                new("service api-staging", "1 task of the API"),
+                new("service api-prod", "2 tasks of the API, each with an OpenTelemetry collector sidecar"),
+                new("service api-staging", "1 task of the API, with its collector sidecar"),
                 new("service pr-<N>", "1 task per open PR preview"),
                 new("service console", "This demo console"),
                 new("task migrate", "One-off; runs database migrations, then exits"),
-                new("task loadgen", "NBomber scenarios, started from the console"),
+                new("task loadgen", "NBomber scenarios (normal, peak, spike, soak), started from the console; requests carry X-Journey"),
             ], "ecs"),
             new("Load balancer", "Receives web traffic and sends it to the right service by hostname.",
             [
@@ -89,12 +89,13 @@ public static class ArchitectureContent
             ], "rds"),
             new("AppConfig", "Feature flags the app reads at run time, toggled from the console.",
             [
-                new("Feature flags", "One set each for prod, staging and previews"),
+                new("Feature flags", "One set each for prod, staging and previews; the API polls every 15 s and reads them through Microsoft.FeatureManagement"),
                 new("Fault flags", "Switch on known-bad paths for demos"),
             ], "appconfig"),
             new("CloudWatch and X-Ray", "Where logs, metrics, traces and alarms live.",
             [
-                new("Log groups", "/ecs/orders-demo/<service>; the API logs structured JSON"),
+                new("Log groups", "/ecs/orders-demo/<service>; the API logs one Serilog JSON line per request with its journey, flag values, version and trace id"),
+                new("Metrics", "Load balancer requests, 5xx and latency per environment; the API's OpenTelemetry metrics per endpoint (namespace OrdersDemo)"),
                 new("Alarms", "5xx count and p95 latency per service; also trigger rollback"),
                 new("X-Ray", "Traces from request to database"),
             ], "cloudwatch"),
@@ -102,7 +103,7 @@ public static class ArchitectureContent
             [
                 new("Alarm rule", "Alarm fires or recovers › starts incident.yml in GitHub"),
             ], "eventbridge"),
-            new("IAM roles", "Who may do what. GitHub signs in with OIDC, so no keys are stored anywhere.",
+            new("IAM roles", "Who may do what. GitHub Actions signs in with OIDC, so there are no AWS keys anywhere; the GitHub App key and a GitHub token live in repository secrets and Secrets Manager.",
             [
                 new("orders-demo-deploy", "deploy.yml on main: staging and prod"),
                 new("orders-demo-preview", "PR preview workflows; preview resources only"),
@@ -120,7 +121,13 @@ public static class ArchitectureContent
             new("Cost Explorer", "What the demo costs, by tag, shown on the console.",
             [
                 new("project tag", "Every demo resource carries project=orders-demo"),
+                new("demo-run tag", "And demo-run=<N>, so the scoreboard can show what one run cost"),
             ], "cost-explorer"),
+            new("Scoreboard snapshots", "A copy of the scoreboard per demo run, kept across teardowns.",
+            [
+                new("SSM /orders-demo/demo-run", "The current run number"),
+                new("S3 metrics bucket › runs/<N>.json", "Written when the scoreboard is shown; read for Past runs"),
+            ], "scoreboard"),
         ]),
         new("Outside services", "called over the internet", "0.8 1 300px",
         [

@@ -305,12 +305,13 @@ public sealed partial class ScenarioEngine(
             }
 
             var now = time.GetUtcNow();
-            var seen = events.Since(step.Floor - ClockSlack);
+            var seen = events.Since((step.Def.Wait.Concat(step.Def.FailOn).Any(w => w.SinceRunStart) ? run.StartedAt : step.Floor) - ClockSlack);
 
             // Correlated conditions (about issue #{issue}, PR #{pr}) tolerate clock skew between the
             // console and GitHub/AWS. Uncorrelated ones (any deploy, any alarm) only count events after
             // the previous step's evidence, so an earlier run's deploy or rollback cannot match.
-            bool InWindow(WaitCondition c, ConsoleEvent e) => e.At >= (Matching.IsCorrelated(c) ? step.Floor - ClockSlack : step.Floor);
+            bool InWindow(WaitCondition c, ConsoleEvent e) =>
+                e.At >= (!Matching.IsCorrelated(c) ? step.Floor : c.SinceRunStart ? run.StartedAt - ClockSlack : step.Floor - ClockSlack);
 
             foreach (var fail in step.Def.FailOn)
             {
@@ -336,7 +337,13 @@ public sealed partial class ScenarioEngine(
                 var wait = step.Def.Wait[i];
                 if (wait.Condition is not null)
                 {
-                    if (await conditions.EvaluateAsync(wait.Condition, ct))
+                    string? subject = null;
+                    if (wait.Subject is not null && !Matching.TryFill(wait.Subject, run.Vars, out subject))
+                    {
+                        continue;
+                    }
+
+                    if (await conditions.EvaluateAsync(wait.Condition, subject, ct))
                     {
                         step.Satisfied[i] = true;
                         step.LatestMatch = Max(step.LatestMatch, now);

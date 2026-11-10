@@ -20,7 +20,11 @@
         }
       },
       "wait": [
-        { "kind": "issue.opened", "subject": "issue#{issue}", "description": "GitHub records the new issue" }
+        {
+          "kind": "issue.opened",
+          "subject": "issue#{issue}",
+          "description": "GitHub records the new issue"
+        }
       ],
       "timeoutSeconds": 120
     },
@@ -30,10 +34,24 @@
       "title": "An AI triager decides who should do it",
       "narration": "Within seconds, a triage job scores the issue for risk and difficulty. Low-risk work goes straight to an agent. Anything risky waits for a human.",
       "wait": [
-        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["agent"], "description": "Triage labels the issue agent" }
+        {
+          "kind": "issue.labeled",
+          "subject": "issue#{issue}",
+          "detailContains": [
+            "agent"
+          ],
+          "description": "Triage labels the issue agent"
+        }
       ],
       "failOn": [
-        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["needs-human"], "description": "Triage sent it to a human instead" }
+        {
+          "kind": "issue.labeled",
+          "subject": "issue#{issue}",
+          "detailContains": [
+            "needs-human"
+          ],
+          "description": "Triage sent it to a human instead"
+        }
       ],
       "timeoutSeconds": 600
     },
@@ -43,7 +61,15 @@
       "title": "An agent writes the code and the tests",
       "narration": "The agent works in a fresh machine in GitHub Actions. It reads the repo rules, writes the change and its tests, and runs the same checks you would run locally.",
       "wait": [
-        { "kind": "pr.opened", "detailContains": ["{agent}", "#{issue}"], "capture": "pr", "description": "The agent opens a pull request that closes the issue" }
+        {
+          "kind": "pr.opened",
+          "detailContains": [
+            "{agent}",
+            "#{issue}"
+          ],
+          "capture": "pr",
+          "description": "The agent opens a pull request that closes the issue"
+        }
       ],
       "timeoutSeconds": 2400
     },
@@ -51,14 +77,57 @@
       "id": "checks",
       "stage": "checks",
       "title": "Every check runs on every PR, in parallel",
-      "narration": "Build, tests, security scans and an AI review all run at once. A preview copy of the app is live for this PR alone. If the AI review finds a problem, the agent fixes it and the checks run again. Nothing merges unless everything is green.",
+      "narration": "Build, tests, security scans, the PR rules and an AI review all run at once, each on its own fresh machine. If the AI review finds a problem, the agent fixes it and the checks run again. Nothing merges unless the two required checks are green.",
       "wait": [
-        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: success"], "description": "Required check ci-ok passes" },
-        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ai-review: success"], "description": "Required check ai-review passes" }
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "ci-ok: success"
+          ],
+          "description": "Required check ci-ok passes"
+        },
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "ai-review: success"
+          ],
+          "description": "Required check ai-review passes"
+        }
       ],
       "failOn": [
-        { "kind": "check.completed", "subject": "pr#{pr}", "detailContains": ["ci-ok: failure"], "description": "ci-ok failed" },
-        { "kind": "issue.labeled", "subject": "pr#{pr}", "detailContains": ["needs-human"], "description": "The AI review blocked the PR twice, so it waits for a person" }
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "ci-ok: failure"
+          ],
+          "description": "ci-ok failed"
+        },
+        {
+          "kind": "issue.labeled",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "needs-human"
+          ],
+          "description": "The AI review blocked the PR twice, so it waits for a person"
+        }
+      ],
+      "timeoutSeconds": 1800
+    },
+    {
+      "id": "preview",
+      "stage": "preview",
+      "title": "A preview copy of the app, for this PR alone",
+      "narration": "While the checks run, the PR's own image starts in AWS at its own address, with its own database. Anyone can click through the change before it merges. It is deleted when the PR closes.",
+      "wait": [
+        {
+          "kind": "preview.up",
+          "subject": "pr#{pr}",
+          "sinceRunStart": true,
+          "description": "The preview for this PR is up"
+        }
       ],
       "timeoutSeconds": 1800
     },
@@ -68,35 +137,108 @@
       "title": "The merge queue keeps main working",
       "narration": "Before merging, the queue re-tests the PR on top of the latest main, so two good changes cannot break each other, and builds the image that will ship. Then it merges, with no button pressed.",
       "wait": [
-        { "kind": "pr.merged", "subject": "pr#{pr}", "description": "The merge queue merges the PR into main" }
+        {
+          "kind": "pr.merged",
+          "subject": "pr#{pr}",
+          "description": "The merge queue merges the PR into main"
+        }
       ],
       "timeoutSeconds": 1800
     },
     {
-      "id": "deploy",
-      "stage": "deploy",
-      "title": "Merging is deploying",
-      "narration": "The image CI already built goes to staging, passes smoke tests, then rolls out to production. If the new version is unhealthy, AWS rolls it back on its own.",
+      "id": "staging",
+      "stage": "staging",
+      "title": "Merging is deploying: staging first",
+      "narration": "The image the merge queue built goes to staging, with no rebuild and no button. Migrations run first, then smoke tests. If staging fails, production never sees the change.",
       "wait": [
-        { "kind": "deploy.succeeded", "subject": "prod", "detailContains": ["#{pr}"], "description": "The new version is live in production" }
+        {
+          "kind": "deploy.succeeded",
+          "subject": "staging",
+          "detailContains": [
+            "#{pr}"
+          ],
+          "description": "The new version passes on staging"
+        }
       ],
       "failOn": [
-        { "kind": "deploy.rolledback", "subject": "prod", "description": "Production rolled the release back" }
+        {
+          "kind": "deploy.rolledback",
+          "subject": "staging",
+          "description": "Staging rolled the release back"
+        }
       ],
       "timeoutSeconds": 1800
+    },
+    {
+      "id": "production",
+      "stage": "production",
+      "title": "Then production, on its own",
+      "narration": "Staging is green, so production follows automatically: the merge was the approval. ECS swaps the tasks one at a time while alarms watch. If the new version is unhealthy, AWS rolls it back without anyone being paged.",
+      "wait": [
+        {
+          "kind": "deploy.succeeded",
+          "subject": "prod",
+          "detailContains": [
+            "#{pr}"
+          ],
+          "description": "The new version is live in production"
+        }
+      ],
+      "failOn": [
+        {
+          "kind": "deploy.rolledback",
+          "subject": "prod",
+          "description": "Production rolled the release back"
+        }
+      ],
+      "timeoutSeconds": 1800
+    },
+    {
+      "id": "traffic",
+      "stage": "traffic",
+      "title": "Real traffic reaches the new version",
+      "narration": "A load generator plays customers browsing, searching and ordering for a few minutes. Watch the requests arrive on production, with the error rate and latency the load balancer measures. Every request says which journey it belongs to, so the logs can tell them apart.",
+      "action": {
+        "label": "Start a few minutes of normal load",
+        "kind": "load.start",
+        "args": {
+          "scenario": "normal",
+          "durationMinutes": "5"
+        }
+      },
+      "wait": [
+        {
+          "condition": "prod-traffic",
+          "description": "Production reports the load generator's requests"
+        }
+      ],
+      "timeoutSeconds": 420
     },
     {
       "id": "monitor",
       "stage": "monitor",
       "title": "Production watches itself",
-      "narration": "Logs, metrics and alarms track every request. When something breaks, an agent investigates and opens an issue, and the loop starts again.",
+      "narration": "Every request is logged as one line with its journey, the flag values and the version, and the metrics and alarms watch every endpoint. When something breaks, an agent investigates and opens an issue, and the loop starts again.",
       "wait": [
-        { "condition": "alarms-ok", "description": "Every production alarm is OK" }
+        {
+          "condition": "alarms-ok",
+          "description": "Every production alarm is OK"
+        }
       ],
       "timeoutSeconds": 600
     }
   ],
   "reset": [
-    { "label": "Close the demo issue", "kind": "github.closeIssue", "args": { "number": "{issue}" } }
+    {
+      "label": "Stop the load generator",
+      "kind": "load.stop"
+    },
+    {
+      "label": "Close the demo issue",
+      "kind": "github.closeIssue",
+      "args": {
+        "number": "{issue}"
+      }
+    }
   ]
 }

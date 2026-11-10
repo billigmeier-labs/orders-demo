@@ -97,7 +97,7 @@
     },
     {
       "id": "deploy",
-      "stage": "deploy",
+      "stage": "production",
       "title": "The fix deploys",
       "narration": "Merging deploys the fix to staging and then production.",
       "wait": [

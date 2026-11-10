@@ -84,7 +84,8 @@ public interface IConditionEvaluator
 {
     IReadOnlySet<string> Names { get; }
 
-    Task<bool> EvaluateAsync(string name, CancellationToken ct);
+    /// <param name="subject">The condition's argument with run variables filled in, e.g. "pr#57"; null when it has none.</param>
+    Task<bool> EvaluateAsync(string name, string? subject, CancellationToken ct);
 }
 
 public sealed class MissingVariableException(string name) : Exception($"The run has no value for {{{name}}} yet.")

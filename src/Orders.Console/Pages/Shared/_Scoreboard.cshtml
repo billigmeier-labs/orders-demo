@@ -1,0 +1,49 @@
+@model ScoreboardShown
+@{
+    var board = Model.Board;
+}
+<div class="scoreboard" data-testid="scoreboard" data-run="@(board.Run ?? "")">
+    <div class="row-between">
+        <div class="sub-head">Demo run @(board.Run ?? "unknown") · @Fmt.Time(board.At)</div>
+        @if (Model.Saved is { } saved)
+        {
+            <a class="small" data-testid="scoreboard-saved" href="@saved.Url" target="_blank" rel="noopener">Saved to @saved.Location</a>
+        }
+        else
+        {
+            <span class="muted small" data-testid="scoreboard-not-saved">Not saved: @Model.SaveError</span>
+        }
+    </div>
+    <div class="score-wrap">
+        <table class="score">
+            <thead><tr><th>Measure</th><th>Now</th><th>Target</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var r in board.Rows)
+                {
+                    var (verdict, css) = Fmt.Verdict(r.Pass);
+                    <tr data-score-row="@r.Id" data-score-pass="@(r.Pass switch { true => "true", false => "false", null => "" })">
+                        <td>@r.Name<span class="muted small block">@r.Hint</span></td>
+                        <td class="value" data-testid="score-value">@r.Value</td>
+                        <td class="small">@(r.Target ?? "")</td>
+                        <td>@if (r.Target is not null) { <span class="pill @css small">@verdict</span> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (board.Jobs.Count > 0)
+    {
+        <div class="sub-head">CI time per job</div>
+        <div class="score-wrap">
+            <table class="score" data-testid="ci-jobs">
+                <thead><tr><th>Job</th><th>p50</th><th>p90</th><th>Runs</th></tr></thead>
+                <tbody>
+                    @foreach (var j in board.Jobs)
+                    {
+                        <tr data-ci-job="@j.Name"><td>@j.Name</td><td>@ScoreboardService.Format(j.P50)</td><td>@ScoreboardService.Format(j.P90)</td><td>@j.Runs</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

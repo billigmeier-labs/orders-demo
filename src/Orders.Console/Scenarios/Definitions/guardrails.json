@@ -1,14 +1,14 @@
 {
   "id": "guardrails",
   "title": "Guardrails: agents cannot change the rules",
-  "summary": "Ask for a change to the CI workflow and watch triage hand it to a human.",
+  "summary": "An agent's change that skips a test and edits CI is stopped twice: triage hands it to a human, and the PR is blocked.",
   "order": 30,
   "steps": [
     {
       "id": "issue",
       "stage": "issue",
       "title": "Ask for a change to the pipeline itself",
-      "narration": "This issue asks to edit a file under .github/. Agents are not allowed to touch the workflows, rules or CODEOWNERS.",
+      "narration": "This issue asks to edit a file under .github/ to make CI faster. Agents are not allowed to touch the workflows, rules or CODEOWNERS, and CI may not get weaker to go faster.",
       "action": {
         "label": "Create the guardrails issue",
         "kind": "github.createIssue",
@@ -19,7 +19,11 @@
         }
       },
       "wait": [
-        { "kind": "issue.opened", "subject": "issue#{issue}", "description": "GitHub records the new issue" }
+        {
+          "kind": "issue.opened",
+          "subject": "issue#{issue}",
+          "description": "GitHub records the new issue"
+        }
       ],
       "timeoutSeconds": 120
     },
@@ -29,15 +33,117 @@
       "title": "Triage sends it to a human",
       "narration": "The triager sees that the change touches .github/ and labels it needs-human instead of assigning an agent.",
       "wait": [
-        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["needs-human"], "description": "Triage labels the issue needs-human" }
+        {
+          "kind": "issue.labeled",
+          "subject": "issue#{issue}",
+          "detailContains": [
+            "needs-human"
+          ],
+          "description": "Triage labels the issue needs-human"
+        }
       ],
       "failOn": [
-        { "kind": "issue.labeled", "subject": "issue#{issue}", "detailContains": ["agent"], "description": "Triage gave it to an agent" }
+        {
+          "kind": "issue.labeled",
+          "subject": "issue#{issue}",
+          "detailContains": [
+            "agent"
+          ],
+          "description": "Triage gave it to an agent"
+        }
       ],
       "timeoutSeconds": 600
+    },
+    {
+      "id": "pr",
+      "stage": "agent",
+      "title": "An agent tries it anyway",
+      "narration": "Suppose an agent, or a person in a hurry, did it anyway. This ready-made branch skips a flaky test and stops the integration tests from blocking merges. It opens as an ordinary PR.",
+      "explain": "pull-request",
+      "action": {
+        "label": "Open the guardrails PR",
+        "kind": "github.openPullRequest",
+        "args": {
+          "head": "demo/guardrails",
+          "base": "main",
+          "title": "ci: skip a flaky test and stop integration tests blocking merges",
+          "body": "Closes #{issue}\n\nDemo scenario `guardrails`: skips a test and edits `.github/workflows/ci.yml`. Expected to be blocked. Opened by the demo console.",
+          "labels": "demo"
+        }
+      }
+    },
+    {
+      "id": "blocked",
+      "stage": "checks",
+      "title": "CI blocks the skipped test",
+      "narration": "The PR rules job compares the PR with main and fails on any newly skipped test, so the required ci-ok check goes red. A PR that edits the workflows could try to weaken the checks themselves, which is why there is a second guardrail.",
+      "explain": "pr-rules",
+      "wait": [
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "PR rules: failure"
+          ],
+          "sinceRunStart": true,
+          "description": "PR rules fails: the PR adds a skipped test"
+        },
+        {
+          "kind": "check.completed",
+          "subject": "pr#{pr}",
+          "detailContains": [
+            "ci-ok: failure"
+          ],
+          "sinceRunStart": true,
+          "description": "The required check ci-ok fails"
+        }
+      ],
+      "timeoutSeconds": 900
+    },
+    {
+      "id": "codeowners",
+      "stage": "checks",
+      "title": "And it waits for the human",
+      "narration": "Because the PR touches .github/, CODEOWNERS makes it need the human's approval even if every check were green, so editing the checks can't sneak past. An agent cannot approve its own work, or anyone else's.",
+      "explain": "codeowners",
+      "wait": [
+        {
+          "condition": "review-required",
+          "subject": "pr#{pr}",
+          "description": "GitHub says the PR needs a code owner's review"
+        }
+      ],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "decide",
+      "stage": "checks",
+      "title": "The human says no",
+      "narration": "The person who owns the pipeline reads it and closes it. A real fix for a flaky test is a quarantine issue and a better test, not a skip.",
+      "explain": "codeowners",
+      "action": {
+        "label": "Close the PR",
+        "kind": "github.closePullRequest",
+        "args": {
+          "number": "{pr}"
+        }
+      }
     }
   ],
   "reset": [
-    { "label": "Close the guardrails issue", "kind": "github.closeIssue", "args": { "number": "{issue}" } }
+    {
+      "label": "Close the guardrails PR",
+      "kind": "github.closePullRequest",
+      "args": {
+        "number": "{pr}"
+      }
+    },
+    {
+      "label": "Close the guardrails issue",
+      "kind": "github.closeIssue",
+      "args": {
+        "number": "{issue}"
+      }
+    }
   ]
 }

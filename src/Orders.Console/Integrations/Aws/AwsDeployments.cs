@@ -15,8 +15,29 @@ public sealed class AwsDeployments(IAmazonECS ecs, ConsoleOptions options) : IDe
     // Task definition revisions never change, so the commit each one runs is cached for good.
     private readonly ConcurrentDictionary<string, string?> _commits = new(StringComparer.Ordinal);
 
+    // A service revision's task definition never changes either.
+    private readonly ConcurrentDictionary<string, string?> _revisionTaskDefinitions = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The last week of ECS service deployments for prod and staging, finished ones included, with their state
+    /// (succeeded, rolled back, in progress, failed) and commit. Falls back to the service's current deployments
+    /// when the deployment history can't be read.
+    /// </summary>
     public async Task<IReadOnlyList<DeployRecord>> GetRecentDeploysAsync(CancellationToken ct)
     {
+        try
+        {
+            var history = await HistoryAsync(ct);
+            if (history.Count > 0)
+            {
+                return history;
+            }
+        }
+        catch (AmazonECSException)
+        {
+            // No ecs:ListServiceDeployments or DescribeServiceRevisions: show what the services say now.
+        }
+
         var services = await DescribeAsync(ct);
         var deployments = services.SelectMany(s => (s.Service.Deployments ?? []).Select(d => (s.Environment, s.Service, Deployment: d))).ToList();
         foreach (var arn in deployments.Select(d => d.Deployment.TaskDefinition).OfType<string>().Distinct(StringComparer.Ordinal))
@@ -34,6 +55,62 @@ public sealed class AwsDeployments(IAmazonECS ecs, ConsoleOptions options) : IDe
             .OrderByDescending(d => d.At)
             .ToList();
     }
+
+    private async Task<List<DeployRecord>> HistoryAsync(CancellationToken ct)
+    {
+        var briefs = new List<(string Environment, string Service, ServiceDeploymentBrief Brief)>();
+        foreach (var (environment, service) in new[] { ("prod", options.EcsProdService), ("staging", options.EcsStagingService) })
+        {
+            var page = await ecs.ListServiceDeploymentsAsync(new ListServiceDeploymentsRequest
+            {
+                Cluster = options.EcsCluster,
+                Service = service,
+                CreatedAt = new CreatedAt { After = DateTime.UtcNow.AddDays(-7) },
+                MaxResults = 10,
+            }, ct);
+            briefs.AddRange((page.ServiceDeployments ?? []).Select(b => (environment, service, b)));
+        }
+
+        var unknown = briefs.Select(b => b.Brief.TargetServiceRevisionArn).OfType<string>()
+            .Where(arn => !_revisionTaskDefinitions.ContainsKey(arn)).Distinct(StringComparer.Ordinal).ToList();
+        foreach (var chunk in unknown.Chunk(20))
+        {
+            var revisions = await ecs.DescribeServiceRevisionsAsync(new DescribeServiceRevisionsRequest { ServiceRevisionArns = [.. chunk] }, ct);
+            foreach (var r in revisions.ServiceRevisions ?? [])
+            {
+                _revisionTaskDefinitions[r.ServiceRevisionArn] = r.TaskDefinition;
+            }
+        }
+
+        var records = new List<DeployRecord>();
+        foreach (var (environment, service, b) in briefs)
+        {
+            var taskDefinition = b.TargetServiceRevisionArn is { } rev ? _revisionTaskDefinitions.GetValueOrDefault(rev) : null;
+            var commit = taskDefinition is null ? null : await CommitAsync(taskDefinition, ct);
+            records.Add(new DeployRecord(
+                environment,
+                Revision(taskDefinition),
+                State(b.Status?.Value),
+                Utc(b.FinishedAt ?? b.StartedAt ?? b.CreatedAt),
+                ServiceUrl(service),
+                commit));
+        }
+
+        return records.OrderByDescending(d => d.At).ToList();
+    }
+
+    /// <summary>ECS's deployment status in the words the Status page uses.</summary>
+    internal static string State(string? status) => status switch
+    {
+        "SUCCESSFUL" => "succeeded",
+        "ROLLBACK_SUCCESSFUL" => "rolled back",
+        "ROLLBACK_REQUESTED" or "ROLLBACK_IN_PROGRESS" => "rolling back",
+        "ROLLBACK_FAILED" => "rollback failed",
+        "IN_PROGRESS" or "PENDING" => "in progress",
+        "STOPPED" or "STOP_REQUESTED" => "stopped",
+        null => "unknown",
+        var other => other.ToLowerInvariant(),
+    };
 
     /// <summary>The commit SHA a task definition runs: its container image tag (release tags are the full SHA).</summary>
     private async Task<string?> CommitAsync(string taskDefinitionArn, CancellationToken ct)

@@ -11,7 +11,7 @@ test('Status renders health, alarms, GitHub activity, flags and cost', async ({ 
   // The live region refreshes itself; wait for one refresh so we test what the poller renders too.
   await expect(page.getByTestId('status-live')).toHaveAttribute('data-poll-at', /.+/, { timeout: 30_000 });
 
-  for (const name of ['health', 'alarms', 'github', 'flags', 'cost']) {
+  for (const name of ['health', 'alarms', 'github', 'flags', 'cost', 'deploys', 'load']) {
     const panel = page.locator(`[data-panel=${name}]`);
     await expect(panel, `${name} panel`).toBeVisible();
     await expect(panel.getByTestId('panel-error'), `${name} panel error`).toHaveCount(0);
@@ -23,6 +23,12 @@ test('Status renders health, alarms, GitHub activity, flags and cost', async ({ 
     await expect(card, `${env} health`).toBeVisible();
     await expect(card).toHaveAttribute('data-health', 'ready');
     await expect(card.getByTestId('env-version')).not.toHaveText(/^(unknown)?$/);
+    // Error rate and latency from the load balancer, per environment.
+    const traffic = card.getByTestId(`traffic-${env}`);
+    await expect(traffic, `${env} traffic`).toBeVisible();
+    await expect(traffic.getByTestId('traffic-rate')).toHaveText(/^[\d,.]+\/min$/);
+    await expect(traffic.getByTestId('traffic-errors')).toHaveText(/^[\d.]+%$/);
+    await expect(traffic.getByTestId('traffic-p95')).toHaveText(/^(\d+ ms|[\d.]+ s|n\/a)$/);
   }
 
   const alarms = page.locator('[data-panel=alarms] [data-alarm]');
@@ -34,6 +40,15 @@ test('Status renders health, alarms, GitHub activity, flags and cost', async ({ 
   const github = page.locator('[data-panel=github]');
   await expect(github.getByTestId('open-issues')).toHaveText(/^\d+$/);
   await expect(github.locator('[data-workflow]').first()).toBeVisible();
+  // Open issues by the labels triage sets, and the agent's PRs still in flight.
+  for (const label of await github.locator('[data-triage-label]').evaluateAll(els => els.map(e => e.getAttribute('data-label')))) {
+    expect(label).toMatch(/^(agent|needs-human|risk:.+|difficulty:.+)$/);
+  }
+  await expect(github.getByTestId('agent-in-flight')).toHaveText(/^\d+$/);
+  if (!settings.live) {
+    await expect(github.locator('[data-triage-label]').first()).toBeVisible();
+    await expect(github.locator('[data-testid=agent-prs] [data-pr-state=open]').first()).toBeVisible();
+  }
 
   const flags = page.locator('[data-panel=flags] [data-flag]');
   await expect(flags.first()).toBeVisible();
@@ -45,7 +60,8 @@ test('Status renders health, alarms, GitHub activity, flags and cost', async ({ 
     await expect(row.locator('.muted'), `${name} description`).not.toHaveText(new RegExp(`^\\s*(${name})?\\s*$`));
   }
 
-  // Deploys show the environment and the short commit SHA of the image, not the task definition.
+  // Deploys and rollbacks: the count of rollbacks, then each deploy with its environment and the short commit SHA.
+  await expect(page.getByTestId('rollback-count')).toHaveAttribute('data-rollbacks', /^\d+$/);
   const deploys = page.locator('[data-panel=deploys] [data-testid=deploy-entry]');
   await expect(deploys.first()).toBeVisible();
   await expect(deploys.first()).toContainText(/\b(prod|staging)\b/);
@@ -53,4 +69,24 @@ test('Status renders health, alarms, GitHub activity, flags and cost', async ({ 
 
   await expect(page.getByTestId('cost-mtd')).toHaveText(/\$\s?[\d,]+(\.\d+)?/);
   await expect(page.getByTestId('cost-today')).toHaveText(/\$\s?[\d,]+(\.\d+)?/);
+});
+
+test('Status starts any load scenario for the minutes typed in', async ({ page }) => {
+  test.skip(settings.live, 'Starts real load on production.');
+  await page.goto('/');
+  const load = page.locator('[data-panel=load]');
+  for (const scenario of ['normal', 'peak', 'spike', 'soak']) {
+    await expect(load.getByTestId(`load-start-${scenario}`)).toBeVisible();
+  }
+
+  await load.getByTestId('load-minutes').fill('7');
+  await load.getByTestId('load-start-peak').click();
+  await expect(page.getByTestId('toast')).toContainText('peak for 7 min');
+  await expect(page.locator('[data-panel=load] [data-testid=load-state]')).toHaveAttribute('data-load-running', 'true');
+  await expect(page.locator('[data-panel=load] [data-testid=load-state]')).toContainText('peak');
+  // What was typed survives the panel refreshing itself.
+  await expect(page.getByTestId('load-minutes')).toHaveValue('7');
+
+  await page.locator('[data-panel=load]').getByTestId('load-stop').click();
+  await expect(page.locator('[data-panel=load] [data-testid=load-state]')).toHaveAttribute('data-load-running', 'false');
 });

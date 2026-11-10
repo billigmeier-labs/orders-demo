@@ -8,7 +8,7 @@ using Task = System.Threading.Tasks.Task;
 namespace Orders.Console.Integrations.Aws;
 
 /// <summary>Starts and stops the <c>loadgen</c> ECS task (Fargate) with SCENARIO and DURATION_MINUTES.</summary>
-public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : ILoadGenerator
+public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options, IDemoRuns? runs = null) : ILoadGenerator
 {
     public const string StartedBy = "orders-console";
     public const string ProjectTagKey = "project";
@@ -17,6 +17,9 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
     /// <summary>The console's task role may stop only tasks with this tag (infra/terraform/env/iam.tf), so it can never stop a service task.</summary>
     public const string ComponentTagKey = "component";
     public const string ComponentTagValue = "loadgen";
+
+    /// <summary>Every demo resource carries the run number (SSM /orders-demo/demo-run), so the scoreboard can show a run's cost.</summary>
+    public const string RunTagKey = "demo-run";
 
     public async Task<LoadStatus> GetStatusAsync(CancellationToken ct)
     {
@@ -44,7 +47,17 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
         }
 
         await StopAsync(ct);
-        var response = await ecs.RunTaskAsync(RunTaskRequestFor(scenario, durationMinutes), ct);
+        string? run = null;
+        try
+        {
+            run = runs is null ? null : await runs.GetCurrentRunAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Without the run number the task still runs; only its share of the run's cost goes uncounted.
+        }
+
+        var response = await ecs.RunTaskAsync(RunTaskRequestFor(scenario, durationMinutes, run), ct);
 
         if (response.Failures is { Count: > 0 } failures)
         {
@@ -54,8 +67,8 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
 
     /// <summary>The loadgen RunTask call. Tasks don't inherit tags by default, so the task gets <c>project=orders-demo</c> itself
     /// and Cost Explorer counts it with the rest of the demo, plus <c>component=loadgen</c>, which is what lets the console
-    /// stop it. (Setting the tags needs ecs:TagResource.)</summary>
-    internal RunTaskRequest RunTaskRequestFor(string scenario, int durationMinutes) =>
+    /// stop it, and <c>demo-run=&lt;N&gt;</c> when the run is known. (Setting the tags needs ecs:TagResource.)</summary>
+    internal RunTaskRequest RunTaskRequestFor(string scenario, int durationMinutes, string? run = null) =>
         new()
         {
             Cluster = options.EcsCluster,
@@ -67,6 +80,7 @@ public sealed class AwsLoadGenerator(IAmazonECS ecs, ConsoleOptions options) : I
             [
                 new Tag { Key = ProjectTagKey, Value = ProjectTagValue },
                 new Tag { Key = ComponentTagKey, Value = ComponentTagValue },
+                .. run is null ? Array.Empty<Tag>() : [new Tag { Key = RunTagKey, Value = run }],
             ],
             NetworkConfiguration = new NetworkConfiguration
             {

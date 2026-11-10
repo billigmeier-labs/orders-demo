@@ -1,0 +1,11 @@
+@model EnvironmentTraffic
+@{
+    var name = Model.Environment == "prod" ? "Production" : "Staging";
+}
+<div class="traffic" data-testid="traffic-@Model.Environment" data-traffic-env="@Model.Environment" data-latest-requests="@((int)Model.LatestRequests)">
+    <div class="kv"><span>Requests</span><strong data-testid="traffic-rate">@Fmt.Rate(Model.RequestsPerMinute)</strong></div>
+    <div class="kv"><span>5xx errors</span><strong data-testid="traffic-errors">@Fmt.Percent(Model.ErrorRate)</strong></div>
+    <div class="kv"><span>p95 latency</span><strong data-testid="traffic-p95">@Fmt.Ms(Model.P95Latency)</strong></div>
+    @Fmt.Sparkline(Model.Minutes, $"{name} requests per minute, last 15 minutes")
+    <span class="muted small">Last 15 minutes, from the load balancer</span>
+</div>

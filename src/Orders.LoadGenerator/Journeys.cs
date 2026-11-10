@@ -21,19 +21,26 @@ internal sealed class Journeys(OrdersApi api, Catalog catalog, Random random)
         "van rossum", "alan turing", "classic desk lamp",
     ];
 
+    // Journey names, as in LoadPlan.Journeys; each request sends its journey in X-Journey.
+    internal const string Browse = "browse-products";
+    internal const string Search = "search";
+    internal const string ViewOrders = "view-orders";
+    internal const string CreateOrder = "create-order";
+    internal const string AdvanceOrder = "advance-order";
+
     private static readonly string[] Statuses = ["Pending", "Paid", "Shipped", "Delivered", "Cancelled"];
 
     public async Task<IReadOnlyList<CallResult>> BrowseProductsAsync(CancellationToken ct)
     {
-        var (list, products) = await api.GetAsync<List<Product>>("GET /products", "api/products", ct);
+        var (list, products) = await api.GetAsync<List<Product>>(Browse, "GET /products", "api/products", ct);
         var pick = products is { Count: > 0 } ? Pick(products) : Pick(catalog.Products);
-        var (one, _) = await api.GetAsync<Product>("GET /products/{id}", $"api/products/{pick.Id}", ct);
+        var (one, _) = await api.GetAsync<Product>(Browse, "GET /products/{id}", $"api/products/{pick.Id}", ct);
         return [list, one];
     }
 
     public async Task<IReadOnlyList<CallResult>> SearchAsync(CancellationToken ct)
     {
-        var (result, _) = await api.GetAsync<object>("GET /search", $"api/search?q={Uri.EscapeDataString(SearchTerm())}", ct);
+        var (result, _) = await api.GetAsync<object>(Search, "GET /search", $"api/search?q={Uri.EscapeDataString(SearchTerm())}", ct);
         return [result];
     }
 
@@ -45,7 +52,7 @@ internal sealed class Journeys(OrdersApi api, Catalog catalog, Random random)
             1 => $"api/orders?status={Pick(Statuses)}&pageSize=10",
             _ => $"api/orders?page={random.Next(1, 4)}",
         };
-        var (list, page) = await api.GetAsync<Page<OrderSummary>>("GET /orders", url, ct);
+        var (list, page) = await api.GetAsync<Page<OrderSummary>>(ViewOrders, "GET /orders", url, ct);
         var orderId = page is { Items.Count: > 0 } ? Pick(page.Items).Id
             : catalog.Orders.Count > 0 ? Pick(catalog.Orders).Id
             : (Guid?)null;
@@ -54,7 +61,7 @@ internal sealed class Journeys(OrdersApi api, Catalog catalog, Random random)
             return [list];
         }
 
-        var (one, _) = await api.GetAsync<object>("GET /orders/{id}", $"api/orders/{orderId}", ct);
+        var (one, _) = await api.GetAsync<object>(ViewOrders, "GET /orders/{id}", $"api/orders/{orderId}", ct);
         return [list, one];
     }
 
@@ -66,7 +73,7 @@ internal sealed class Journeys(OrdersApi api, Catalog catalog, Random random)
             .DistinctBy(p => p.Id)
             .Select(p => new { productId = p.Id, quantity = random.Next(1, 3) })
             .ToList();
-        var (result, order) = await api.PostAsync<OrderSummary>("POST /orders", "api/orders", new { customerId = customer.Id, lines }, ct);
+        var (result, order) = await api.PostAsync<OrderSummary>(CreateOrder, "POST /orders", "api/orders", new { customerId = customer.Id, lines }, ct);
         if (order is not null)
         {
             catalog.AddCreated(order.Id);
@@ -86,11 +93,11 @@ internal sealed class Journeys(OrdersApi api, Catalog catalog, Random random)
                 return [];
             }
 
-            var (look, _) = await api.GetAsync<object>("GET /orders/{id}", $"api/orders/{Pick(catalog.Orders).Id}", ct);
+            var (look, _) = await api.GetAsync<object>(AdvanceOrder, "GET /orders/{id}", $"api/orders/{Pick(catalog.Orders).Id}", ct);
             return [look];
         }
 
-        var (current, order) = await api.GetAsync<OrderSummary>("GET /orders/{id}", $"api/orders/{id}", ct);
+        var (current, order) = await api.GetAsync<OrderSummary>(AdvanceOrder, "GET /orders/{id}", $"api/orders/{id}", ct);
         if (order is null)
         {
             return [current];
@@ -102,7 +109,7 @@ internal sealed class Journeys(OrdersApi api, Catalog catalog, Random random)
             return [current];
         }
 
-        var (changed, _) = await api.PostAsync<OrderSummary>("POST /orders/{id}/status", $"api/orders/{id}/status", new { status = next }, ct);
+        var (changed, _) = await api.PostAsync<OrderSummary>(AdvanceOrder, "POST /orders/{id}/status", $"api/orders/{id}/status", new { status = next }, ct);
         if (next is not ("Delivered" or "Cancelled"))
         {
             catalog.ReturnCreated(id);

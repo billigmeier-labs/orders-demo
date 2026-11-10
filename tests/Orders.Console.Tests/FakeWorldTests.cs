@@ -49,6 +49,13 @@ public sealed class FakeWorldTests
         Assert.Contains((EventKinds.CheckCompleted, pr.Subject, "ai-review: success"), kinds);
         Assert.Contains(kinds, k => k.Kind == EventKinds.PrMerged && k.Subject == pr.Subject);
         Assert.Contains(kinds, k => k.Kind == EventKinds.DeploySucceeded && k.Subject == "prod");
+        // Staging first, then production, each keyed to the PR.
+        var deploys = NewEvents().Where(e => e.Kind is EventKinds.DeployStarted or EventKinds.DeploySucceeded).Select(e => (e.Kind, e.Subject)).ToList();
+        Assert.Equal(
+            [(EventKinds.DeployStarted, "staging"), (EventKinds.DeploySucceeded, "staging"), (EventKinds.DeployStarted, "prod"), (EventKinds.DeploySucceeded, "prod")],
+            deploys);
+        Assert.All(NewEvents().Where(e => e.Kind is EventKinds.DeployStarted or EventKinds.DeploySucceeded),
+            e => Assert.Contains($"(#{Orders.Console.Scenarios.Matching.NumberIn(pr.Subject)})", e.Detail, StringComparison.Ordinal));
 
         var order = NewEvents().Select(e => e.Kind).Distinct().ToList();
         Assert.True(order.IndexOf(EventKinds.IssueLabeled) < order.IndexOf(EventKinds.PrOpened));
@@ -79,7 +86,7 @@ public sealed class FakeWorldTests
     public async Task The_canned_bug_deploys_alarms_and_rolls_back()
     {
         await _world.OpenPullRequestAsync(new NewPullRequest(FakeWorld.CannedBugBranch, "main", "perf: cache prices", ""), Ct);
-        await AdvanceAsync(4);
+        await AdvanceAsync(5);
         Assert.Contains(await _world.GetAlarmsAsync(Ct), a => a.State == "ALARM");
         var errors = await _world.GetRecentErrorsAsync(Ct);
         Assert.Contains(errors, l => LogSummary.Summarize(l.Message) == "/api/search — PostgresException 42601: syntax error in tsquery: \"alan turing:*\"");
@@ -91,7 +98,9 @@ public sealed class FakeWorldTests
         Assert.Contains(EventKinds.DeployStarted, kinds);
         Assert.Contains(EventKinds.AlarmAlarm, kinds);
         Assert.Contains(EventKinds.DeployRolledBack, kinds);
-        Assert.DoesNotContain(EventKinds.DeploySucceeded, kinds);
+        // Staging passes (the bug only shows under load); production never succeeds.
+        Assert.Contains(NewEvents(), e => e.Kind == EventKinds.DeploySucceeded && e.Subject == "staging");
+        Assert.DoesNotContain(NewEvents(), e => e.Kind == EventKinds.DeploySucceeded && e.Subject == "prod");
         Assert.All(await _world.GetAlarmsAsync(Ct), a => Assert.Equal("OK", a.State));
     }
 
@@ -132,8 +141,8 @@ public sealed class FakeWorldTests
         var store = new EventStore();
         var options = new ConsoleOptions { Fakes = true, FakeStep = TimeSpan.FromSeconds(3) };
         var status = new StatusService(_world, _world, _world, _world, _world, _world, _world, store, new SourceHealth(), options, _time);
-        var actions = new ScenarioActions(_world, _world, _world, new ScoreboardService(_world, _world, _time), status);
-        var conditions = new ConditionEvaluator(_world);
+        var actions = new ScenarioActions(_world, _world, _world, new ScoreboardService(_world, _world, _world, options, _time), status);
+        var conditions = new ConditionEvaluator(_world, _world);
         var catalog = new ScenarioCatalog(
             ScenarioCatalog.LoadDirectory(Path.Combine(AppContext.BaseDirectory, "Scenarios", "Definitions")),
             ScenarioActions.KnownKinds,

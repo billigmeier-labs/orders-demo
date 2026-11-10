@@ -94,7 +94,7 @@
     },
     {
       "id": "deploy",
-      "stage": "deploy",
+      "stage": "production",
       "title": "The deploy starts",
       "narration": "Merging is deploying. The new image goes to staging, then production.",
       "wait": [
@@ -125,7 +125,7 @@
     },
     {
       "id": "rollback",
-      "stage": "deploy",
+      "stage": "production",
       "title": "AWS rolls it back",
       "narration": "The deployment is unhealthy, so ECS puts the previous version back on its own. Nobody was paged to do it.",
       "explain": "rollback",

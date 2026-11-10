@@ -1,15 +1,43 @@
 {
   "id": "scoreboard",
-  "title": "Scoreboard",
-  "summary": "How fast and how safely changes ship, from real CI, PR and deploy data.",
+  "title": "Scoreboard and teardown",
+  "summary": "How fast and how safely changes shipped, against the targets, then what this run cost and how it all goes away.",
   "order": 60,
   "steps": [
     {
       "id": "show",
-      "title": "The numbers",
-      "narration": "CI duration, time from PR to merge, agent PRs merged without an AI-review block, prod rollbacks, and what the demo costs.",
+      "title": "The numbers, against the targets",
+      "narration": "Every number comes from real data: GitHub's pull requests, timelines and Actions runs, the deploy pipeline and Cost Explorer. Each one is shown next to the target we set at the start, with a tick or a cross. Showing it saves a copy for this demo run.",
       "explain": "scoreboard",
-      "action": { "label": "Show the scoreboard", "kind": "scoreboard.show" }
+      "action": {
+        "label": "Show the scoreboard",
+        "kind": "scoreboard.show"
+      }
+    },
+    {
+      "id": "past",
+      "title": "Compared with earlier runs",
+      "narration": "Each demo run's scoreboard is kept in S3, outside the environment, so it survives the teardown. This is how we can tell whether a change to the workflow made things better.",
+      "explain": "scoreboard",
+      "action": {
+        "label": "Show past runs",
+        "kind": "scoreboard.pastRuns"
+      }
+    },
+    {
+      "id": "teardown",
+      "title": "Then it all goes away",
+      "narration": "Between demos the whole AWS side is deleted, so it costs nothing while idle. One command closes the demo PRs, deletes the demo issues, destroys everything tagged for this project, and checks nothing is left. The console can't run it, on purpose: it has no permission to delete anything.",
+      "explain": "teardown",
+      "action": {
+        "label": "Show the teardown",
+        "kind": "note.show",
+        "args": {
+          "text": "just env down\n  1. Closes the open demo PRs and deletes their branches, deletes the demo issues\n  2. terraform destroy: ECS services and tasks, both databases, the load balancer, alarms, AppConfig flags, logs\n  3. Checks that nothing tagged project=orders-demo is left\nKept: the repo and its history, the Terraform state bucket, the OIDC provider, the joshb.app zone, and this run's scoreboard ({snapshot})",
+          "url": "{snapshotUrl}"
+        }
+      },
+      "command": "just env down"
     }
   ]
 }
