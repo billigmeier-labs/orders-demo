@@ -30,11 +30,22 @@ locals {
   subnet_ids = sort(data.aws_subnets.public.ids)
   ecr        = local.base.ecr_repository_urls
   role_pfx   = local.base.ecs_role_prefix
-  appconfig  = local.base.appconfig
+  appconfig = {
+    application_arn  = aws_appconfig_application.orders.arn
+    profile_id       = aws_appconfig_configuration_profile.flags.configuration_profile_id
+    environment_arns = { for k, e in aws_appconfig_environment.this : k => e.arn }
+  }
+
+  # Persistent bucket in the base layer (same name there); computed here so this layer does not need
+  # the base layer's newer outputs to plan.
+  metrics_bucket = "orders-demo-metrics-${local.account_id}"
 
   # Long-running services. desired is what the service runs once an image exists. bake_minutes is how
   # long ECS keeps watching the deployment alarms after the new tasks are healthy: staging is short so
-  # merge to prod stays quick; prod keeps 5 minutes so a bad version under real traffic still rolls back.
+  # merge to prod stays quick. Prod bakes 4 minutes: ECS watches the alarms from the moment the first new
+  # task takes traffic, and the 5xx alarm needs two one-minute datapoints plus about a minute of ALB metric
+  # delay (about 3 minutes after the first errors), so a version that fails under load still rolls back
+  # inside the bake with a minute to spare. (`just rollback` skips the bake; see the justfile.)
   services = {
     api-prod = {
       host         = local.domain
@@ -46,7 +57,7 @@ locals {
       db           = "prod"
       task_role    = "task-prod"
       priority     = 10
-      bake_minutes = 5
+      bake_minutes = 4
     }
     api-staging = {
       host         = "staging.${local.domain}"
@@ -70,7 +81,7 @@ locals {
       db           = null
       task_role    = "console"
       priority     = 30
-      bake_minutes = 5
+      bake_minutes = 3
     }
   }
 }

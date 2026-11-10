@@ -26,7 +26,7 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = local.base.certificate_arn
+  certificate_arn   = aws_acm_certificate_validation.demo.certificate_arn
 
   default_action {
     type = "fixed-response"
@@ -41,18 +41,20 @@ resource "aws_lb_listener" "https" {
 resource "aws_lb_target_group" "svc" {
   for_each = local.services
 
-  name                 = "${local.name}-${each.key}"
-  port                 = 8080
-  protocol             = "HTTP"
-  target_type          = "ip"
-  vpc_id               = var.vpc_id
-  deregistration_delay = 15
+  name        = "${local.name}-${each.key}"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = var.vpc_id
+  # Deploy speed: a replaced task drains for 10 s (requests here take milliseconds; the default is
+  # 300 s), and a new task is healthy after two 5-second checks instead of two 10-second ones.
+  deregistration_delay = 10
 
   health_check {
     path                = each.value.health_path
     matcher             = "200"
-    interval            = 10
-    timeout             = 5
+    interval            = 5
+    timeout             = 4
     healthy_threshold   = 2
     unhealthy_threshold = 3
   }

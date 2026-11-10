@@ -37,3 +37,22 @@ output "task_definition_families" {
 output "db_endpoints" {
   value = { for k, db in aws_db_instance.this : k => db.address }
 }
+
+output "urls" {
+  value = {
+    prod    = "https://${local.domain}"
+    staging = "https://staging.${local.domain}"
+    console = "https://console.${local.domain}"
+    dashboards = {
+      for k, d in aws_cloudwatch_dashboard.env : k => "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards/dashboard/${d.dashboard_name}"
+    }
+  }
+}
+
+output "console_secret_arn" {
+  value = aws_secretsmanager_secret.console.arn
+}
+
+output "demo_run" {
+  value = var.demo_run
+}

@@ -50,6 +50,21 @@ variable "github_dispatch_token" {
   sensitive   = true
 }
 
+variable "demo_run" {
+  description = "Demo run number N (SSM /orders-demo/demo-run); `just env up/plan/down` set TF_VAR_demo_run."
+  type        = string
+  validation {
+    condition     = can(regex("^[0-9]+$", var.demo_run))
+    error_message = "demo_run must be a number."
+  }
+}
+
+variable "migrate_from_base" {
+  description = "One-time: adopt the certificate, AppConfig and console secret that used to be in the base layer (import_from_base.tf). `just env up/plan` set it when the env state does not have them yet but the environment is up."
+  type        = bool
+  default     = false
+}
+
 variable "alarm_5xx_threshold" {
   description = "Target 5xx responses per minute that put a service alarm in ALARM."
   type        = number
@@ -60,4 +75,16 @@ variable "alarm_p95_seconds" {
   description = "Target response time p95 (seconds) that puts a service alarm in ALARM."
   type        = number
   default     = 1.5
+}
+
+variable "alarm_error_rate_percent" {
+  description = "Share of requests (percent) answered with a target 5xx, per minute, that puts the error-rate alarm in ALARM."
+  type        = number
+  default     = 5
+}
+
+variable "alarm_min_requests" {
+  description = "Below this many requests in a minute the error-rate alarm treats the minute as fine (a few errors on no traffic is noise)."
+  type        = number
+  default     = 20
 }

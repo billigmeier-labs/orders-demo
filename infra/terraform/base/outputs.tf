@@ -1,7 +1,3 @@
-output "certificate_arn" {
-  value = aws_acm_certificate_validation.demo.certificate_arn
-}
-
 output "zone_id" {
   value = var.zone_id
 }
@@ -30,20 +26,10 @@ output "ecs_role_prefix" {
   value = local.ecs_role_prefix
 }
 
-output "appconfig" {
-  value = {
-    application_id   = aws_appconfig_application.orders.id
-    application_arn  = aws_appconfig_application.orders.arn
-    profile_id       = aws_appconfig_configuration_profile.flags.configuration_profile_id
-    environment_ids  = { for k, e in aws_appconfig_environment.this : k => e.environment_id }
-    environment_arns = { for k, e in aws_appconfig_environment.this : k => e.arn }
-  }
+output "metrics_bucket" {
+  value = aws_s3_bucket.metrics.bucket
 }
 
-output "appconfig_deployment_strategy_id" {
-  value = aws_appconfig_deployment_strategy.instant.id
-}
-
-output "console_secret_arn" {
-  value = aws_secretsmanager_secret.console.arn
+output "demo_run_parameter" {
+  value = aws_ssm_parameter.demo_run.name
 }

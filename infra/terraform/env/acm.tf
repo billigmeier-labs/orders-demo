@@ -1,6 +1,9 @@
+# The certificate for demo.joshb.app and *.demo.joshb.app (every host: prod, staging., console., pr-<N>.).
+# Per demo run: `just env down` deletes it with its validation record; `up` requests a new one, and DNS
+# validation finishes while RDS is still being created.
 resource "aws_acm_certificate" "demo" {
-  domain_name               = var.domain
-  subject_alternative_names = ["*.${var.domain}"]
+  domain_name               = local.domain
+  subject_alternative_names = ["*.${local.domain}"]
   validation_method         = "DNS"
 
   lifecycle {
@@ -13,10 +16,10 @@ resource "aws_acm_certificate" "demo" {
 resource "aws_route53_record" "cert_validation" {
   for_each = {
     for dvo in aws_acm_certificate.demo.domain_validation_options : dvo.domain_name => dvo
-    if dvo.domain_name == var.domain
+    if dvo.domain_name == local.domain
   }
 
-  zone_id         = var.zone_id
+  zone_id         = local.base.zone_id
   name            = each.value.resource_record_name
   type            = each.value.resource_record_type
   records         = [each.value.resource_record_value]

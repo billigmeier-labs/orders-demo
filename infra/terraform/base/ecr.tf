@@ -2,6 +2,9 @@
 # queue has pushed it. orders-loadgen excludes `latest` from immutability: CI moves it to the newest
 # load generator (the one-off task definition runs :latest). PR images go to orders-api-preview.
 # The pr- rule below is left over from when previews were pushed here (changing it replaces the policy).
+# The repositories stay between demos (empty repositories cost nothing, and the merge queue's release image
+# job pushes here even while the environment is down); `just env down` deletes every image in them and
+# `just env up` rebuilds main's images (images.yml).
 resource "aws_ecr_repository" "this" {
   for_each = toset(local.ecr_repositories)
 

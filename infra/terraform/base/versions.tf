@@ -23,6 +23,8 @@ provider "aws" {
   default_tags {
     tags = {
       project = "orders-demo"
+      # Everything in this layer is kept between demos; `just env down`'s leftover check skips it.
+      demo-run = "persistent"
     }
   }
 }

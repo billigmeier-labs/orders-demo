@@ -1,3 +1,6 @@
+# Feature flags, per demo run. The account has AppConfig deletion protection on (60 minutes), which would
+# block destroying environments and profiles the services polled recently, so `just env down` deletes the
+# whole application with --deletion-protection-check BYPASS before `terraform destroy`.
 resource "aws_appconfig_application" "orders" {
   name        = "orders-demo"
   description = "Feature flags for the orders demo"

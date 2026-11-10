@@ -35,13 +35,15 @@ locals {
       subs      = ["${local.env_sub}:staging", "${local.env_sub}:production"]
       workflows = ["${local.workflow_ref}/deploy-service.yml@refs/heads/main"]
     }
-    # ci.yml release image job (merge queue, push to main) and deploy.yml's Prepare job.
+    # ci.yml release image job (merge queue, push to main), deploy.yml's Prepare job, and images.yml
+    # (`just env up` rebuilds main's images after a teardown wiped ECR).
     release = {
       subs = ["${local.env_sub}:release"]
       workflows = [
         "${local.workflow_ref}/ci.yml@refs/heads/main",
         "${local.workflow_ref}/ci.yml@refs/heads/gh-readonly-queue/main/*",
         "${local.workflow_ref}/deploy.yml@refs/heads/main",
+        "${local.workflow_ref}/images.yml@refs/heads/main",
       ]
     }
     # pull_request: per-PR previews. preview-reaper: the nightly / manual reaper on main.
@@ -215,9 +217,10 @@ data "aws_iam_policy_document" "deploy" {
       "appconfig:ListHostedConfigurationVersions",
       "appconfig:StartConfigurationSession",
     ]
+    # The application lives in the env layer now (its id changes every demo run), so this read-only
+    # grant names the account's applications rather than one ARN.
     resources = [
-      aws_appconfig_application.orders.arn,
-      "${aws_appconfig_application.orders.arn}/*",
+      "arn:${local.partition}:appconfig:${var.region}:${local.account_id}:application/*",
     ]
   }
 

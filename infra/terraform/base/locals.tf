@@ -13,4 +13,7 @@ locals {
   preview_task_role      = "preview-task"
 
   cluster_name = "orders-demo"
+
+  # Same name in the env layer (main.tf), which grants the console task role access to runs/*.
+  metrics_bucket = "orders-demo-metrics-${data.aws_caller_identity.current.account_id}"
 }

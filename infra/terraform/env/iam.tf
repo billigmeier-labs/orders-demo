@@ -36,7 +36,7 @@ data "aws_iam_policy_document" "execution_secrets" {
     actions = ["secretsmanager:GetSecretValue"]
     resources = concat(
       [for db in aws_db_instance.this : db.master_user_secret[0].secret_arn],
-      [local.base.console_secret_arn],
+      [aws_secretsmanager_secret.console.arn],
     )
   }
 }
@@ -134,6 +134,25 @@ resource "aws_iam_role_policy" "task_appconfig" {
   policy   = each.value.json
 }
 
+# The ADOT sidecar in prod and staging API tasks writes EMF records (per-endpoint metrics) to the metrics
+# log group; the group exists, so it never needs CreateLogGroup. Not preview-task: previews run unreviewed
+# code, and EMF records name their own namespace and dimensions, so a preview could forge prod metrics
+# (preview.yml runs their collector with the bundled traces-only config).
+data "aws_iam_policy_document" "task_emf" {
+  statement {
+    sid       = "PutEmf"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
+    resources = [aws_cloudwatch_log_group.this["metrics"].arn, "${aws_cloudwatch_log_group.this["metrics"].arn}:*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_emf" {
+  for_each = toset(["task-prod", "task-nonprod"])
+  name     = "emf-metrics"
+  role     = aws_iam_role.task[each.key].id
+  policy   = data.aws_iam_policy_document.task_emf.json
+}
+
 # The console shows what is happening in AWS (alarms, logs, deployments, cost)
 # and drives the demo: starts/stops the load generator and toggles flags.
 # Permissions follow src/Orders.Console/README.md ("In ECS").
@@ -159,8 +178,38 @@ data "aws_iam_policy_document" "console" {
       "logs:FilterLogEvents",
       "logs:GetLogEvents",
       "ce:GetCostAndUsage",
+      "ce:GetTags",
     ]
     resources = ["*"]
+  }
+
+  # The current demo run and where its snapshot goes (contract: /orders-demo/demo-run,
+  # /orders-demo/metrics-bucket).
+  statement {
+    sid     = "ReadRunParameters"
+    actions = ["ssm:GetParameter", "ssm:GetParameters"]
+    resources = [
+      "arn:aws:ssm:${var.region}:${local.account_id}:parameter/${local.name}/demo-run",
+      "arn:aws:ssm:${var.region}:${local.account_id}:parameter/${local.name}/metrics-bucket",
+    ]
+  }
+
+  # Per-run snapshots in the persistent metrics bucket: runs/<N>.json, read back to compare runs.
+  statement {
+    sid       = "RunSnapshots"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["arn:aws:s3:::${local.metrics_bucket}/runs/*"]
+  }
+
+  statement {
+    sid       = "ListRunSnapshots"
+    actions   = ["s3:ListBucket"]
+    resources = ["arn:aws:s3:::${local.metrics_bucket}"]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["runs/", "runs/*"]
+    }
   }
 
   statement {

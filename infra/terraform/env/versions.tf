@@ -23,6 +23,9 @@ provider "aws" {
   default_tags {
     tags = {
       project = "orders-demo"
+      # The demo run this environment belongs to (SSM /orders-demo/demo-run, set by `just env up`), so
+      # leftovers and costs can be traced to one demo. `just env down` fails if anything with it remains.
+      demo-run = var.demo_run
     }
   }
 }

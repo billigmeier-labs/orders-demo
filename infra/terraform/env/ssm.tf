@@ -22,6 +22,7 @@ locals {
     { for k, s in local.services : "services/${k}/desired-count" => tostring(s.desired) },
     { for k, td in aws_ecs_task_definition.migrate : "migrate/${k}/family" => td.family },
     { "loadgen/family" = aws_ecs_task_definition.loadgen.family },
+    { "preview/dropdb-family" = aws_ecs_task_definition.preview_dropdb.family },
   )
 }
 
