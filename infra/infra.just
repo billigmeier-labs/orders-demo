@@ -226,12 +226,8 @@ leftovers run="":
     set -euo pipefail
     export AWS_REGION={{ region }} AWS_DEFAULT_REGION={{ region }}
     run="{{ run }}"
+    # Real API checks decide pass/fail. The tagging index keeps deleted resources for hours, so it's only reported.
     find_leftovers() {
-      {
-        aws resourcegroupstaggingapi get-resources --tag-filters Key=project,Values=orders-demo --output json
-        [ -z "$run" ] || aws resourcegroupstaggingapi get-resources --tag-filters Key=demo-run,Values="$run" --output json
-      } | jq -rs '[.[].ResourceTagMappingList[]] | unique_by(.ResourceARN)[]
-          | select(([.Tags[] | select(.Key == "demo-run") | .Value][0] // "") != "persistent") | .ResourceARN'
       for r in orders-api orders-console orders-loadgen orders-api-preview; do
         n=$(aws ecr list-images --repository-name "$r" --query 'length(imageIds)' --output text 2>/dev/null || echo 0)
         [ "$n" = 0 ] || echo "ECR $r: $n images"
@@ -239,6 +235,13 @@ leftovers run="":
       for s in ACTIVE INACTIVE; do
         aws ecs list-task-definitions --status "$s" --query 'taskDefinitionArns[]' --output text | tr '\t' '\n' | grep '/orders-demo-' | sed "s/^/$s task definition /" || true
       done
+      aws ecs describe-clusters --clusters orders-demo --query "clusters[?status=='ACTIVE'].clusterArn" --output text | grep -v '^$' | sed 's/^/ECS cluster /' || true
+      aws rds describe-db-instances --query "DBInstances[?starts_with(DBInstanceIdentifier, 'orders-demo')].DBInstanceIdentifier" --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/RDS instance /' || true
+      aws elbv2 describe-load-balancers --query "LoadBalancers[?starts_with(LoadBalancerName, 'orders-demo')].LoadBalancerName" --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Load balancer /' || true
+      aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName, 'orders-demo')].TargetGroupName" --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Target group /' || true
+      aws ec2 describe-security-groups --filters Name=tag:project,Values=orders-demo --query 'SecurityGroups[].GroupName' --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Security group /' || true
+      aws secretsmanager list-secrets --query "SecretList[?starts_with(Name, 'orders-demo') || starts_with(Name, 'rds!db')].Name" --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Secret /' || true
+      aws events list-rules --name-prefix orders-demo --query 'Rules[].Name' --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/EventBridge rule /' || true
       aws appconfig list-applications --query "Items[?Name=='orders-demo'].Id" --output text | grep -v '^$' | sed 's/^/AppConfig application /' || true
       aws cloudwatch describe-alarms --alarm-name-prefix orders-demo- --query 'MetricAlarms[].AlarmName' --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Alarm /' || true
       aws cloudwatch list-dashboards --dashboard-name-prefix orders-demo- --query 'DashboardEntries[].DashboardName' --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Dashboard /' || true
@@ -250,9 +253,20 @@ leftovers run="":
         | jq -r '.ResourceRecordSets[] | select(.Name | test("(^|\\.)demo\\.joshb\\.app\\.$")) | "DNS record \(.Name) \(.Type)"'
       aws acm list-certificates --query 'CertificateSummaryList[?DomainName==`demo.joshb.app`].CertificateArn' --output text | tr '\t' '\n' | grep -v '^$' | sed 's/^/Certificate /' || true
     }
+    tagged() {
+      {
+        aws resourcegroupstaggingapi get-resources --tag-filters Key=project,Values=orders-demo --output json
+        [ -z "$run" ] || aws resourcegroupstaggingapi get-resources --tag-filters Key=demo-run,Values="$run" --output json
+      } | jq -rs '[.[].ResourceTagMappingList[]] | unique_by(.ResourceARN)
+          | map(select(([.Tags[] | select(.Key == "demo-run") | .Value][0] // "") != "persistent")) | length'
+    }
     for attempt in $(seq 1 20); do
       left=$(find_leftovers | sort -u)
-      [ -z "$left" ] && { echo "Nothing left behind${run:+ by demo run $run} (kept: tagged demo-run=persistent, the Route 53 zone, the state bucket, the OIDC provider)."; exit 0; }
+      if [ -z "$left" ]; then
+        echo "Nothing left behind${run:+ by demo run $run} (kept: tagged demo-run=persistent, the Route 53 zone, the state bucket, the OIDC provider)."
+        n=$(tagged); [ "$n" = 0 ] || echo "(AWS's tagging index still lists $n deleted resources; it catches up within a few hours.)"
+        exit 0
+      fi
       [ "$attempt" = 20 ] && break
       echo "$(wc -l <<<"$left") leftovers, waiting for deletions to settle (attempt $attempt/20)..."
       sleep 30
