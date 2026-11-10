@@ -1,0 +1,98 @@
+name: Images
+
+# Builds the release images (orders-api, orders-console, orders-loadgen) for one commit on main and moves
+# orders-loadgen:latest to it. `just env up` runs it after a teardown: `just env down` empties ECR, and the
+# deploy needs the images the merge queue built for main's head. Same build as ci.yml's Release image job;
+# tags that already exist are left alone (release tags are immutable).
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA on main to build (default the head of main)
+        type: string
+        required: false
+
+concurrency:
+  group: images-${{ inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  images:
+    name: Release images
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    # orders-demo-release trusts the release environment and pins this file (job_workflow_ref,
+    # infra/terraform/base/iam_github.tf); the environment allows main only for this workflow's runs.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Resolve the commit
+        id: sha
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          sha="${INPUT_SHA:-$GITHUB_SHA}"
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::sha must be a full 40-character commit SHA"; exit 1; fi
+          echo "sha=$sha" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+          fetch-depth: 0
+
+      - name: The commit is on main
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          git fetch -q origin main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$SHA is not on main; release images are built only from main"; exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::983889169993:role/orders-demo-release
+          aws-region: us-east-1
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push linux/arm64 images tagged with the commit SHA
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          {
+            echo "### Release images for \`${SHA::7}\`"
+            echo "| Repository | Result |"
+            echo "| --- | --- |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          build() {
+            local repo=$1 dockerfile=$2 err
+            if [ ! -f "$dockerfile" ]; then
+              echo "| $repo | skipped (no $dockerfile) |" >>"$GITHUB_STEP_SUMMARY"
+              return
+            fi
+            if err=$(aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$SHA" 2>&1 >/dev/null); then
+              echo "$repo:$SHA already exists, not rebuilding"
+              echo "| $repo | already existed |" >>"$GITHUB_STEP_SUMMARY"
+              return
+            elif ! grep -q ImageNotFoundException <<<"$err"; then
+              echo "::error::Could not check $repo:$SHA: $err"; return 1
+            fi
+            docker buildx build --platform linux/arm64 -f "$dockerfile" \
+              --label "org.opencontainers.image.revision=$SHA" \
+              --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              -t "$REGISTRY/$repo:$SHA" --push .
+            echo "| $repo | pushed \`$repo:$SHA\` |" >>"$GITHUB_STEP_SUMMARY"
+          }
+          build orders-api src/Orders.Api/Dockerfile
+          build orders-console src/Orders.Console/Dockerfile
+          build orders-loadgen src/Orders.LoadGenerator/Dockerfile
+          if aws ecr describe-images --repository-name orders-loadgen --image-ids imageTag="$SHA" >/dev/null 2>&1; then
+            docker buildx imagetools create -t "$REGISTRY/orders-loadgen:latest" "$REGISTRY/orders-loadgen:$SHA"
+          fi
