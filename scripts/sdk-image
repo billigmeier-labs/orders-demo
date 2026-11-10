@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Prints the .NET SDK image everything builds in: the FROM line of .devcontainer/Dockerfile.
+# The devcontainer adds its features on top; scripts/dotnet and CI use the image as is.
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+image=$(sed -nE 's/^FROM[[:space:]]+([^[:space:]]+).*/\1/p' "$root/.devcontainer/Dockerfile" | head -1)
+[ -n "$image" ] || { echo "No FROM line in .devcontainer/Dockerfile" >&2; exit 1; }
+echo "$image"

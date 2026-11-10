@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Runs `dotnet` from PATH if installed, otherwise inside the official .NET SDK container.
+# Runs `dotnet` from PATH if installed, otherwise inside the official .NET SDK container: the exact
+# image the devcontainer uses (the FROM line of .devcontainer/Dockerfile), so laptops, agents and CI
+# all build with the same SDK. CI sets DOTNET_IN_DOCKER=1 to use the container even though the runner
+# has a (different) SDK preinstalled.
 #
 # The container mounts the repo at the same path, runs as the calling user, keeps
 # HOME and the NuGet cache in .cache/, and can start sibling containers through the
@@ -7,12 +10,12 @@
 # Extra `docker run` flags can be passed in DOTNET_DOCKER_ARGS (used by `just dev`).
 set -euo pipefail
 
-if command -v dotnet >/dev/null 2>&1; then
+if [ "${DOTNET_IN_DOCKER:-}" != 1 ] && command -v dotnet >/dev/null 2>&1; then
     exec dotnet "$@"
 fi
 
-image="${DOTNET_SDK_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+image="${DOTNET_SDK_IMAGE:-$("$root/scripts/sdk-image")}"
 socket=/var/run/docker.sock
 socket_gid="$(stat -c %g "$socket" 2>/dev/null || stat -f %g "$socket" 2>/dev/null || echo 0)"
 workdir="$PWD"
