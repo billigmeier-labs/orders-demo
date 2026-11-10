@@ -19,9 +19,10 @@ public static class ArchitectureContent
                 new("CODEOWNERS", "Paths that need the human to approve"),
                 new("infra/", "Terraform for everything in AWS"),
             ], "terraform"),
-            new("Issues and pull requests", "All work is tracked as issues and pull requests.",
+            new("Issues and pull requests", "All work is tracked as issues and pull requests; a Projects board is the view.",
             [
                 new("Issues", "From people, the incident agent and mutation tests"),
+                new("Projects board", "Every issue and PR is added automatically, with Status, Risk and Difficulty; closed or merged items move to Done"),
                 new("Labels", "risk:*, difficulty:*, agent, needs-human, incident, mutation, demo"),
                 new("Pull requests", "One per issue; auto-merge when green"),
             ], "pull-request"),
