@@ -2,6 +2,11 @@ name: CI
 
 # Runs on every PR, in the merge queue, and on main.
 # The single required check is `ci-ok`, which passes only if every job it needs passed (or was skipped on purpose).
+#
+# Every job runs a just recipe, so `just ci` reproduces a red run locally. .NET isn't installed on the runner:
+# DOTNET_IN_DOCKER=1 makes scripts/dotnet run every dotnet command in the devcontainer's SDK image
+# (.devcontainer/devcontainer.json), the same image people and agents use. Docker-based steps (Testcontainers,
+# Postgres, image builds, scanners) talk to the runner's Docker through the mounted socket.
 on:
   pull_request:
   merge_group:
@@ -17,20 +22,26 @@ permissions:
   contents: read
 
 env:
-  DOTNET_NOLOGO: "true"
-  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_IN_DOCKER: "1"
 
 jobs:
   changes:
     name: What changed
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      # Docs-only PRs skip the test jobs. The merge queue and main always run everything.
+      code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
+          # `every`: a file counts as code only if it matches ALL patterns (not Markdown AND not under docs/).
+          predicate-quantifier: every
           filters: |
             code:
               - '!**/*.md'
@@ -41,18 +52,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-      - uses: extractions/setup-just@v2
-        id: just1
-        continue-on-error: true  # GitHub release downloads sometimes 504
-      - if: steps.just1.outcome == 'failure'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
+      - uses: ./.github/actions/setup
       - run: just lint
 
   unit:
@@ -60,90 +63,108 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-      - uses: extractions/setup-just@v2
-        id: just2
-        continue-on-error: true  # GitHub release downloads sometimes 504
-      - if: steps.just2.outcome == 'failure'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
+      - uses: ./.github/actions/setup
       - run: just build
       - run: just test
 
   integration:
-    name: Integration tests
+    name: Integration tests and coverage
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
-      - uses: extractions/setup-just@v2
-        id: just3
-        continue-on-error: true  # GitHub release downloads sometimes 504
-      - if: steps.just3.outcome == 'failure'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
+          fetch-depth: 0 # the coverage gate diffs against the PR's base
+      - uses: ./.github/actions/setup
       - run: just test-all
+      - name: New and changed lines are covered
+        if: github.event_name == 'pull_request'
+        run: just coverage-gate ${{ github.event.pull_request.base.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: artifacts/coverage/
+          retention-days: 7
+          if-no-files-found: ignore
 
   security:
     name: Security scans
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Secret scan (gitleaks)
-        run: |
-          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.3 git /repo --redact --no-banner
-      - uses: actions/setup-dotnet@v4
+          fetch-depth: 0 # gitleaks scans the whole history
+      - uses: ./.github/actions/setup
+      - run: just secrets
+      - run: just vulnerable
+
+  image-scan:
+    name: API image scan
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
         with:
-          global-json-file: global.json
-      - name: Vulnerable packages (high or critical fail)
-        run: |
-          dotnet restore Orders.slnx >/dev/null
-          dotnet list Orders.slnx package --vulnerable --include-transitive | tee vuln.txt
-          if grep -Eq '\b(High|Critical)\b' vuln.txt; then echo "::error::High or critical vulnerable package found"; exit 1; fi
+          nuget-cache: "false" # the image restores inside its own build
+      - uses: docker/setup-buildx-action@v3
+      # Exposes the Actions cache token to `docker buildx` in the recipe (type=gha layer cache).
+      - uses: crazy-max/ghaction-github-runtime@v3
+      - name: Trivy vulnerability database cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      - run: just image-scan
 
   pr-rules:
     name: PR rules
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check the PR follows the rules in AGENTS.md
+      - uses: ./.github/actions/setup
+        with:
+          nuget-cache: "false"
+      - run: just pr-rules ${{ github.event.pull_request.base.sha }}
         env:
-          TITLE: ${{ github.event.pull_request.title }}
-          BODY: ${{ github.event.pull_request.body }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          fail=0
-          if ! grep -Eq '^(feat|fix|test|chore|docs|refactor|perf|ci|build)(\([a-z0-9-]+\))?!?: .+' <<<"$TITLE"; then
-            echo "::error::PR title must be a Conventional Commit, e.g. 'feat: add order search'"; fail=1
-          fi
-          case "$AUTHOR" in
-            claude*|*claude\[bot\]*)
-              if ! grep -Eiq '(closes|fixes|resolves) #[0-9]+' <<<"$BODY"; then
-                echo "::error::Agent PRs must link the issue they work on ('Closes #123')"; fail=1
-              fi ;;
-          esac
-          added_skips=$(git diff "$BASE" "$HEAD" -- '*.cs' | grep -E '^\+.*(Skip *=|\[Fact\(Skip|\[Theory\(Skip)' || true)
-          if [ -n "$added_skips" ]; then
-            echo "::error::This PR adds skipped tests:"; echo "$added_skips"; fail=1
-          fi
-          exit $fail
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ github.token }}
+
+  # Agents start every task from a fresh container, so `just setup` has to stay fast and unattended.
+  # This runs it on a clean runner (no NuGet cache) and reports setup-seconds=<n> in the job summary.
+  setup-time:
+    name: Fresh setup
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          nuget-cache: "false"
+      - run: just setup-time
 
   # The release image is built once, in the merge queue, and tagged with the merge group's SHA, which
   # is the commit that lands on main. A push to main (an admin bypass) builds only what is missing.
@@ -151,64 +172,32 @@ jobs:
     name: Release image
     if: github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     # The release environment (main and gh-readonly-queue/main/* only) is what lets this job assume
     # orders-demo-release; other workflows on main cannot push release images.
     environment: release
     permissions:
       contents: read
       id-token: write
-    env:
-      SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          nuget-cache: "false"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-release
           aws-region: us-east-1
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - name: Build and push linux/arm64 images tagged with the commit SHA
-        env:
-          REGISTRY: ${{ steps.ecr.outputs.registry }}
-        run: |
-          {
-            echo "### Release images for \`${SHA::7}\`"
-            echo "| Repository | Result |"
-            echo "| --- | --- |"
-          } >>"$GITHUB_STEP_SUMMARY"
-          build() {
-            local repo=$1 dockerfile=$2 err
-            if [ ! -f "$dockerfile" ]; then
-              echo "$dockerfile not found, skipping $repo"
-              echo "| $repo | skipped (no $dockerfile) |" >>"$GITHUB_STEP_SUMMARY"
-              return
-            fi
-            if err=$(aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$SHA" 2>&1 >/dev/null); then
-              echo "$repo:$SHA already exists, not rebuilding"
-              echo "| $repo | already existed |" >>"$GITHUB_STEP_SUMMARY"
-              return
-            elif ! grep -q ImageNotFoundException <<<"$err"; then
-              echo "::error::Could not check $repo:$SHA: $err"; return 1
-            fi
-            docker buildx build --platform linux/arm64 -f "$dockerfile" \
-              --label "org.opencontainers.image.revision=$SHA" \
-              --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-              -t "$REGISTRY/$repo:$SHA" --push .
-            echo "| $repo | pushed \`$repo:$SHA\` |" >>"$GITHUB_STEP_SUMMARY"
-          }
-          build orders-api src/Orders.Api/Dockerfile
-          build orders-console src/Orders.Console/Dockerfile
-          build orders-loadgen src/Orders.LoadGenerator/Dockerfile
-          # The load generator runs as a one-off task from a fixed task definition that uses :latest
-          # (the one tag orders-loadgen leaves mutable).
-          if aws ecr describe-images --repository-name orders-loadgen --image-ids imageTag="$SHA" >/dev/null 2>&1; then
-            docker buildx imagetools create -t "$REGISTRY/orders-loadgen:latest" "$REGISTRY/orders-loadgen:$SHA"
-          fi
+      - uses: docker/setup-buildx-action@v3
+      - uses: crazy-max/ghaction-github-runtime@v3
+      - run: just release-images ${{ steps.ecr.outputs.registry }} ${{ github.sha }}
 
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, lint, unit, integration, security, pr-rules, image]
+    needs: [changes, lint, unit, integration, security, image-scan, pr-rules, setup-time, image]
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed or were skipped on purpose
@@ -217,5 +206,6 @@ jobs:
         run: |
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           if echo "$RESULTS" | jq -e 'to_entries | any(.value.result == "failure" or .value.result == "cancelled")' >/dev/null; then
-            echo "::error::A required job failed or was cancelled"; exit 1
+            echo "::error::A required job failed or was cancelled. Open the failed job above; each prints the file, the problem and the fix. \`just ci\` reproduces it locally."
+            exit 1
           fi
