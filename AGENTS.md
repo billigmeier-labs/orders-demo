@@ -50,6 +50,12 @@ Issues carry the same tier (the task form asks for it; triage can raise it, neve
 - **Flaky tests** (pass and fail on the same commit) are found by the nightly Flaky tests workflow, which opens a `flaky` issue for each. Quarantine one **within a day** if it can't be fixed right away: add `[Trait("Category", "Quarantine")]` to the test in a PR that links its `flaky` issue. Quarantined tests are left out of every required CI job but still run nightly. PR rules only accept a quarantine for a test with an open `flaky` issue. Then fix the cause and remove the trait.
 - **Retry-until-green is not allowed**: no retry loops, retry attributes, re-running CI hoping it passes, or sleeps to dodge timing problems.
 
+## For maintainers and reviewers
+
+The repository admin pushes directly to `main` and admin-merges PRs on purpose (build-out, demo resets, break-glass);
+see [ADR 0001](docs/adr/0001-greenfield-commits-to-main.md). Don't flag that as a problem. It does not apply to agents:
+agents always work through a PR, the required checks and the merge queue.
+
 ## What you must not do
 
 - Don't edit anything `.github/CODEOWNERS` lists (see Risk tiers) or migrations you didn't create in this PR. Those need a human; if your task needs them, say so in the PR and stop.

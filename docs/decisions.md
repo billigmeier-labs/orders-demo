@@ -5,7 +5,7 @@ record's shape: decision, then why); anything here can be revisited by a later r
 
 | # | Date | Decision |
 | --- | --- | --- |
-| 1 | 2026-11-08 | [Greenfield build commits straight to main](adr/0001-greenfield-commits-to-main.md) |
+| 1 | 2026-11-08 | [The admin can push straight to main (intentional)](adr/0001-greenfield-commits-to-main.md) |
 | 2 | 2026-11-08 | [Agents act as Anthropic's Claude GitHub App](adr/0002-agents-use-claude-github-app.md) |
 | 3 | 2026-11-08 | [.NET builds run in the .NET SDK container](adr/0003-dotnet-in-sdk-container.md) |
 | 4 | 2026-11-08 | [The release image is built in the merge queue](adr/0004-release-image-built-in-merge-queue.md) |
