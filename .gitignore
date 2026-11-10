@@ -5,6 +5,7 @@ obj/
 .idea/
 TestResults/
 coverage/
+artifacts/
 .worktrees/
 .env
 *.tfstate*

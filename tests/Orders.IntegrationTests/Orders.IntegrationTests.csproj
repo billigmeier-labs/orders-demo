@@ -6,4 +6,11 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Orders.Api/Orders.Api.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Line coverage for the changed-lines gate (just coverage-gate) -->
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
 </Project>

@@ -1,0 +1,10 @@
+# Image-scan findings accepted on purpose (`just image-scan`). Every entry needs a reason and an expiry,
+# after which the finding fails CI again. CODEOWNERS makes a human review changes here.
+vulnerabilities:
+  - id: CVE-2026-109518
+    paths: []
+    statement: >-
+      apt in the mcr.microsoft.com/dotnet/aspnet:10.0 base image; only exploitable while apt downloads
+      packages, which the API container never does. Real fix: the final stage moves to the chiseled
+      aspnet image (no apt), or Microsoft rebuilds the base with apt 2.8.4ubuntu0.1.
+    expired_at: 2026-12-10

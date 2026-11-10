@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# The PR rules from AGENTS.md, as one check with readable failures.
+#
+#   scripts/pr-rules <base-ref> [head-ref]
+#
+# Without head-ref it judges the working tree (committed and uncommitted changes), which is what
+# `just ci` does locally. PR details come from the environment and are checked only when set
+# (CI sets them; locally they're usually empty):
+#   PR_TITLE   Conventional Commit title
+#   PR_BODY    must link an issue (Closes #123), except for the bots and branches listed below
+#   PR_AUTHOR  login of the PR's author
+#   PR_BRANCH  the PR's head branch
+# Always checked: no newly skipped or disabled tests, no deleted tests, thresholds not lowered.
+set -euo pipefail
+export LC_ALL=C
+
+base=${1:?usage: pr-rules <base-ref> [head-ref]}
+head=${2:-}
+cd "$(git rev-parse --show-toplevel)"
+
+fail=0
+errors=0
+error() { # error <file> <line> <message> <fix>
+    local file=$1 line=$2 msg=$3 fix=$4 where=$1
+    [ -n "$line" ] && where="$file:$line"
+    [ -n "$where" ] && echo "  $where: $msg" || echo "  $msg"
+    echo "    Fix: $fix"
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        local loc=""
+        [ -n "$file" ] && loc=" file=$file${line:+,line=$line},"
+        echo "::error${loc# }title=PR rules::$msg Fix: $fix"
+    fi
+    errors=$((errors + 1)); fail=1
+}
+section() { echo; echo "== $1"; }
+
+# File contents at the head side (working tree when no head-ref) and at the base.
+at_head() { if [ -n "$head" ]; then git show "$head:$1" 2>/dev/null || true; else cat "$1" 2>/dev/null || true; fi; }
+at_base() { git show "$base:$1" 2>/dev/null || true; }
+diff_range=("$base"); [ -n "$head" ] && diff_range+=("$head")
+
+# --- PR title -------------------------------------------------------------------------------------
+if [ -n "${PR_TITLE:-}" ]; then
+    section "PR title is a Conventional Commit"
+    if grep -Eq '^(feat|fix|test|chore|docs|refactor|perf|ci|build|revert|security)(\([a-z0-9-]+\))?!?: .+' <<<"$PR_TITLE"; then
+        echo "  ok: $PR_TITLE"
+    else
+        error "" "" "PR title '$PR_TITLE' isn't a Conventional Commit." \
+            "Rename the PR to '<type>: <what changes>', e.g. 'feat: add order search' (types: feat, fix, test, chore, docs, refactor, perf, ci, build, revert)."
+    fi
+fi
+
+# --- Linked issue -----------------------------------------------------------------------------------
+if [ -n "${PR_AUTHOR:-}${PR_BRANCH:-}" ]; then
+    section "PR links the issue it works on"
+    exempt=""
+    case "${PR_AUTHOR:-}" in "dependabot[bot]") exempt="Dependabot update" ;; esac
+    case "${PR_BRANCH:-}" in
+        release-please--*) exempt="release-please release PR" ;;
+        demo/*) exempt="canned demo PR (branch demo/*)" ;;
+    esac
+    if [ -n "$exempt" ]; then
+        echo "  not needed: $exempt"
+    else
+        issue=$(grep -Eio '\b(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]*:?[[:space:]]+#[0-9]+' <<<"${PR_BODY:-}" | head -1 | grep -Eo '[0-9]+$' || true)
+        if [ -z "$issue" ]; then
+            error "" "" "The PR body doesn't link an issue." \
+                "Put 'Closes #<issue>' on the first line of the PR description (every change starts from an issue; open one first if there isn't one)."
+        elif [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+            kind=$(gh api "repos/${GITHUB_REPOSITORY:?}/issues/$issue" --jq 'if .pull_request then "pr" else "issue" end' 2>/dev/null || echo missing)
+            case "$kind" in
+                issue) echo "  ok: closes #$issue" ;;
+                pr) error "" "" "#$issue is a pull request, not an issue." "Link the issue this PR works on: 'Closes #<issue>'." ;;
+                *) error "" "" "Issue #$issue doesn't exist in this repo." "Link an existing issue: 'Closes #<issue>'." ;;
+            esac
+        else
+            echo "  ok: closes #$issue"
+        fi
+    fi
+fi
+
+# --- Skipped or disabled tests ------------------------------------------------------------------------
+section "No newly skipped or disabled tests"
+skip_patterns=(
+    '\bSkip(Unless|When|Exceptions)?[[:space:]]*=|xunit Skip on a test attribute'
+    '\bAssert\.Skip(Unless|When)?[[:space:]]*\(|Assert.Skip in a test body'
+    '\bExplicit[[:space:]]*=[[:space:]]*true|Explicit = true (the test only runs when asked for by name)'
+    '\[[[:space:]]*Explicit\b|[Explicit] attribute'
+    '^[[:space:]]*#if[[:space:]]+(false|0|NEVER|DISABLED)\b|#if false around code'
+    '^[[:space:]]*//+[[:space:]]*\[[[:space:]]*(Fact|Theory)\b|a commented-out test'
+)
+found_skip=0
+while IFS=$'\t' read -r file line text; do
+    for entry in "${skip_patterns[@]}"; do
+        # The pattern itself contains '|' alternatives, so split on the last '|' only.
+        pattern=${entry%|*}; what=${entry##*|}
+        if grep -Eq -- "$pattern" <<<"$text"; then
+            error "$file" "$line" "adds $what: \`$(sed -E 's/^[[:space:]]+//' <<<"$text" | cut -c1-100)\`" \
+                "Don't skip tests to get CI green. Fix the test or the code. If the test is flaky, quarantine it the documented way (AGENTS.md, Flaky tests)."
+            found_skip=1
+            break
+        fi
+    done
+done < <(git diff -U0 --no-color --no-ext-diff "${diff_range[@]}" -- 'tests/*.cs' 'tests/**/*.cs' | awk '
+    /^\+\+\+ / { f = substr($0, 7); next }
+    /^@@ / { split($3, n, ","); l = substr(n[1], 2); next }
+    /^\+/ && f != "" { print f "\t" l "\t" substr($0, 2); l++ }')
+[ "$found_skip" = 1 ] || echo "  ok"
+
+# Quarantine is the one allowed way to take a test out of CI, and only for a test the nightly flaky run
+# has an open `flaky` issue for.
+quarantined=$(git diff -U0 --no-color --no-ext-diff "${diff_range[@]}" -- 'tests/*.cs' 'tests/**/*.cs' | awk '
+    /^\+\+\+ / { f = substr($0, 7); next }
+    /^@@ / { split($3, n, ","); l = substr(n[1], 2); next }
+    /^\+/ && f != "" { if ($0 ~ /Trait\([[:space:]]*"Category"[[:space:]]*,[[:space:]]*"Quarantine"/) print f "\t" l; l++ }')
+if [ -n "$quarantined" ]; then
+    section "Quarantined tests have an open flaky issue"
+    flaky_titles=""
+    if [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+        flaky_titles=$(gh issue list -R "${GITHUB_REPOSITORY:?}" --label flaky --state open --limit 200 --json title --jq '.[].title' 2>/dev/null || true)
+    fi
+    while IFS=$'\t' read -r file line; do
+        name=$(at_head "$file" | awk -v from="$line" 'NR >= from && match($0, /(void|Task|ValueTask)[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\(/) {
+            s = substr($0, RSTART, RLENGTH); sub(/^(void|Task|ValueTask)[[:space:]]+/, "", s); sub(/[[:space:]]*\($/, "", s); print s; exit }')
+        if [ -z "${GH_TOKEN:-}" ]; then
+            echo "  $file:$line: quarantines ${name:-a test}; CI checks it has an open \`flaky\` issue (can't check locally)."
+        elif [ -n "$name" ] && grep -q -- "\.$name\b" <<<"$flaky_titles"; then
+            echo "  ok: $name has an open flaky issue"
+        else
+            error "$file" "$line" "quarantines ${name:-a test}, but there's no open \`flaky\` issue for it." \
+                "Only tests the nightly Flaky tests run reported can be quarantined. Fix the test instead, or wait for its flaky issue."
+        fi
+    done <<<"$quarantined"
+fi
+
+# --- Deleted tests ----------------------------------------------------------------------------------
+section "No deleted tests"
+test_names() { # test method names in C# source on stdin: the method after each [Fact]/[Theory]
+    awk '/\[[[:space:]]*(Fact|Theory)([^A-Za-z0-9_]|$)|,[[:space:]]*(Fact|Theory)[[:space:]]*[](]/ { want = 1 }
+        want && match($0, /(void|Task|ValueTask)[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\(/) {
+            s = substr($0, RSTART, RLENGTH); sub(/^(void|Task|ValueTask)[[:space:]]+/, "", s); sub(/[[:space:]]*\($/, "", s)
+            print s; want = 0 }'
+}
+work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
+# Every test name on the head side, so a test moved to another file isn't reported as deleted.
+if [ -n "$head" ]; then
+    git ls-tree -r --name-only "$head" -- tests | grep '\.cs$' | while read -r f; do git show "$head:$f" | test_names; done
+else
+    { git ls-files -- 'tests/*.cs' 'tests/**/*.cs'; git ls-files --others --exclude-standard -- 'tests/*.cs' 'tests/**/*.cs'; } \
+        | sort -u | while read -r f; do [ -f "$f" ] && test_names < "$f"; done
+fi | sort -u > "$work/head-names"
+deleted=0
+while IFS=$'\t' read -r status old new; do
+    new=${new:-$old}
+    before=$(at_base "$old" | grep -Ec '\[[[:space:]]*(Fact|Theory)\b' || true)
+    after=0; [ "${status:0:1}" = D ] || after=$(at_head "$new" | grep -Ec '\[[[:space:]]*(Fact|Theory)\b' || true)
+    [ "$after" -lt "$before" ] || continue
+    gone=$(comm -23 <(at_base "$old" | test_names | sort -u) "$work/head-names")
+    if [ -z "$gone" ]; then
+        echo "  $new: $before -> $after tests, all still present elsewhere (moved)"
+        continue
+    fi
+    for name in $gone; do
+        line=$(at_base "$old" | grep -nE "(void|Task|ValueTask)[[:space:]]+${name}[[:space:]]*\(" | head -1 | cut -d: -f1)
+        error "$old" "" "deletes test $name (was at line ${line:-?} on the base branch; $before -> $after tests in this file)." \
+            "Keep the test, or change it to match the new behaviour. Removing coverage needs a human: say why in the PR and ask for review."
+        deleted=1
+    done
+done < <(git diff --name-status -M --no-color "${diff_range[@]}" -- 'tests/*.cs' 'tests/**/*.cs' | awk -F'\t' '$1 ~ /^(M|D|R)/ { print $1 "\t" $2 "\t" $3 }')
+[ "$deleted" = 1 ] || echo "  ok"
+
+# --- Thresholds not lowered ---------------------------------------------------------------------------
+section "Coverage and mutation thresholds not lowered"
+numbers() { # "key<TAB>number" for every "key": number in a JSON document on stdin
+    { grep -oE '"[A-Za-z]+"[[:space:]]*:[[:space:]]*[0-9]+(\.[0-9]+)?' || true; } | sed -E 's/"([A-Za-z]+)"[[:space:]]*:[[:space:]]*/\1\t/'
+}
+lowered=0
+for file in coverage-thresholds.json stryker-config.json; do
+    base_numbers=$(at_base "$file" | numbers)
+    [ -n "$base_numbers" ] || continue
+    head_numbers=$(at_head "$file" | numbers)
+    while IFS=$'\t' read -r key was; do
+        now=$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' <<<"$head_numbers")
+        if [ -z "$now" ]; then
+            error "$file" "" "removes the \"$key\" threshold (was $was)." "Put \"$key\": $was back. Thresholds only go up."
+            lowered=1
+        elif awk -v a="$now" -v b="$was" 'BEGIN { exit !(a < b) }'; then
+            line=$(at_head "$file" | grep -nE "\"$key\"" | head -1 | cut -d: -f1)
+            error "$file" "$line" "lowers \"$key\" from $was to $now." "Put it back to $was (or higher). Add tests instead of lowering the bar."
+            lowered=1
+        fi
+    done <<<"$base_numbers"
+done
+if ! git diff --quiet "${diff_range[@]}" -- tests/coverage.runsettings 2>/dev/null; then
+    echo "  note: tests/coverage.runsettings changed (what is measured); CODEOWNERS makes a human review it."
+fi
+[ "$lowered" = 1 ] || echo "  ok"
+
+echo
+if [ "$fail" = 0 ]; then echo "PR rules passed."; else echo "PR rules failed: $errors problem(s) above."; fi
+exit "$fail"

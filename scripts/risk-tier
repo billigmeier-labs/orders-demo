@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Prints the PR's risk tier from the paths it changes: `high` when any changed path is owned in
+# .github/CODEOWNERS (those need the human's approval), otherwise `low`. The matched paths go to stderr.
+#
+#   scripts/risk-tier <base-ref> [head-ref]
+#
+# CODEOWNERS is read from the base, so a PR can't lower its own tier by editing it.
+# Supports the CODEOWNERS pattern forms this repo uses: /anchored, unanchored, dir/, *, ** and ?.
+set -euo pipefail
+export LC_ALL=C
+
+base=${1:?usage: risk-tier <base-ref> [head-ref]}
+head=${2:-}
+cd "$(git rev-parse --show-toplevel)"
+
+to_regex() { # CODEOWNERS pattern -> ERE over repo-relative paths
+    local p=$1 anchor='(^|/)' tail='(/.*)?$'
+    case "$p" in /*) anchor='^'; p=${p#/} ;; esac
+    case "$p" in */) tail='/.*$'; p=${p%/} ;; esac
+    case "$p" in */*) anchor='^' ;; esac # a slash in the middle anchors it too
+    local out="" i c
+    for ((i = 0; i < ${#p}; i++)); do
+        c=${p:i:1}
+        case "$c" in
+            '*') if [ "${p:i+1:1}" = '*' ]; then out+='.*'; i=$((i + 1)); else out+='[^/]*'; fi ;;
+            '?') out+='[^/]' ;;
+            [].[+\(\){}^\$\|\\]) out+="\\$c" ;;
+            *) out+=$c ;;
+        esac
+    done
+    p=$out
+    echo "$anchor$p$tail"
+}
+
+range=("$base"); [ -n "$head" ] && range+=("$head")
+mapfile -t changed < <(git diff --name-only --no-renames "${range[@]}"; [ -n "$head" ] || git ls-files --others --exclude-standard)
+mapfile -t patterns < <(git show "$base:.github/CODEOWNERS" 2>/dev/null | sed -E 's/#.*//' | awk 'NF >= 2 { print $1 }')
+
+hits=()
+for path in "${changed[@]}"; do
+    for pat in "${patterns[@]}"; do
+        if grep -Eq -- "$(to_regex "$pat")" <<<"$path"; then hits+=("$path (CODEOWNERS: $pat)"); break; fi
+    done
+done
+
+if [ "${#hits[@]}" -gt 0 ]; then
+    printf '%s\n' "${hits[@]}" | sed 's/^/owned: /' >&2
+    echo high
+else
+    echo "No changed path is in CODEOWNERS." >&2
+    echo low
+fi
