@@ -246,9 +246,18 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
         }, ct);
         var pr = json.GetProperty("data").GetProperty("repository").GetProperty("pullRequest");
         string? Text(string name) => pr.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        var state = new PullReviewState(number, Text("reviewDecision"), Text("mergeStateStatus"));
+        var state = new PullReviewState(number, Text("reviewDecision"), Text("mergeStateStatus"), await TouchesCodeOwnedAsync(number, ct));
         _reviewStates[number] = (now + TimeSpan.FromSeconds(15), state);
         return state;
+    }
+
+    private async Task<bool> TouchesCodeOwnedAsync(int number, CancellationToken ct)
+    {
+        var owners = await GetAsync($"{_repo}/contents/.github/CODEOWNERS", ct);
+        var text = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(owners.GetProperty("content").GetString()!.Replace("\n", "")));
+        var patterns = CodeOwners.Parse(text);
+        var files = (await GetArrayAsync($"{_repo}/pulls/{number}/files?per_page=100", ct)).Select(f => f.GetProperty("filename").GetString()!);
+        return files.Any(f => CodeOwners.Matches(patterns, f));
     }
 
     private async Task<int?> CountOrNullAsync(string path, CancellationToken ct)
