@@ -21,4 +21,14 @@ public sealed class LoadGeneratorTests
         Assert.Equal("steady", env["SCENARIO"]);
         Assert.Equal("10", env["DURATION_MINUTES"]);
     }
+
+    [Fact]
+    public void Loadgen_task_carries_the_demo_run_when_it_is_known()
+    {
+        var generator = new AwsLoadGenerator(null!, new ConsoleOptions { LoadgenSubnets = ["subnet-1"] });
+
+        var request = generator.RunTaskRequestFor("normal", 5, "7");
+
+        Assert.Contains(request.Tags, t => t.Key == AwsLoadGenerator.RunTagKey && t.Value == "7");
+    }
 }

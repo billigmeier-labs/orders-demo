@@ -52,7 +52,7 @@ builder.Services.AddOptionalTelemetry(builder.Configuration, appInfo);
 
 var app = builder.Build();
 
-app.UseHealthChecksOutOfMetrics();
+app.UseRequestMetricTags();
 // One summary line per request (no query strings), with the request's context on every line it logs.
 app.UseAppRequestLogging();
 // Unhandled exceptions are logged once, with the stack, by the exception handler; EF Core's own
