@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Builds and pushes the linux/arm64 release images for one commit, tagged with its SHA (the merge-queue
+# job). An image that already exists for the SHA isn't rebuilt (tags are immutable). In GitHub Actions
+# the layers come from and go to the Actions cache.
+#
+#   scripts/release-images <ecr-registry> <sha>
+set -euo pipefail
+registry=${1:?usage: release-images <registry> <sha>}
+sha=${2:?usage: release-images <registry> <sha>}
+summary=${GITHUB_STEP_SUMMARY:-/dev/null}
+{
+    echo "### Release images for \`${sha::7}\`"
+    echo "| Repository | Result |"
+    echo "| --- | --- |"
+} >>"$summary"
+
+build() {
+    local repo=$1 dockerfile=$2 err cache=()
+    if [ ! -f "$dockerfile" ]; then
+        echo "$dockerfile not found, skipping $repo"
+        echo "| $repo | skipped (no $dockerfile) |" >>"$summary"
+        return
+    fi
+    if err=$(aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$sha" 2>&1 >/dev/null); then
+        echo "$repo:$sha already exists, not rebuilding"
+        echo "| $repo | already existed |" >>"$summary"
+        return
+    elif ! grep -q ImageNotFoundException <<<"$err"; then
+        echo "::error::Could not check $repo:$sha: $err"; return 1
+    fi
+    if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ]; then
+        cache=(--cache-from "type=gha,scope=$repo-arm64" --cache-to "type=gha,mode=max,scope=$repo-arm64")
+    fi
+    docker buildx build --platform linux/arm64 -f "$dockerfile" "${cache[@]}" \
+        --label "org.opencontainers.image.revision=$sha" \
+        --label "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-billigmeier-labs/orders-demo}" \
+        -t "$registry/$repo:$sha" --push .
+    echo "| $repo | pushed \`$repo:$sha\` |" >>"$summary"
+}
+
+build orders-api src/Orders.Api/Dockerfile
+build orders-console src/Orders.Console/Dockerfile
+build orders-loadgen src/Orders.LoadGenerator/Dockerfile
+# The load generator runs as a one-off task from a fixed task definition that uses :latest
+# (the one tag orders-loadgen leaves mutable).
+if aws ecr describe-images --repository-name orders-loadgen --image-ids imageTag="$sha" >/dev/null 2>&1; then
+    docker buildx imagetools create -t "$registry/orders-loadgen:latest" "$registry/orders-loadgen:$sha"
+fi

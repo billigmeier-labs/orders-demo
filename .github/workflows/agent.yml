@@ -2,6 +2,13 @@ name: Agent
 
 # When an issue gets the `agent` label (from triage, or a person), Claude implements it and opens a PR
 # with auto-merge on. When the AI review blocks that PR, Claude reads the findings and pushes a fix.
+#
+# Limits (spec: "a few agent runs at once, a time and cost cap per run, and an issue that fails twice is
+# handed to the human with what was tried"):
+#   - at most MAX_AGENTS runs work at once: the `slot` job queues the rest first-in-first-out
+#   - each run has a timeout and a cost cap (Claude Code's --max-budget-usd), plus a turn cap
+#   - a failed implement run labels the issue agent:failed-once and tries once more; a second failure
+#     labels it needs-human, takes it off the agent and comments what was tried
 on:
   issues:
     types: [labeled]
@@ -17,12 +24,37 @@ permissions:
 concurrency:
   group: agent-${{ github.event.issue.number || github.event.pull_request.number }}
 
+env:
+  MAX_AGENTS: 3
+  IMPLEMENT_BUDGET_USD: 5
+  FIX_BUDGET_USD: 3
+
 jobs:
+  slot:
+    name: Wait for an agent slot
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'agent') ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'ai-review:blocked' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'claude[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/agent-slot.sh
+
   implement:
     name: Implement issue
+    needs: slot
     if: github.event_name == 'issues' && github.event.label.name == 'agent'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    outputs:
+      summary: ${{ steps.work.outputs.structured_output }}
     env:
       ISSUE: ${{ github.event.issue.number }}
     steps:
@@ -33,6 +65,8 @@ jobs:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # `just ci` compares the branch with origin/main (coverage gate, PR rules)
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -90,6 +124,7 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 80
+            --max-budget-usd ${{ env.IMPLEMENT_BUDGET_USD }}
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just:*),Bash(dotnet:*),Bash(git:*),Bash(gh pr create:*),Bash(gh issue comment:*)"
             --json-schema '{"type":"object","required":["opened_pr"],"properties":{"opened_pr":{"type":"boolean"},"pr_number":{"type":"integer"},"summary":{"type":"string"}}}'
 
@@ -106,6 +141,7 @@ jobs:
 
   fix-review:
     name: Address AI review
+    needs: slot
     # Only the agent's own PRs: a person's PR that gets blocked is theirs to fix.
     if: github.event_name == 'pull_request' && github.event.label.name == 'ai-review:blocked' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'claude[bot]'
     runs-on: ubuntu-latest
@@ -116,6 +152,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -151,4 +188,33 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 60
+            --max-budget-usd ${{ env.FIX_BUDGET_USD }}
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just:*),Bash(dotnet:*),Bash(git:*),Bash(gh pr comment:*)"
+
+  # A failed run (error, timeout, cost or turn cap) gets one retry; the second failure goes to the human.
+  failed:
+    name: Record a failed agent run
+    needs: implement
+    if: failure() && needs.implement.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      # The automation token's label events start the retry run (GITHUB_TOKEN's wouldn't).
+      - env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          ISSUE: ${{ github.event.issue.number }}
+          SUMMARY: ${{ needs.implement.outputs.summary }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/agent-failed.sh

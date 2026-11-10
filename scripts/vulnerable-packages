@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Reads `dotnet list package --vulnerable --include-transitive` output and fails on High or Critical,
+# printing one line per package with the project, the advisory and how to fix it.
+#
+#   scripts/vulnerable-packages <output-file>
+set -euo pipefail
+export LC_ALL=C
+out=${1:?usage: vulnerable-packages <dotnet-list-output>}
+
+grep -qE "has the following vulnerable packages|has no vulnerable packages" "$out" || {
+    cat "$out"; echo "Couldn't read the vulnerability report above (did restore fail?)." >&2; exit 2; }
+
+found=$(awk '
+    /^Project `/ { p = $2; gsub(/`/, "", p) }
+    /Top-level Package/ { kind = "direct" }
+    /Transitive Package/ { kind = "transitive" }
+    $1 == ">" {
+        sev = ""; for (i = 3; i <= NF; i++) if ($i ~ /^(Low|Moderate|High|Critical)$/) { sev = $i; ver = $(i - 1) }
+        print sev "\t" p "\t" $2 "\t" ver "\t" kind "\t" $NF
+    }' "$out" | sort -u)
+
+if [ -n "$found" ]; then
+    echo "Vulnerable packages:"
+    while IFS=$'\t' read -r sev project pkg ver kind url; do
+        echo "  $sev: $pkg $ver ($kind, in $project) $url"
+    done <<<"$found"
+fi
+bad=$(grep -E '^(High|Critical)' <<<"$found" || true)
+if [ -n "$bad" ]; then
+    echo
+    echo "FAIL: $(wc -l <<<"$bad") package(s) with High or Critical vulnerabilities."
+    echo "Fix: direct packages: raise the version in Directory.Packages.props to one the advisory says is fixed."
+    echo "     transitive packages: add a <PackageVersion> for the fixed version to Directory.Packages.props and"
+    echo "     reference it from the project that pulls it in (or update the package that depends on it)."
+    echo "     Then run \`just restore\` to update the lock files."
+    [ -z "${GITHUB_ACTIONS:-}" ] || while IFS=$'\t' read -r sev project pkg ver kind url; do
+        echo "::error file=Directory.Packages.props,title=Vulnerable package::$sev vulnerability in $pkg $ver ($kind, $project): $url"
+    done <<<"$bad"
+    exit 1
+fi
+echo "No High or Critical vulnerable packages."

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Finds flaky tests in repeated test runs: a test that passed in some runs and failed in others.
+# A test that failed every time is broken, not flaky, and is listed separately.
+#
+#   scripts/flaky-report <dir-with-trx-files>
+#
+# Writes <dir>/flaky.tsv (test, passes, failures, first failure message) for the nightly workflow,
+# and prints a readable summary.
+set -euo pipefail
+export LC_ALL=C
+dir=${1:?usage: flaky-report <dir>}
+mapfile -t trx < <(find "$dir" -name '*.trx' | sort)
+[ "${#trx[@]}" -gt 0 ] || { echo "No .trx files in $dir" >&2; exit 2; }
+
+# Theory cases share one entry: Namespace.Class.Method(args) -> Namespace.Class.Method
+awk '
+    function attr(s, name,   r) { r = name "=\"[^\"]*\""; if (match(s, r)) return substr(s, RSTART + length(name) + 2, RLENGTH - length(name) - 3); return "" }
+    /<UnitTestResult / {
+        t = attr($0, "testName"); sub(/\(.*$/, "", t); o = attr($0, "outcome")
+        if (o == "Passed") pass[t]++
+        else if (o == "Failed") { fail[t]++; want = t }
+        seen[t] = 1
+    }
+    want != "" && /<Message>/ {
+        m = $0; sub(/.*<Message>/, "", m); sub(/<\/Message>.*/, "", m); gsub(/\t/, " ", m)
+        gsub(/&lt;/, "<", m); gsub(/&gt;/, ">", m); gsub(/&quot;/, "\"", m); gsub(/&apos;/, "'"'"'", m); gsub(/&#x[DA];/, " ", m); gsub(/&amp;/, "\\&", m)
+        if (!(want in msg)) msg[want] = substr(m, 1, 300)
+        want = ""
+    }
+    END { for (t in seen) print t "\t" pass[t] + 0 "\t" fail[t] + 0 "\t" msg[t] }
+' "${trx[@]}" | sort > "$dir/all.tsv"
+
+awk -F'\t' '$2 > 0 && $3 > 0' "$dir/all.tsv" > "$dir/flaky.tsv"
+awk -F'\t' '$2 == 0 && $3 > 0' "$dir/all.tsv" > "$dir/broken.tsv"
+
+echo "$(wc -l < "$dir/all.tsv") tests over ${#trx[@]} result files."
+if [ -s "$dir/flaky.tsv" ]; then
+    echo "Flaky (passed and failed on the same commit):"
+    awk -F'\t' '{ printf "  %s: failed %d of %d runs. %s\n", $1, $3, $2 + $3, $4 }' "$dir/flaky.tsv"
+else
+    echo "No flaky tests."
+fi
+if [ -s "$dir/broken.tsv" ]; then
+    echo "Failed every run (broken, not flaky; main should never be in this state):"
+    awk -F'\t' '{ printf "  %s: %s\n", $1, $4 }' "$dir/broken.tsv"
+fi

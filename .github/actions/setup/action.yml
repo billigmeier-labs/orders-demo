@@ -1,0 +1,25 @@
+name: Set up just and the NuGet cache
+description: >-
+  Installs just and restores the NuGet package cache. .NET itself isn't installed: every dotnet command
+  runs through scripts/dotnet in the devcontainer's SDK image (DOTNET_IN_DOCKER=1), like on a laptop.
+inputs:
+  nuget-cache:
+    description: Restore and save the NuGet package cache (.cache/nuget)
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: extractions/setup-just@v2
+      id: just
+      continue-on-error: true # GitHub release downloads sometimes 504
+    - if: steps.just.outcome == 'failure'
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+    # Keyed on the committed lock files (and tool manifest), so a cache hit is exactly the packages restore needs.
+    - if: inputs.nuget-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: .cache/nuget
+        key: nuget-${{ hashFiles('**/packages.lock.json', '.config/dotnet-tools.json') }}
+        restore-keys: nuget-

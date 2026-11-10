@@ -1,6 +1,11 @@
 name: Task
-description: A piece of work an agent or a person can pick up
+description: A piece of work an agent or a person can pick up (the agent works from this alone)
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Write it so someone new to the repo could do it without asking: what should be true, how to check it, and what not to touch.
+        Triage scores every new issue; low-risk work that isn't hard goes straight to the agent.
   - type: textarea
     id: goal
     attributes:
@@ -12,9 +17,24 @@ body:
     id: acceptance
     attributes:
       label: Acceptance criteria
-      description: A checklist the PR can be judged against.
+      description: A checklist the PR can be judged against. The AI review blocks a PR that doesn't meet it.
       value: |
         - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk tier
+      description: >-
+        high if the work touches anything in .github/CODEOWNERS (the pipeline, AGENTS.md, migrations, sign-in,
+        infra, test thresholds) or could lose data; otherwise low. See "Risk tiers" in AGENTS.md. Triage can raise
+        it, never lower it.
+      options:
+        - low
+        - high
+        - not sure
+      default: 2
     validations:
       required: true
   - type: textarea

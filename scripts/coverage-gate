@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Fails when the lines a change adds or edits aren't run by any test.
+#
+#   scripts/coverage-gate <base-ref> [coverage-dir]
+#   COVERAGE_HEAD=<ref> scripts/coverage-gate <base-ref>   # judge <base-ref>..<ref> instead of the working tree
+#
+# Reads the lcov files the test run wrote (`just test-all` puts them in artifacts/coverage), compares them
+# with `git diff <base-ref>` (committed and uncommitted changes, plus new untracked files) and checks:
+#   - changedLines: % of changed executable lines under src/ that tests run
+#   - overallLines: % of all measured lines that tests run (a floor, so coverage can't quietly erode)
+# Both numbers live in coverage-thresholds.json. Lines with no executable code (comments, braces,
+# declarations) don't count. Files no test project measures are listed but don't fail the gate.
+set -euo pipefail
+export LC_ALL=C
+
+base=${1:?usage: coverage-gate <base-ref> [coverage-dir]}
+dir=${2:-artifacts/coverage}
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+thresholds=coverage-thresholds.json
+
+threshold() { # threshold <key>: an integer from coverage-thresholds.json
+    sed -nE "s/.*\"$1\"[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/p" "$thresholds" | head -1
+}
+min_changed=$(threshold changedLines)
+min_overall=$(threshold overallLines)
+[ -n "$min_changed" ] && [ -n "$min_overall" ] || { echo "coverage-gate: $thresholds needs \"changedLines\" and \"overallLines\"" >&2; exit 2; }
+
+mapfile -t reports < <(find "$dir" -name '*.info' -type f 2>/dev/null | sort)
+if [ "${#reports[@]}" -eq 0 ]; then
+    echo "coverage-gate: no coverage in $dir. Run \`just test-all\` first (it writes lcov files there)." >&2
+    exit 2
+fi
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# file<TAB>line<TAB>hits, summed over every report (a line run by any test project counts as covered).
+awk -v root="$root/" '
+    /^SF:/ { f = substr($0, 4); if (index(f, root) == 1) f = substr(f, length(root) + 1); next }
+    /^DA:/ { split(substr($0, 4), a, ","); hits[f "\t" a[1]] += a[2] }
+    END { for (k in hits) print k "\t" hits[k] }
+' "${reports[@]}" | grep -v '/obj/' | sort > "$work/coverage.tsv" || true
+
+# file<TAB>line for every added or edited line under src/ (new side of the diff).
+{
+    git diff -U0 --no-color --no-ext-diff "$base" ${COVERAGE_HEAD:+"$COVERAGE_HEAD"} -- 'src/*.cs' 'src/**/*.cs'
+    [ -n "${COVERAGE_HEAD:-}" ] || git ls-files --others --exclude-standard -- 'src/*.cs' 'src/**/*.cs' | while read -r f; do
+        printf -- '+++ b/%s\n@@ -0,0 +1,%s @@\n' "$f" "$(wc -l < "$f")"
+    done
+} | awk '
+    /^\+\+\+ / { f = substr($0, 7); if ($0 == "+++ /dev/null") f = ""; next }
+    /^@@ / && f != "" {
+        split($3, n, ","); start = substr(n[1], 2); count = (2 in n) ? n[2] : 1
+        for (i = 0; i < count; i++) print f "\t" start + i
+    }
+' | sort -u > "$work/changed.tsv"
+
+# Join: changed lines that have coverage data are executable; hits=0 means no test runs them.
+awk -F'\t' 'NR == FNR { hits[$1 "\t" $2] = $3; measured[$1] = 1; next }
+    { k = $1 "\t" $2
+      if (k in hits) print (hits[k] > 0 ? "covered" : "missed") "\t" $1 "\t" $2
+      else if (!($1 in measured)) print "unmeasured\t" $1 }' \
+    "$work/coverage.tsv" "$work/changed.tsv" | sort -u > "$work/result.tsv"
+
+covered=$(grep -c '^covered' "$work/result.tsv" || true)
+missed=$(grep -c '^missed' "$work/result.tsv" || true)
+total=$((covered + missed))
+all=$(wc -l < "$work/coverage.tsv")
+all_covered=$(awk -F'\t' '$3 > 0' "$work/coverage.tsv" | wc -l)
+
+pct() { awk -v a="$1" -v b="$2" 'BEGIN { if (b == 0) print "100.0"; else printf "%.1f", a * 100 / b }'; }
+below() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b) }'; }
+changed_pct=$(pct "$covered" "$total")
+overall_pct=$(pct "$all_covered" "$all")
+fail=0
+
+echo "Changed lines covered: $changed_pct% ($covered of $total executable changed lines; minimum $min_changed%)"
+echo "Overall line coverage: $overall_pct% ($all_covered of $all lines; minimum $min_overall%)"
+
+if grep -q '^unmeasured' "$work/result.tsv"; then
+    echo
+    echo "Not measured (no test project with coverage loads these files; not counted):"
+    grep '^unmeasured' "$work/result.tsv" | cut -f2 | sed 's/^/  /'
+fi
+
+if below "$changed_pct" "$min_changed"; then
+    fail=1
+    echo
+    echo "FAIL: only $changed_pct% of the lines this change adds or edits are run by a test (minimum $min_changed%)."
+    echo "These changed lines are never run by any test:"
+    # Collapse runs of consecutive lines into ranges so the list stays short.
+    grep '^missed' "$work/result.tsv" | cut -f2,3 | sort -t$'\t' -k1,1 -k2,2n | awk -F'\t' '
+        function flush() { if (f != "") print f "\t" s "\t" e }
+        $1 != f || $2 != e + 1 { flush(); f = $1; s = $2 }
+        { e = $2 }
+        END { flush() }' | while IFS=$'\t' read -r f s e; do
+        where="$f:$s"; [ "$s" = "$e" ] || where="$f:$s-$e"
+        echo "  $where: not covered"
+        if [ -n "${GITHUB_ACTIONS:-}" ]; then
+            echo "::error file=$f,line=$s,endLine=$e,title=Not covered by tests::Lines $s-$e of $f are new or changed but no test runs them."
+        fi
+    done
+    echo "Fix: add or extend a unit or integration test that exercises those lines, then run \`just ci\`."
+    echo "Don't lower coverage-thresholds.json or exclude files to get past this; PR rules reject that."
+fi
+
+if below "$overall_pct" "$min_overall"; then
+    fail=1
+    echo
+    echo "FAIL: overall line coverage $overall_pct% is below the floor of $min_overall% in $thresholds."
+    echo "Fix: add tests for the code this change touches (or removes tests for), then run \`just ci\`."
+fi
+
+[ "$fail" = 0 ] && echo "Coverage gate passed."
+exit "$fail"

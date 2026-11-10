@@ -1,7 +1,8 @@
 # Orders demo task runner. Run `just` to list recipes.
 #
-# scripts/dotnet calls `dotnet` directly when it is installed (CI, devcontainer)
-# and otherwise runs it inside the official .NET SDK container.
+# scripts/dotnet calls `dotnet` directly when it is installed (devcontainer, agents) and otherwise
+# runs it inside the devcontainer's .NET SDK image. CI forces the image (DOTNET_IN_DOCKER=1), so a
+# laptop, an agent and CI build with the same SDK and run the same recipes.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
@@ -10,31 +11,139 @@ configuration := "Release"
 postgres_image := "postgres:17-alpine"
 api_port := "8080"
 db_port := "5432"
+db_container := "orders-dev-db"
 e2e_port := "8088"
 console_url := "https://console.demo.joshb.app"
 # Where the API finds the dev Postgres when dotnet runs natively (the devcontainer sets host.docker.internal)
 dev_db_host := env("DEV_DB_HOST", "localhost")
+# Tests tagged [Trait("Category", "Quarantine")] are flaky and left out of every required run (AGENTS.md).
+test_filter := "Category!=Quarantine"
+coverage_dir := "artifacts/coverage"
+coverage_args := "--settings tests/coverage.runsettings --collect 'XPlat Code Coverage' --results-directory " + coverage_dir
+gitleaks_image := "zricethezav/gitleaks:v8.24.3"
+trivy_image := "aquasec/trivy:0.76.1"
+api_image := "orders-api:ci"
+# Where this branch left main: what coverage-gate, pr-rules and risk-tier compare against by default
+main_base := `git merge-base origin/main HEAD 2>/dev/null || git rev-parse HEAD 2>/dev/null || echo HEAD`
 
 # List recipes
 default:
     @just --list
 
+# One command from a fresh clone to a working API: tools, packages, Postgres, migrations, seed data (idempotent)
+setup: restore db db-prepare
+    @echo "Ready. \`just dev\` runs the API on http://localhost:{{ api_port }} with hot reload."
+
+# Time `just setup` and report setup-seconds=<n> (CI runs it on a fresh runner; agents start from scratch every task)
+setup-time target="180":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    start=$(date +%s)
+    just setup
+    secs=$(( $(date +%s) - start ))
+    echo "setup-seconds=$secs (target {{ target }})"
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        echo "setup-seconds=$secs" >> "$GITHUB_STEP_SUMMARY"
+        echo "::notice title=setup-seconds::$secs"
+        [ "$secs" -le {{ target }} ] || echo "::warning title=Slow setup::just setup took ${secs}s on a fresh runner (target {{ target }}s)."
+    fi
+
 # Restore tools and packages (updates lock files when packages change)
-setup:
+restore:
     {{ dotnet }} tool restore
     {{ dotnet }} restore Orders.slnx
+
+# Start the dev Postgres on :5432 (keeps its data in the orders-dev-db volume; no-op when running)
+db:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    state=$(docker inspect -f '{{{{.State.Running}}' {{ db_container }} 2>/dev/null || echo missing)
+    case "$state" in
+        true) ;;
+        false) docker start {{ db_container }} >/dev/null ;;
+        *) docker run -d --name {{ db_container }} -p {{ db_port }}:5432 -v orders-dev-db:/var/lib/postgresql/data \
+               -e POSTGRES_USER=orders -e POSTGRES_PASSWORD=orders -e POSTGRES_DB=orders {{ postgres_image }} >/dev/null ;;
+    esac
+    for _ in $(seq 1 60); do docker exec {{ db_container }} pg_isready -h 127.0.0.1 -U orders -q 2>/dev/null && break; sleep 1; done
+    # Over TCP: during first-time init a temporary server answers on the Unix socket only, then restarts.
+    docker exec {{ db_container }} pg_isready -h 127.0.0.1 -U orders -q || { docker logs {{ db_container }} | tail -20; echo "Postgres didn't start." >&2; exit 1; }
+    echo "Postgres is up on :{{ db_port }}."
+
+# Delete the dev database and its data (the next `just setup` recreates and seeds it)
+db-reset:
+    docker rm -f {{ db_container }} >/dev/null 2>&1 || true
+    docker volume rm orders-dev-db >/dev/null 2>&1 || true
+    @echo "Dev database removed. Run \`just setup\`."
+
+# Apply migrations and seed an empty dev database: starts the API once with MIGRATE_ON_STARTUP and SEED_DATA, then stops it
+db-prepare:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    log=$(mktemp)
+    export ASPNETCORE_ENVIRONMENT=Development MIGRATE_ON_STARTUP=true SEED_DATA=true
+    export APP_VERSION=dev APP_COMMIT=local APP_ENVIRONMENT=local
+    # Port 0: any free port, so this works while `just dev` is running.
+    export ASPNETCORE_URLS=http://127.0.0.1:0
+    db_host={{ dev_db_host }}
+    if [ "${DOTNET_IN_DOCKER:-}" = 1 ] || ! command -v dotnet >/dev/null 2>&1; then
+        db_host=host.docker.internal
+        export DOTNET_DOCKER_ARGS="--name orders-setup -e ASPNETCORE_URLS -e ASPNETCORE_ENVIRONMENT -e MIGRATE_ON_STARTUP -e SEED_DATA -e APP_VERSION -e APP_COMMIT -e APP_ENVIRONMENT -e ConnectionStrings__Orders"
+    fi
+    export ConnectionStrings__Orders="Host=$db_host;Port={{ db_port }};Database=orders;Username=orders;Password=orders"
+    docker rm -f orders-setup >/dev/null 2>&1 || true
+    {{ dotnet }} run --project src/Orders.Api -c {{ configuration }} --no-launch-profile </dev/null >"$log" 2>&1 &
+    pid=$!
+    stop() { kill "$pid" 2>/dev/null || true; docker rm -f orders-setup >/dev/null 2>&1 || true; wait "$pid" 2>/dev/null || true; }
+    trap stop EXIT
+    # The API migrates and seeds before it starts listening, so "Application started" means the database is ready.
+    for _ in $(seq 1 300); do
+        grep -q "Application started" "$log" && { echo "Database migrated and seeded."; exit 0; }
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+    done
+    tail -40 "$log"
+    echo "The API didn't finish migrating and seeding (log above). Is Postgres up? Try \`just db-reset\` then \`just setup\`." >&2
+    exit 1
 
 # Build everything, warnings as errors, lock files enforced
 build:
     {{ dotnet }} build Orders.slnx -c {{ configuration }} -p:RestoreLockedMode=true
 
-# Unit tests (fast, no Docker)
+# Unit tests with coverage (fast, no Docker)
 test:
-    {{ dotnet }} test tests/Orders.UnitTests -c {{ configuration }}
+    rm -rf {{ coverage_dir }}
+    {{ dotnet }} test tests/Orders.UnitTests -c {{ configuration }} --filter "{{ test_filter }}" {{ coverage_args }}
 
-# Unit + integration tests (needs Docker)
+# Unit + integration tests with coverage (needs Docker)
 test-all:
-    {{ dotnet }} test Orders.slnx -c {{ configuration }}
+    rm -rf {{ coverage_dir }}
+    {{ dotnet }} test Orders.slnx -c {{ configuration }} --filter "{{ test_filter }}" {{ coverage_args }}
+
+# Every test, quarantined ones too, `runs` times; TRX results in artifacts/test-runs (the nightly flaky-test hunt)
+test-repeat runs="5":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf artifacts/test-runs
+    {{ dotnet }} build Orders.slnx -c {{ configuration }} -p:RestoreLockedMode=true
+    for i in $(seq 1 {{ runs }}); do
+        echo "== Run $i of {{ runs }}"
+        {{ dotnet }} test tests/Orders.UnitTests -c {{ configuration }} --no-build --logger "trx;LogFileName=unit-$i.trx" --results-directory artifacts/test-runs || true
+        {{ dotnet }} test tests/Orders.IntegrationTests -c {{ configuration }} --no-build --logger "trx;LogFileName=integration-$i.trx" --results-directory artifacts/test-runs || true
+    done
+    # Failures are judged across runs (a test that always fails isn't flaky, it's broken): see scripts/flaky-report.
+    scripts/flaky-report artifacts/test-runs
+
+# Check that the lines this branch adds or changes are covered (run after `just test-all`)
+coverage-gate base=main_base:
+    scripts/coverage-gate {{ base }} {{ coverage_dir }}
+
+# PR rules: no skipped or deleted tests, thresholds not lowered (+ title and linked issue when PR_* env vars are set)
+pr-rules base=main_base:
+    scripts/pr-rules {{ base }}
+
+# Risk tier from CODEOWNERS for the changes since base: prints low or high
+risk-tier base=main_base:
+    @scripts/risk-tier {{ base }}
 
 # Check formatting and style
 lint:
@@ -44,33 +153,93 @@ lint:
 format:
     {{ dotnet }} format Orders.slnx
 
-# Everything CI runs
-ci: lint build test-all
+# Secret scan, vulnerable packages, and the API image scan
+security: secrets vulnerable image-scan
+
+# Secret scan of the whole git history (gitleaks)
+secrets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Same paths inside the container, plus the shared git dir, so it also works in a git worktree.
+    common=$(cd "$(git rev-parse --git-common-dir)" && pwd)
+    if ! docker run --rm -v "$PWD:$PWD" -v "$common:$common" -w "$PWD" {{ gitleaks_image }} git "$PWD" --redact --no-banner; then
+        echo "Fix: remove the secret (rotate it if it was real: it's in git history now). If it's a false positive," >&2
+        echo "     add its fingerprint (shown above) to .gitleaksignore; a human reviews that file." >&2
+        exit 1
+    fi
+
+# NuGet packages with known high or critical vulnerabilities, direct or transitive
+vulnerable:
+    {{ dotnet }} restore Orders.slnx >/dev/null
+    mkdir -p artifacts
+    {{ dotnet }} list Orders.slnx package --vulnerable --include-transitive > artifacts/vulnerable.txt
+    scripts/vulnerable-packages artifacts/vulnerable.txt
+
+# Build the API image as orders-api:ci (uses the GitHub Actions layer cache in CI)
+image platform="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=()
+    if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ]; then
+        args+=(--cache-from type=gha,scope=api-ci --cache-to type=gha,mode=max,scope=api-ci)
+    fi
+    [ -z "{{ platform }}" ] || args+=(--platform "{{ platform }}")
+    # --pull: scan the base image as it is today, not a stale local copy.
+    docker buildx build --pull "${args[@]}" -f src/Orders.Api/Dockerfile -t {{ api_image }} --load .
+
+# Build the API image and fail on HIGH or CRITICAL vulnerabilities that have a fix (Trivy)
+image-scan: image
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p .cache/trivy
+    sock=/var/run/docker.sock
+    if ! docker run --rm --user "$(id -u):$(id -g)" --group-add "$(stat -c %g "$sock")" -v "$sock:$sock" \
+            -v "$PWD/.cache/trivy:/cache" -v "$PWD/.trivyignore.yaml:/trivyignore.yaml:ro" \
+            {{ trivy_image }} image --cache-dir /cache --quiet --ignorefile /trivyignore.yaml \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table {{ api_image }}; then
+        echo "Fix: the table above lists each vulnerable package and the version that fixes it." >&2
+        echo "     OS packages: bump the base image tag in src/Orders.Api/Dockerfile (Dependabot does this weekly)." >&2
+        echo "     NuGet packages: bump the version in Directory.Packages.props, then \`just restore\`." >&2
+        echo "     Can't be fixed yet: add it to .trivyignore.yaml with a reason and an expiry (a human reviews it)." >&2
+        exit 1
+    fi
+    echo "Image scan passed: no fixable HIGH or CRITICAL vulnerabilities in {{ api_image }}."
+
+# Build and push the release images for a commit (the merge-queue job; needs AWS credentials)
+release-images registry sha:
+    scripts/release-images {{ registry }} {{ sha }}
+
+# Everything PR CI runs, in the same order (pr-rules also checks title and issue link when PR_* are set)
+ci: lint build test-all coverage-gate pr-rules security
 
 # Mutation testing of the API with Stryker.NET (slow; report in StrykerOutput/<date>/reports)
 mutation *args:
     {{ dotnet }} tool restore
     {{ dotnet }} tool run dotnet-stryker --config-file stryker-config.json {{ args }}
 
+# Path of the newest Stryker JSON report (and `report=<path>` for GitHub Actions)
+mutation-report:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    report=$(ls -t StrykerOutput/*/reports/mutation-report.json 2>/dev/null | head -1 || true)
+    [ -n "$report" ] || { echo "No Stryker report in StrykerOutput/. The Stryker run failed before scoring; its log has the error." >&2; exit 1; }
+    echo "$report"
+    [ -z "${GITHUB_OUTPUT:-}" ] || echo "report=$report" >> "$GITHUB_OUTPUT"
+
 # Add an EF Core migration, e.g. `just migration AddOrderNotes`
 migration name:
     {{ dotnet }} tool restore
     {{ dotnet }} tool run dotnet-ef migrations add {{ name }} --project src/Orders.Api --output-dir Data/Migrations
 
-# Run the API on :8080 against a seeded Postgres container (Ctrl-C stops both); FeatureFlags__* env vars pass through
-dev:
+# Run the API with hot reload (dotnet watch) on :8080 against the dev Postgres; FeatureFlags__* env vars pass through
+dev: db
     #!/usr/bin/env bash
     set -euo pipefail
-    docker rm -f orders-dev-db >/dev/null 2>&1 || true
-    docker run -d --name orders-dev-db -p {{ db_port }}:5432 \
-        -e POSTGRES_USER=orders -e POSTGRES_PASSWORD=orders -e POSTGRES_DB=orders \
-        {{ postgres_image }} >/dev/null
-    trap 'docker rm -f orders-dev-api orders-dev-db >/dev/null 2>&1 || true' EXIT
-    until docker exec orders-dev-db pg_isready -U orders -q; do sleep 1; done
-    echo "Postgres is up on :{{ db_port }}. API on http://localhost:{{ api_port }}"
-
+    trap 'docker rm -f orders-dev-api >/dev/null 2>&1 || true' EXIT
+    echo "API on http://localhost:{{ api_port }} (edits reload automatically; Ctrl-C stops it, Postgres keeps running)"
     export ASPNETCORE_ENVIRONMENT=Development MIGRATE_ON_STARTUP=true SEED_DATA=true
     export APP_VERSION=dev APP_COMMIT=local APP_ENVIRONMENT=local
+    export DOTNET_WATCH_RESTART_ON_RUDE_EDIT=true
     db_host={{ dev_db_host }}
     if command -v dotnet >/dev/null 2>&1; then
         export ASPNETCORE_URLS=http://localhost:{{ api_port }}
@@ -78,12 +247,12 @@ dev:
         # The API runs in the SDK container and reaches Postgres through the host.
         db_host=host.docker.internal
         export ASPNETCORE_URLS=http://+:8080
-        export DOTNET_DOCKER_ARGS="--name orders-dev-api -p {{ api_port }}:8080 -e ASPNETCORE_URLS -e ASPNETCORE_ENVIRONMENT -e MIGRATE_ON_STARTUP -e SEED_DATA -e APP_VERSION -e APP_COMMIT -e APP_ENVIRONMENT -e ConnectionStrings__Orders"
+        export DOTNET_DOCKER_ARGS="--name orders-dev-api -p {{ api_port }}:8080 -e ASPNETCORE_URLS -e ASPNETCORE_ENVIRONMENT -e MIGRATE_ON_STARTUP -e SEED_DATA -e APP_VERSION -e APP_COMMIT -e APP_ENVIRONMENT -e ConnectionStrings__Orders -e DOTNET_WATCH_RESTART_ON_RUDE_EDIT"
         # Feature flags set in the calling shell, e.g. `FeatureFlags__searchV2=true just dev`
         for flag in $(compgen -e | grep '^FeatureFlags__' || true); do DOTNET_DOCKER_ARGS+=" -e $flag"; done
     fi
     export ConnectionStrings__Orders="Host=$db_host;Port={{ db_port }};Database=orders;Username=orders;Password=orders"
-    {{ dotnet }} run --project src/Orders.Api --no-launch-profile
+    {{ dotnet }} watch --project src/Orders.Api run --no-launch-profile
 
 # Playwright suite against the console in fake mode, auth on (extra args go to `playwright test`)
 e2e *args:

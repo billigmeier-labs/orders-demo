@@ -4,19 +4,24 @@ A small orders API in .NET 10 (minimal APIs, EF Core, PostgreSQL), used to demo 
 
 - [AGENTS.md](AGENTS.md): how to work in this repo (people and agents)
 - [docs/contracts.md](docs/contracts.md): endpoints, names and configuration
-- [docs/decisions.md](docs/decisions.md): decision log
+- [docs/adr/](docs/adr/): one record per decision ([index](docs/decisions.md))
 
 ## Run it
 
-You need [just](https://just.systems) and Docker. The .NET 10 SDK is optional: without it, every recipe runs `dotnet` in the `mcr.microsoft.com/dotnet/sdk:10.0` container (see `scripts/dotnet`). The devcontainer has everything.
+You need [just](https://just.systems) and Docker. That's all: without a .NET SDK, every recipe runs `dotnet` in the same SDK image the devcontainer and CI use (`.devcontainer/Dockerfile`, via `scripts/dotnet`). The devcontainer has everything.
 
 ```sh
-just setup   # restore tools and packages
-just ci      # lint, build, unit + integration tests: exactly what CI runs
-just dev     # API on http://localhost:8080 with a seeded Postgres container
+just setup
 ```
 
-Then try `curl localhost:8080/health/ready` or `curl localhost:8080/api/orders`. `just` lists every recipe.
+That one command restores tools and packages, starts Postgres in Docker, applies the migrations and seeds the data. It needs no input and is safe to re-run. Then:
+
+```sh
+just dev     # API on http://localhost:8080, hot reload on save
+just ci      # everything PR CI runs, in the same order
+```
+
+Try `curl localhost:8080/health/ready` or `curl localhost:8080/api/orders`. `just` lists every recipe.
 
 ## Layout
 

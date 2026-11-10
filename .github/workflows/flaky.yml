@@ -1,0 +1,52 @@
+name: Flaky tests
+
+# Nightly hunt for flaky tests: runs the unit and integration tests several times on main, quarantined ones
+# included, and opens or updates one `flaky` issue per test that both passed and failed on the same commit (the
+# console counts open `flaky` issues). Flaky tests are quarantined within a day with [Trait("Category", "Quarantine")],
+# which keeps them out of every required CI job but still runs them here. Retrying until green is not allowed.
+on:
+  schedule:
+    - cron: "43 9 * * *" # 3:43 AM Central
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: How many times to run the tests
+        default: "5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flaky-tests
+
+env:
+  DOTNET_IN_DOCKER: "1"
+
+jobs:
+  flaky:
+    name: flaky-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Automation app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: ./.github/actions/setup
+      - run: just test-repeat ${{ inputs.runs || '5' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-runs
+          path: artifacts/test-runs/
+          retention-days: 7
+      # With the automation token so new issues are triaged (issues made with GITHUB_TOKEN start nothing).
+      - name: Open or update flaky-test issues
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: bash .github/scripts/flaky-issues.sh artifacts/test-runs/flaky.tsv

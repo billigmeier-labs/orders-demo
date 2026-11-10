@@ -1,7 +1,9 @@
 name: Dependabot auto-merge
 
-# Patch and minor package updates from Dependabot merge on their own once every check is green,
-# through the same queue as everything else. Major updates, and anything touching .github/, wait for a human.
+# Patch updates from Dependabot (NuGet, Docker images and Actions) merge on their own once every check is green,
+# through the same merge queue as everything else. Minor and major updates wait for a human. Updates that touch a
+# CODEOWNERS path (Actions in .github/, the devcontainer's SDK image) still need the human's approval before the
+# queued auto-merge can happen.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
@@ -23,12 +25,15 @@ jobs:
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - id: meta
         uses: dependabot/fetch-metadata@v2
-      - name: Turn on auto-merge for patch and minor package updates
-        if: >-
-          steps.meta.outputs.package-ecosystem == 'nuget' &&
-          (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-           steps.meta.outputs.update-type == 'version-update:semver-minor')
+      # For a grouped PR, update-type is the biggest change in the group, so one minor bump keeps the whole PR manual.
+      - name: Turn on auto-merge for patch updates
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto --squash
+      - name: Leave the rest for a human
+        if: steps.meta.outputs.update-type != 'version-update:semver-patch'
+        env:
+          KIND: ${{ steps.meta.outputs.update-type }}
+        run: echo "::notice::${KIND:-unknown} update; not auto-merging (patch updates only)."

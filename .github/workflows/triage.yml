@@ -40,9 +40,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AUTHOR: ${{ github.event.issue.user.login }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then echo "allowed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          # Our own automation (incident and mutation issues) is trusted; bots have no collaborator permission to check.
+          # Issues our automation opens already routed (mutation issues come labelled agent + risk:low, the low-score
+          # issue needs-human) aren't re-scored, so triage can't send them the other way.
+          case "$AUTHOR" in "orders-automation[bot]")
+            if [[ ",$LABELS," == *",agent,"* || ",$LABELS," == *",needs-human,"* ]]; then
+              echo "::notice::Opened already routed ($LABELS); not re-triaging."; echo "allowed=false" >> "$GITHUB_OUTPUT"; exit 0
+            fi ;;
+          esac
+          # Our own automation (incident, mutation and flaky-test issues) is trusted; bots have no collaborator permission to check.
           case "$AUTHOR" in "orders-automation[bot]"|"claude[bot]") echo "allowed=true" >> "$GITHUB_OUTPUT"; exit 0;; esac
           level=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq .permission 2>/dev/null || echo none)
           case "$level" in admin|maintain|write) echo "allowed=true" >> "$GITHUB_OUTPUT";;
@@ -80,6 +88,8 @@ jobs:
               stored data, or touches concurrency/connection handling; "high" if it touches anything AGENTS.md says
               needs a human (.github, infra, migrations, auth, AGENTS.md, test thresholds) or could lose data.
               Be consistent: the same kind of change always gets the same score.
+              If the issue's "Risk tier" field says high (or "not sure"), take that as a reason to look harder; it can
+              raise your score but never lower it.
             - difficulty: "low" (a focused change in one place), "medium" (a few files, clear approach), "high" (unclear
               approach, design decisions, or large).
             Write short, plain reasons a programmer new to this repo would follow. If the issue lacks clear acceptance
