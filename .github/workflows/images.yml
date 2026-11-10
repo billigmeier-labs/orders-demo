@@ -39,7 +39,7 @@ jobs:
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::sha must be a full 40-character commit SHA"; exit 1; fi
           echo "sha=$sha" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ steps.sha.outputs.sha }}
           fetch-depth: 0
@@ -53,13 +53,13 @@ jobs:
             echo "::error::$SHA is not on main; release images are built only from main"; exit 1
           fi
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-release
           aws-region: us-east-1
 
       - id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
       - name: Build and push linux/arm64 images tagged with the commit SHA
         env:

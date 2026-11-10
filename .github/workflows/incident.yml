@@ -36,7 +36,7 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
@@ -67,14 +67,14 @@ jobs:
         run: |
           gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body "**Alarm again** at $AT: \`$ALARM\`. $REASON"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
         with:
           fetch-depth: 30
 
       - name: Read-only AWS access
         if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-incident-readonly
           aws-region: us-east-1
@@ -82,7 +82,7 @@ jobs:
       - name: Claude investigates
         id: investigate
         if: env.STATE == 'ALARM' && steps.find.outputs.issue == ''
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
         env:
           GH_TOKEN: ${{ github.token }}
         with:

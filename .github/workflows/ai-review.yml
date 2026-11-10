@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
@@ -80,7 +80,7 @@ jobs:
           echo "::error::The AI review blocked this PR twice. A human needs to review it (or comment '/override-ai-review')."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 0
@@ -107,7 +107,7 @@ jobs:
       - name: Claude reviews
         id: review
         if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Agent and Dependabot PRs are opened by bots; they're reviewed like everyone else's.

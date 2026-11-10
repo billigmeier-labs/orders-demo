@@ -19,12 +19,12 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
       # For a grouped PR, update-type is the biggest change in the group, so one minor bump keeps the whole PR manual.
       - name: Turn on auto-merge for patch updates
         if: steps.meta.outputs.update-type == 'version-update:semver-patch'

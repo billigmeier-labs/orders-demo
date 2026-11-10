@@ -29,7 +29,7 @@ jobs:
     steps:
       - name: Automation app token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ secrets.AUTOMATION_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_KEY }}
@@ -56,7 +56,7 @@ jobs:
           case "$level" in admin|maintain|write) echo "allowed=true" >> "$GITHUB_OUTPUT";;
             *) echo "allowed=false" >> "$GITHUB_OUTPUT"; echo "::notice::$AUTHOR has '$level' access; not triaging automatically.";; esac
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.gate.outputs.allowed == 'true'
 
       # Only the issue itself (its author passed the gate above); comments can come from anyone.
@@ -72,7 +72,7 @@ jobs:
       - name: Score the issue
         id: score
         if: steps.gate.outputs.allowed == 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.

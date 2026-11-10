@@ -31,7 +31,7 @@ jobs:
     outputs:
       prs: ${{ steps.stale.outputs.prs }}
     steps:
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-preview
           aws-region: us-east-1
@@ -97,7 +97,7 @@ jobs:
       id-token: write
       pull-requests: read
     steps:
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::983889169993:role/orders-demo-preview
           aws-region: us-east-1
