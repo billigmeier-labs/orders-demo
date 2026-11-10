@@ -4,6 +4,8 @@ using Amazon.CloudWatch;
 using Amazon.CloudWatchLogs;
 using Amazon.CostExplorer;
 using Amazon.ECS;
+using Amazon.S3;
+using Amazon.SimpleSystemsManagement;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Orders.Console;
@@ -59,6 +61,7 @@ if (options.Fakes)
     services.AddSingleton<IFeatureFlagService>(sp => sp.GetRequiredService<FakeWorld>());
     services.AddSingleton<ILoadGenerator>(sp => sp.GetRequiredService<FakeWorld>());
     services.AddSingleton<IEnvironmentProbe>(sp => sp.GetRequiredService<FakeWorld>());
+    services.AddSingleton<IDemoRuns>(sp => sp.GetRequiredService<FakeWorld>());
 }
 else
 {
@@ -76,6 +79,8 @@ else
     services.AddSingleton<IAmazonECS>(_ => new AmazonECSClient(region));
     services.AddSingleton<IAmazonAppConfig>(_ => new AmazonAppConfigClient(region));
     services.AddSingleton<IAmazonCostExplorer>(_ => new AmazonCostExplorerClient(RegionEndpoint.USEast1));
+    services.AddSingleton<IAmazonSimpleSystemsManagement>(_ => new AmazonSimpleSystemsManagementClient(region));
+    services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(region));
 
     services.AddSingleton<AwsMonitoring>();
     services.AddSingleton<IMonitoringService>(sp => sp.GetRequiredService<AwsMonitoring>());
@@ -84,6 +89,7 @@ else
     services.AddSingleton<IDeploymentService>(sp => sp.GetRequiredService<AwsDeployments>());
     services.AddSingleton<IEventSource>(sp => sp.GetRequiredService<AwsDeployments>());
     services.AddSingleton<ICostService, AwsCost>();
+    services.AddSingleton<IDemoRuns, AwsDemoRuns>();
     services.AddSingleton<IFeatureFlagService, AwsFeatureFlags>();
     services.AddSingleton<ILoadGenerator, AwsLoadGenerator>();
     services.AddSingleton<IEnvironmentProbe>(sp => new EnvironmentProbe(sp.GetRequiredService<IHttpClientFactory>().CreateClient("probe"), options));

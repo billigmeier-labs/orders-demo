@@ -330,6 +330,82 @@ public sealed class ScenarioEngineTests
     }
 
     [Fact]
+    public async Task Since_run_start_waits_see_events_from_before_the_previous_step()
+    {
+        var def = new ScenarioDefinition
+        {
+            Id = "p",
+            Title = "p",
+            Tour = true,
+            Steps =
+            [
+                new StepDefinition { Id = "pr", Title = "PR", Action = Defs.Action("test.issue"), Wait = [Defs.On(EventKinds.PrOpened, "pr#{issue}")] },
+                new StepDefinition { Id = "checks", Title = "Checks", Wait = [Defs.On(EventKinds.CheckCompleted, "pr#{issue}", ["ci-ok: success"])] },
+                new StepDefinition
+                {
+                    Id = "preview", Title = "Preview",
+                    Wait = [new WaitCondition { Kind = EventKinds.PreviewUp, Subject = "pr#{issue}", SinceRunStart = true, Description = "preview up" }],
+                },
+            ],
+        };
+        var h = new EngineHarness(def);
+        await h.Engine.RunActionAsync("p", "pr", Ct);
+        h.Emit(EventKinds.PrOpened, "pr#42");
+        await h.TickAsync();
+        h.Time.Advance(TimeSpan.FromMinutes(3));
+        h.Emit(EventKinds.PreviewUp, "pr#42");
+        h.Time.Advance(TimeSpan.FromMinutes(5));
+        h.Emit(EventKinds.CheckCompleted, "pr#42", "ci-ok: success");
+
+        await h.TickAsync();
+
+        Assert.Equal(RunStates.Completed, h.Engine.Current!.State);
+    }
+
+    [Fact]
+    public async Task Conditions_get_their_subject_with_run_variables_filled_in()
+    {
+        var def = new ScenarioDefinition
+        {
+            Id = "r",
+            Title = "r",
+            Tour = true,
+            Steps =
+            [
+                new StepDefinition
+                {
+                    Id = "review", Title = "Review", Action = Defs.Action("test.issue"),
+                    Wait = [new WaitCondition { Condition = "review-required", Subject = "pr#{issue}", Description = "needs review" }],
+                },
+            ],
+        };
+        var h = new EngineHarness(def);
+        await h.Engine.RunActionAsync("r", "review", Ct);
+        Assert.Equal(StepStates.Waiting, h.State("review"));
+
+        h.Conditions.ReviewRequired = true;
+        await h.TickAsync();
+
+        Assert.Equal(RunStates.Completed, h.Engine.Current!.State);
+        Assert.All(h.Conditions.ReviewSubjects, s => Assert.Equal("pr#42", s));
+    }
+
+    [Fact]
+    public void Since_run_start_is_only_for_waits_about_the_run()
+    {
+        var def = new ScenarioDefinition
+        {
+            Id = "bad",
+            Title = "bad",
+            Tour = true,
+            Steps = [new StepDefinition { Id = "s", Title = "S", Action = Defs.Action("test.noop"), Wait = [new WaitCondition { Kind = EventKinds.DeploySucceeded, Subject = "prod", SinceRunStart = true, Description = "any deploy" }] }],
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new EngineHarness(def));
+        Assert.Contains("sinceRunStart", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Unknown_scenarios_and_steps_are_not_found()
     {
         var h = new EngineHarness(Defs.Flow());

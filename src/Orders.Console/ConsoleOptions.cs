@@ -31,6 +31,10 @@ public sealed class ConsoleOptions
     public string ProdLogGroup { get; init; } = "/ecs/orders-api/prod";
     public string ErrorLogFilter { get; init; } = "?ERROR ?Error ?Exception";
     public string CostProjectTag { get; init; } = "orders-demo";
+    public string DemoRunParameter { get; init; } = "/orders-demo/demo-run";
+    public string MetricsBucketParameter { get; init; } = "/orders-demo/metrics-bucket";
+    public string? MetricsBucket { get; init; }
+    public double MutationScoreTarget { get; init; } = 60;
 
     public string AppConfigApplication { get; init; } = "orders-demo";
     public string AppConfigEnvironment { get; init; } = "prod";
@@ -90,6 +94,10 @@ public sealed class ConsoleOptions
             ProdLogGroup = Str("PROD_LOG_GROUP", d.ProdLogGroup),
             ErrorLogFilter = Str("ERROR_LOG_FILTER", d.ErrorLogFilter),
             CostProjectTag = Str("COST_PROJECT_TAG", d.CostProjectTag),
+            DemoRunParameter = Str("DEMO_RUN_PARAMETER", d.DemoRunParameter),
+            MetricsBucketParameter = Str("METRICS_BUCKET_PARAMETER", d.MetricsBucketParameter),
+            MetricsBucket = Opt("METRICS_BUCKET"),
+            MutationScoreTarget = Num("MUTATION_SCORE_TARGET", d.MutationScoreTarget),
             AppConfigApplication = Str("APPCONFIG_APPLICATION", d.AppConfigApplication),
             AppConfigEnvironment = Str("APPCONFIG_ENVIRONMENT", d.AppConfigEnvironment),
             AppConfigProfile = Str("APPCONFIG_PROFILE", d.AppConfigProfile),

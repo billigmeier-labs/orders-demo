@@ -7,9 +7,12 @@ const highlighted: Record<string, string[]> = {
   issue: ['repo'],
   triage: ['repo', 'runner', 'claude'],
   agent: ['repo', 'runner', 'claude'],
-  checks: ['repo', 'runner', 'ecr', 'ecs', 'rds'],
+  checks: ['repo', 'runner', 'claude'],
+  preview: ['runner', 'ecr', 'ecs', 'rds'],
   queue: ['repo', 'runner', 'queue'],
-  deploy: ['runner', 'ecr', 'ecs', 'rds'],
+  staging: ['runner', 'ecr', 'ecs', 'rds'],
+  production: ['runner', 'ecr', 'ecs', 'rds', 'cw'],
+  traffic: ['ecs', 'cw'],
   monitor: ['ecs', 'cw', 'runner', 'claude', 'repo'],
 };
 
@@ -37,6 +40,13 @@ test('the Tour runs from a new issue to production @live-slow', async ({ page, c
 
       await inspector.goto(`/present?scenario=tour&view=${step.id}`);
       await expect(inspector.getByTestId('narration')).toHaveAttribute('data-step', step.id);
+      // The live-traffic step shows production's requests arriving.
+      if (step.id === 'traffic') {
+        const prod = inspector.getByTestId('live-traffic').getByTestId('traffic-prod');
+        await expect(prod).toBeVisible();
+        expect(Number(await prod.getAttribute('data-latest-requests'))).toBeGreaterThanOrEqual(100);
+        await expect(prod.getByTestId('traffic-rate')).toHaveText(/\/min$/);
+      }
 
       const where = inspector.getByTestId('where-running');
       await expect(where).toBeVisible();

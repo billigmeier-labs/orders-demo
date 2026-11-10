@@ -17,7 +17,17 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
     private const string ProdJobPrefix = "Production";
     private const string ProdRollbackMessage = "Production rolled back to the previous version";
 
+    private const string StagingJobPrefix = "Staging";
+    private const string FlakyLabel = "flaky";
+    private const string MutationWorkflow = "mutation.yml";
+    private const string MutationScoreTitle = "mutation-score";
+
     private readonly ConcurrentDictionary<(long Run, DateTimeOffset UpdatedAt), bool> _rollbacks = new();
+    // Completed runs and merged PRs never change, so what was read about them is kept.
+    private readonly ConcurrentDictionary<(long Run, DateTimeOffset UpdatedAt), IReadOnlyList<JobInfo>> _jobs = new();
+    private readonly ConcurrentDictionary<int, PullFacts> _pullFacts = new();
+    private readonly ConcurrentDictionary<long, double?> _mutationScores = new();
+    private readonly ConcurrentDictionary<int, (DateTimeOffset Until, PullReviewState State)> _reviewStates = new();
     private (DateTimeOffset Until, DeliveryStats Stats)? _stats;
 
     public string Name => "github";
@@ -87,6 +97,7 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             .OrderByDescending(l => l.Count).ThenBy(l => l.Label, StringComparer.Ordinal).ToList();
         var pulls = await GetArrayAsync($"{_repo}/pulls?state=all&sort=created&direction=desc&per_page=50", ct);
         var agentPulls = pulls.Where(p => Login(p) == options.AgentLogin).Take(6).Select(ToPull).ToList();
+        var inFlight = pulls.Where(p => Login(p) == options.AgentLogin && p.GetProperty("state").GetString() == "open").Select(ToPull).ToList();
         var runs = new List<WorkflowRunSummary>();
         foreach (var workflow in options.Workflows)
         {
@@ -94,7 +105,7 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             runs.AddRange(latest);
         }
 
-        return new GitHubActivity(labels, issues.Count, agentPulls, runs);
+        return new GitHubActivity(labels, issues.Count, agentPulls, runs, inFlight);
     }
 
     public async Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct, string state = "open")
@@ -127,8 +138,22 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             return s.Stats;
         }
 
-        var ci = (await WorkflowRunsAsync(options.Workflows.Count > 0 ? options.Workflows[0] : "ci.yml", 50, ct, "&status=completed"))
-            .Select(r => r.Duration).OfType<TimeSpan>().ToList();
+        // CI: whole runs on PRs and in the merge queue, and each job's time.
+        var ciRuns = (await WorkflowRunsAsync(options.Workflows.Count > 0 ? options.Workflows[0] : "ci.yml", 30, ct, "&status=completed"))
+            .Where(r => r.Event is null or "pull_request" or "merge_group").ToList();
+        var ci = ciRuns.Select(r => r.Duration).OfType<TimeSpan>().ToList();
+        var jobDurations = new Dictionary<string, List<TimeSpan>>(StringComparer.Ordinal);
+        foreach (var run in ciRuns)
+        {
+            foreach (var job in await RunJobsAsync(run, ct) ?? [])
+            {
+                if (job.Duration is { } d && job.Conclusion is "success" or "failure")
+                {
+                    (jobDurations.TryGetValue(job.Name, out var list) ? list : jobDurations[job.Name] = []).Add(d);
+                }
+            }
+        }
+
         var closed = await GetArrayAsync($"{_repo}/pulls?state=closed&sort=updated&direction=desc&per_page=50", ct);
         var merged = closed.Where(p => p.GetProperty("merged_at").ValueKind == JsonValueKind.String).ToList();
         var openToMerge = merged.Select(p => Date(p, "merged_at") - Date(p, "created_at")).ToList();
@@ -142,6 +167,16 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             }
         }
 
+        // Size, merge queue wait and human review time, from each recent merged PR and its timeline.
+        var facts = new List<PullFacts>();
+        foreach (var p in merged.Take(30))
+        {
+            if (await PullFactsAsync(p, ct) is { } f)
+            {
+                facts.Add(f);
+            }
+        }
+
         var deploys = await WorkflowRunsAsync(options.DeployWorkflow, 30, ct);
         var rollbacks = 0;
         foreach (var run in deploys.Where(r => r.Conclusion == "failure" && r.Id != 0 && r.StartedAt >= now.AddDays(-30)))
@@ -152,9 +187,197 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             }
         }
 
-        var stats = new DeliveryStats(ci, openToMerge, agentMerged.Count, clean, deploys, rollbacks);
+        // Production deploys in the last 30 days: the deploy runs whose Production job ran.
+        var mergedBySha = merged
+            .Where(p => p.TryGetProperty("merge_commit_sha", out var sha) && sha.ValueKind == JsonValueKind.String)
+            .GroupBy(p => p.GetProperty("merge_commit_sha").GetString()!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => Date(g.First(), "merged_at"), StringComparer.Ordinal);
+        int prodDeploys = 0, prodFailures = 0;
+        var mergeToProd = new List<TimeSpan>();
+        foreach (var run in deploys.Where(r => r.Status == "completed" && r.StartedAt >= now.AddDays(-30)))
+        {
+            var prod = ProductionJob(await RunJobsAsync(run, ct));
+            if (prod is null)
+            {
+                continue;
+            }
+
+            prodDeploys++;
+            if (prod.Conclusion != "success" || run.Title.StartsWith("Revert ", StringComparison.Ordinal))
+            {
+                prodFailures++;
+            }
+
+            if (prod.Conclusion == "success" && run.HeadSha is { } head && mergedBySha.TryGetValue(head, out var mergedAt))
+            {
+                mergeToProd.Add((prod.CompletedAt ?? run.UpdatedAt) - mergedAt);
+            }
+        }
+
+        var stats = new DeliveryStats(ci, openToMerge, agentMerged.Count, clean, deploys, rollbacks)
+        {
+            CiJobDurations = jobDurations.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<TimeSpan>)kv.Value, StringComparer.Ordinal),
+            PullSizes = facts.Select(f => f.ChangedLines).OfType<int>().ToList(),
+            MergeQueueWaits = facts.Select(f => f.QueueWait).OfType<TimeSpan>().ToList(),
+            HumanReviewTimes = facts.Select(f => f.HumanReview).OfType<TimeSpan>().ToList(),
+            MergeToProduction = mergeToProd,
+            ProdDeploys = prodDeploys,
+            ProdDeployFailures = prodFailures,
+            FlakyTests = await CountOrNullAsync($"{_repo}/issues?state=open&labels={FlakyLabel}&per_page=100", ct),
+            MutationScore = await MutationScoreAsync(ct),
+        };
         _stats = (now + TimeSpan.FromMinutes(5), stats);
         return stats;
+    }
+
+    public async Task<PullReviewState> GetReviewStateAsync(int number, CancellationToken ct)
+    {
+        var now = time.GetUtcNow();
+        if (_reviewStates.TryGetValue(number, out var hit) && hit.Until > now)
+        {
+            return hit.State;
+        }
+
+        var parts = options.GitHubRepository.Split('/');
+        var json = await SendAsync(HttpMethod.Post, "graphql", new
+        {
+            query = "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewDecision mergeStateStatus } } }",
+            variables = new { owner = parts[0], name = parts.Length > 1 ? parts[1] : "", number },
+        }, ct);
+        var pr = json.GetProperty("data").GetProperty("repository").GetProperty("pullRequest");
+        string? Text(string name) => pr.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        var state = new PullReviewState(number, Text("reviewDecision"), Text("mergeStateStatus"));
+        _reviewStates[number] = (now + TimeSpan.FromSeconds(15), state);
+        return state;
+    }
+
+    private async Task<int?> CountOrNullAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            return (await GetArrayAsync(path, ct)).Count(i => !i.TryGetProperty("pull_request", out _));
+        }
+        catch (GitHubException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The latest successful nightly mutation run's score: its <c>::notice title=mutation-score::&lt;pct&gt;</c> annotation.</summary>
+    private async Task<double?> MutationScoreAsync(CancellationToken ct)
+    {
+        var latest = await WorkflowRunsAsync(MutationWorkflow, 1, ct, "&status=success");
+        if (latest is not [var run, ..] || run.Id == 0)
+        {
+            return null;
+        }
+
+        if (_mutationScores.TryGetValue(run.Id, out var known))
+        {
+            return known;
+        }
+
+        double? score = null;
+        foreach (var job in await RunJobsAsync(run, ct) ?? [])
+        {
+            var annotations = await GetArrayAsync($"{_repo}/check-runs/{job.Id.ToString(CultureInfo.InvariantCulture)}/annotations?per_page=50", ct);
+            foreach (var a in annotations)
+            {
+                if (a.TryGetProperty("title", out var title) && title.GetString() == MutationScoreTitle
+                    && a.TryGetProperty("message", out var message)
+                    && double.TryParse((message.GetString() ?? "").Trim().TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var pct))
+                {
+                    score = pct;
+                }
+            }
+        }
+
+        _mutationScores[run.Id] = score;
+        return score;
+    }
+
+    /// <summary>A run's jobs; kept for good once the run is completed. Null when GitHub could not say.</summary>
+    private async Task<IReadOnlyList<JobInfo>?> RunJobsAsync(WorkflowRunSummary run, CancellationToken ct)
+    {
+        var key = (run.Id, run.UpdatedAt);
+        if (run.Id == 0)
+        {
+            return null;
+        }
+
+        if (_jobs.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        JsonElement json;
+        try
+        {
+            json = await GetAsync($"{_repo}/actions/runs/{run.Id.ToString(CultureInfo.InvariantCulture)}/jobs?per_page=100", ct);
+        }
+        catch (GitHubException)
+        {
+            return null;
+        }
+
+        static DateTimeOffset? At(JsonElement j, string name) =>
+            j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
+        var jobs = json.GetProperty("jobs").EnumerateArray().Select(j => new JobInfo(
+            j.GetProperty("id").GetInt64(),
+            j.GetProperty("name").GetString() ?? "",
+            j.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
+            j.TryGetProperty("conclusion", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
+            At(j, "started_at"),
+            At(j, "completed_at"))).ToList();
+        if (run.Status == "completed")
+        {
+            _jobs[key] = jobs;
+        }
+
+        return jobs;
+    }
+
+    /// <summary>The deploy run's Production job (reusable workflow jobs are named "Production / ..."), if it ran.</summary>
+    internal static JobInfo? ProductionJob(IReadOnlyList<JobInfo>? jobs) => EnvironmentJob(jobs, ProdJobPrefix);
+
+    private static JobInfo? EnvironmentJob(IReadOnlyList<JobInfo>? jobs, string prefix)
+    {
+        var matching = (jobs ?? []).Where(j => j.Name.StartsWith(prefix, StringComparison.Ordinal) && j.Conclusion is not "skipped" && j.StartedAt is not null).ToList();
+        if (matching.Count == 0)
+        {
+            return null;
+        }
+
+        var done = matching.All(j => j.Status == "completed");
+        var conclusion = !done ? null : matching.All(j => j.Conclusion == "success") ? "success" : "failure";
+        return new JobInfo(matching[0].Id, prefix, done ? "completed" : "in_progress", conclusion,
+            matching.Min(j => j.StartedAt), done ? matching.Max(j => j.CompletedAt) : null);
+    }
+
+    /// <summary>What the scoreboard needs from one merged PR: its size, merge queue wait and human review time.</summary>
+    private async Task<PullFacts?> PullFactsAsync(JsonElement pull, CancellationToken ct)
+    {
+        var number = pull.GetProperty("number").GetInt32();
+        if (_pullFacts.TryGetValue(number, out var known))
+        {
+            return known;
+        }
+
+        try
+        {
+            var detail = await GetAsync($"{_repo}/pulls/{number}", ct);
+            int? size = detail.TryGetProperty("additions", out var add) && detail.TryGetProperty("deletions", out var del)
+                ? add.GetInt32() + del.GetInt32()
+                : null;
+            var timeline = await GetArrayAsync($"{_repo}/issues/{number}/timeline?per_page=100", ct);
+            var facts = Timeline.Facts(timeline, Date(pull, "created_at"), Date(pull, "merged_at"), Login(pull)) with { ChangedLines = size };
+            _pullFacts[number] = facts;
+            return facts;
+        }
+        catch (GitHubException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The AI review blocked the PR (it labels it <c>ai-review:blocked</c>, and the label stays after the fix),
@@ -182,13 +405,16 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             return known;
         }
 
-        var jobs = await GetAsync($"{_repo}/actions/runs/{run.Id.ToString(CultureInfo.InvariantCulture)}/jobs?per_page=100", ct);
-        var rolledBack = false;
-        foreach (var job in jobs.GetProperty("jobs").EnumerateArray().Where(j =>
-            (j.GetProperty("name").GetString() ?? "").StartsWith(ProdJobPrefix, StringComparison.Ordinal)
-            && j.GetProperty("conclusion").ValueKind == JsonValueKind.String && j.GetProperty("conclusion").GetString() == "failure"))
+        var jobs = await RunJobsAsync(run, ct);
+        if (jobs is null)
         {
-            var annotations = await GetArrayAsync($"{_repo}/check-runs/{job.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture)}/annotations?per_page=50", ct);
+            return false;
+        }
+
+        var rolledBack = false;
+        foreach (var job in jobs.Where(j => j.Name.StartsWith(ProdJobPrefix, StringComparison.Ordinal) && j.Conclusion == "failure"))
+        {
+            var annotations = await GetArrayAsync($"{_repo}/check-runs/{job.Id.ToString(CultureInfo.InvariantCulture)}/annotations?per_page=50", ct);
             if (annotations.Any(a => a.TryGetProperty("message", out var m) && (m.GetString() ?? "").Contains(ProdRollbackMessage, StringComparison.Ordinal)))
             {
                 rolledBack = true;
@@ -287,13 +513,23 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             }
         }
 
-        foreach (var run in await WorkflowRunsAsync(options.DeployWorkflow, 10, ct))
+        // Deploys: one deploy run goes to staging, then production; each environment's job is its own event.
+        foreach (var run in (await WorkflowRunsAsync(options.DeployWorkflow, 10, ct)).Where(r => r.UpdatedAt >= since).Take(5))
         {
             var detail = $"{run.Branch}: {run.Title}";
-            Add(run.StartedAt, EventKinds.DeployStarted, "prod", detail, run.Url);
-            if (run.Status == "completed" && run.Conclusion == "success")
+            var jobs = await RunJobsAsync(run, ct);
+            foreach (var (prefix, environment) in new[] { (StagingJobPrefix, "staging"), (ProdJobPrefix, "prod") })
             {
-                Add(run.UpdatedAt, EventKinds.DeploySucceeded, "prod", detail, run.Url);
+                if (EnvironmentJob(jobs, prefix) is not { StartedAt: { } started } job)
+                {
+                    continue;
+                }
+
+                Add(started, EventKinds.DeployStarted, environment, detail, run.Url);
+                if (job is { Conclusion: "success", CompletedAt: { } done })
+                {
+                    Add(done, EventKinds.DeploySucceeded, environment, detail, run.Url);
+                }
             }
         }
 
@@ -322,7 +558,9 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
             r.GetProperty("html_url").GetString() ?? "",
             r.TryGetProperty("run_started_at", out var started) && started.ValueKind == JsonValueKind.String ? started.GetDateTimeOffset() : Date(r, "created_at"),
             Date(r, "updated_at"),
-            r.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number ? id.GetInt64() : 0)).ToList();
+            r.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number ? id.GetInt64() : 0,
+            r.TryGetProperty("head_sha", out var sha) && sha.ValueKind == JsonValueKind.String ? sha.GetString() : null,
+            r.TryGetProperty("event", out var ev) && ev.ValueKind == JsonValueKind.String ? ev.GetString() : null)).ToList();
     }
 
     private static IssueSummary ToIssue(JsonElement i) => new(
@@ -411,6 +649,65 @@ public sealed partial class GitHubService(HttpClient http, ConsoleOptions option
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not turn on auto-merge for PR #{Number}")]
     private partial void LogAutoMergeFailed(Exception ex, int number);
+}
+
+/// <summary>One job of a workflow run.</summary>
+public sealed record JobInfo(long Id, string Name, string Status, string? Conclusion, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt)
+{
+    public TimeSpan? Duration => StartedAt is { } s && CompletedAt is { } c && c >= s ? c - s : null;
+}
+
+/// <summary>Scoreboard facts about one merged PR.</summary>
+public sealed record PullFacts(int? ChangedLines, TimeSpan? QueueWait, TimeSpan? HumanReview);
+
+/// <summary>Reads a PR's timeline (GET /issues/{n}/timeline).</summary>
+public static class Timeline
+{
+    /// <summary>
+    /// Merge queue wait: the last <c>added_to_merge_queue</c> before the merge, to the merge.
+    /// Human review time, on PRs that needed one (a person was asked to review, or reviewed): from the review
+    /// request or ready-for-review, whichever came last before the first review by a person other than the author,
+    /// to that review. Bots (the AI review, Dependabot) don't count as people.
+    /// </summary>
+    public static PullFacts Facts(IReadOnlyList<JsonElement> timeline, DateTimeOffset createdAt, DateTimeOffset mergedAt, string author)
+    {
+        static DateTimeOffset? At(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
+        static string Event(JsonElement e) => e.TryGetProperty("event", out var v) ? v.GetString() ?? "" : "";
+        static bool Human(JsonElement e, string property, out string login)
+        {
+            login = "";
+            if (!e.TryGetProperty(property, out var user) || user.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            login = user.TryGetProperty("login", out var l) ? l.GetString() ?? "" : "";
+            var type = user.TryGetProperty("type", out var t) ? t.GetString() : null;
+            return type != "Bot" && !login.EndsWith("[bot]", StringComparison.Ordinal);
+        }
+
+        var queued = timeline.Where(e => Event(e) == "added_to_merge_queue").Select(e => At(e, "created_at")).OfType<DateTimeOffset>()
+            .Where(t => t <= mergedAt).DefaultIfEmpty().Max();
+        TimeSpan? queueWait = queued == default ? null : mergedAt - queued;
+
+        var requests = timeline.Where(e => Event(e) == "review_requested" && Human(e, "requested_reviewer", out _))
+            .Select(e => At(e, "created_at")).OfType<DateTimeOffset>().ToList();
+        var ready = timeline.Where(e => Event(e) == "ready_for_review").Select(e => At(e, "created_at")).OfType<DateTimeOffset>().ToList();
+        var reviews = timeline.Where(e => Event(e) == "reviewed" && Human(e, "user", out var login) && login != author
+                && e.TryGetProperty("state", out var st) && st.GetString() is "approved" or "changes_requested" or "commented")
+            .Select(e => At(e, "submitted_at")).OfType<DateTimeOffset>().Order().ToList();
+
+        TimeSpan? review = null;
+        if (reviews.Count > 0)
+        {
+            var first = reviews[0];
+            var start = requests.Concat(ready).Where(t => t <= first).DefaultIfEmpty(createdAt).Max();
+            review = first - start;
+        }
+
+        return new PullFacts(null, queueWait, review);
+    }
 }
 
 public sealed class GitHubException(HttpStatusCode status, string message) : Exception(message)

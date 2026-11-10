@@ -111,6 +111,11 @@ public sealed class ScenarioCatalog
                     {
                         errors.Add($"{s.Id}/{step.Id}: unknown condition '{w.Condition}'.");
                     }
+
+                    if (w.SinceRunStart && !Matching.IsCorrelated(w))
+                    {
+                        errors.Add($"{s.Id}/{step.Id}: '{w.Description}' has sinceRunStart but is not about the run's issue or PR.");
+                    }
                 }
             }
         }

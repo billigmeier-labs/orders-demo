@@ -19,6 +19,18 @@ public sealed class LogSummaryTests
         Assert.Equal("/api/search — PostgresException 42601: syntax error in tsquery: \"alan turing:*\"", LogSummary.Summarize(UnhandledSearchError));
     }
 
+    // The same error in the API's Serilog compact JSON (Orders.Api Infrastructure/Logging.cs).
+    private const string CompactSearchError =
+        """{"@t":"2026-11-09T15:04:05.1234567Z","@m":"An unhandled exception has occurred while executing the request.","@i":"6f8cd2f2","@l":"Error","@x":"Npgsql.PostgresException (0x80004005): 42601: syntax error in tsquery: \"alan turing:*\"\n   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async)","@tr":"4bf92f3577b34da6a3ce929d0e0e4736","SourceContext":"Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware","RequestId":"0HN8V1K2Q3R4S:00000001","RequestPath":"/api/search","Journey":"search","Flags":{"searchV2":"on","faultSlowSearch":"off","faultFailOrders":"off"},"AppVersion":"1.4.2","AppCommit":"a3f9c21","AppEnvironment":"prod","TraceId":"4bf92f3577b34da6a3ce929d0e0e4736"}""";
+
+    [Fact]
+    public void Log_summary_reads_the_serilog_compact_format()
+    {
+        Assert.Equal("/api/search — PostgresException 42601: syntax error in tsquery: \"alan turing:*\"", LogSummary.Summarize(CompactSearchError));
+        Assert.Equal("GET /api/orders — HTTP GET /api/orders responded 500 in 12.0 ms",
+            LogSummary.Summarize("""{"@m":"HTTP GET /api/orders responded 500 in 12.0 ms","@l":"Error","RequestMethod":"GET","RequestPath":"/api/orders","StatusCode":500}"""));
+    }
+
     [Fact]
     public void Log_summary_includes_the_method_only_when_the_log_has_it()
     {

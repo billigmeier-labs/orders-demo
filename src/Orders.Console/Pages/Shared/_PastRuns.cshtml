@@ -1,0 +1,31 @@
+@model IReadOnlyList<Scoreboard>
+@{
+    string[] ids = ["ci-p90", "pr-to-merge", "merge-to-prod", "change-failure", "agent-clean", "run-cost"];
+    var names = ids.Select(id => Model.Select(b => b.Row(id)?.Name).FirstOrDefault(n => n is not null) ?? id).ToList();
+}
+<div class="score-wrap" data-testid="past-runs">
+    @if (Model.Count == 0)
+    {
+        <p class="muted">No saved runs yet.</p>
+    }
+    else
+    {
+        <table class="score">
+            <thead><tr><th>Run</th>@foreach (var n in names) { <th>@n</th> }</tr></thead>
+            <tbody>
+                @foreach (var b in Model)
+                {
+                    <tr data-past-run="@b.Run">
+                        <td><strong>@b.Run</strong><span class="muted small block">@b.At.ToString("MMM d", System.Globalization.CultureInfo.InvariantCulture)</span></td>
+                        @foreach (var id in ids)
+                        {
+                            var r = b.Row(id);
+                            var (_, css) = Fmt.Verdict(r?.Pass);
+                            <td>@(r?.Value ?? "")@if (r?.Pass is not null) { <span class="pill @css small">@Fmt.Verdict(r.Pass).Text</span> }</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Orders.Console.Scenarios;
+using Orders.Console.Status;
 
 namespace Orders.Console.Pages;
 
-public sealed class PresentModel(ScenarioCatalog catalog, ScenarioEngine engine, TimeProvider time) : PageModel
+public sealed class PresentModel(ScenarioCatalog catalog, ScenarioEngine engine, ScoreboardService scoreboard, StatusService status, TimeProvider time) : PageModel
 {
     [BindProperty(SupportsGet = true, Name = "scenario")]
     public string? ScenarioId { get; set; }
@@ -16,9 +17,9 @@ public sealed class PresentModel(ScenarioCatalog catalog, ScenarioEngine engine,
 
     public string PollUrl => $"/present?handler=Live&scenario={Uri.EscapeDataString(View.Scenario.Id)}" + (ViewStep is null ? "" : $"&view={Uri.EscapeDataString(ViewStep)}");
 
-    public IActionResult OnGet()
+    public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
-        if (!Load())
+        if (!await LoadAsync(ct))
         {
             return NotFound();
         }
@@ -26,9 +27,9 @@ public sealed class PresentModel(ScenarioCatalog catalog, ScenarioEngine engine,
         return Page();
     }
 
-    public IActionResult OnGetLive()
+    public async Task<IActionResult> OnGetLiveAsync(CancellationToken ct)
     {
-        if (!Load())
+        if (!await LoadAsync(ct))
         {
             return NotFound();
         }
@@ -36,7 +37,7 @@ public sealed class PresentModel(ScenarioCatalog catalog, ScenarioEngine engine,
         return Partial("_RunLive", View);
     }
 
-    private bool Load()
+    private async Task<bool> LoadAsync(CancellationToken ct)
     {
         var scenario = ScenarioId is null ? catalog.Tour : catalog.Find(ScenarioId);
         if (scenario is null)
@@ -44,7 +45,15 @@ public sealed class PresentModel(ScenarioCatalog catalog, ScenarioEngine engine,
             return false;
         }
 
-        View = RunView.Build(catalog, scenario, engine.Current, ViewStep, time.GetUtcNow());
+        var view = RunView.Build(catalog, scenario, engine.Current, ViewStep, time.GetUtcNow());
+        var focus = view.FocusStep.Def;
+        var done = view.FocusStep.State == StepStates.Done;
+        View = view with
+        {
+            Scoreboard = focus.Action?.Kind == "scoreboard.show" && done ? scoreboard.Latest : null,
+            PastRuns = focus.Action?.Kind == "scoreboard.pastRuns" && done ? scoreboard.LatestPastRuns : null,
+            Traffic = focus.Stage == "traffic" ? await status.GetTrafficAsync(ct) : null,
+        };
         return true;
     }
 }

@@ -21,8 +21,15 @@
       if (!res.ok) { el.dataset.pollError = String(res.status); return; }
       // Keep expanded <details data-keep-open="key"> open across the refresh.
       const open = new Set(Array.from(el.querySelectorAll('details[data-keep-open][open]')).map(d => d.dataset.keepOpen));
+      // Keep what was typed in <input data-keep-value="key"> (and its focus) across the refresh too.
+      const values = new Map(Array.from(el.querySelectorAll('input[data-keep-value]')).map(i => [i.dataset.keepValue, i.value]));
+      const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.keepValue : undefined;
       el.innerHTML = await res.text();
       el.querySelectorAll('details[data-keep-open]').forEach(d => { if (open.has(d.dataset.keepOpen)) d.open = true; });
+      el.querySelectorAll('input[data-keep-value]').forEach(i => {
+        if (values.has(i.dataset.keepValue)) i.value = values.get(i.dataset.keepValue);
+        if (focused && i.dataset.keepValue === focused) i.focus();
+      });
       // The header's "Step N of M" is outside the polled region; copy it from the fresh content.
       const counter = el.querySelector('[data-step-counter]');
       const header = document.querySelector('[data-header-step]');
@@ -55,6 +62,16 @@
     toastTimer = setTimeout(() => { toastEl.hidden = true; }, isError ? 8000 : 4000);
   }
 
+  // data-minutes-input="id" adds durationMinutes from that input to the action's JSON body.
+  function actionBody(btn) {
+    const body = btn.dataset.actionBody || '{}';
+    const input = btn.dataset.minutesInput && document.getElementById(btn.dataset.minutesInput);
+    if (!input) return body;
+    const parsed = JSON.parse(body);
+    parsed.durationMinutes = Math.min(120, Math.max(1, Math.round(Number(input.value)) || 15));
+    return JSON.stringify(parsed);
+  }
+
   async function runAction(btn) {
     if (btn.dataset.busy) return;
     if (btn.dataset.confirm && !window.confirm(btn.dataset.confirm)) return;
@@ -64,7 +81,7 @@
       const res = await fetch(btn.dataset.actionUrl, {
         method: 'POST',
         headers: { ...fetchHeaders, 'Content-Type': 'application/json', 'X-Console-Action': '1' },
-        body: btn.dataset.actionBody || '{}',
+        body: actionBody(btn),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {

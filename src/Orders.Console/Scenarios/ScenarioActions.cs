@@ -25,6 +25,8 @@ public sealed class ScenarioActions(
         "load.stop",
         "flags.set",
         "scoreboard.show",
+        "scoreboard.pastRuns",
+        "note.show",
     };
 
     public IReadOnlySet<string> Kinds => KnownKinds;
@@ -134,8 +136,40 @@ public sealed class ScenarioActions(
 
             case "scoreboard.show":
                 {
-                    var board = await scoreboard.GetAsync(ct);
-                    return new ActionOutcome(new Dictionary<string, string>(), board.Rows.Select(r => new ActionLine($"{r.Name}: {r.Value}")).ToList());
+                    var shown = await scoreboard.ShowAsync(ct);
+                    var lines = shown.Board.Rows.Select(r => new ActionLine(
+                        $"{r.Name}: {r.Value}" + (r.Target is null ? "" : $" (target {r.Target}: {(r.Pass switch { true => "met", false => "missed", null => "no data" })})"))).ToList();
+                    // Always set, so later steps can mention the snapshot whether or not it was saved.
+                    var vars = new Dictionary<string, string>
+                    {
+                        ["run"] = shown.Board.Run ?? "unknown",
+                        ["snapshot"] = shown.Saved?.Location ?? "not saved",
+                        ["snapshotUrl"] = shown.Saved?.Url ?? "",
+                    };
+                    lines.Add(shown.Saved is { } saved
+                        ? new ActionLine($"Saved as run {shown.Board.Run}: {saved.Location}", saved.Url)
+                        : new ActionLine($"Not saved: {shown.SaveError}"));
+
+                    return new ActionOutcome(vars, lines);
+                }
+
+            case "scoreboard.pastRuns":
+                {
+                    var past = await scoreboard.PastRunsAsync(ct);
+                    var lines = past.Count == 0
+                        ? [new ActionLine("No saved runs yet.")]
+                        : past.Select(b => new ActionLine($"Run {b.Run}, {b.At:MMM d}: " + string.Join(", ",
+                            b.Rows.Where(r => r.Id is "ci-p90" or "pr-to-merge" or "change-failure" or "run-cost").Select(r => $"{r.Name} {r.Value}")))).ToList();
+                    return new ActionOutcome(new Dictionary<string, string>(), lines);
+                }
+
+            case "note.show":
+                {
+                    // Lines of text for the audience; the last one links to "url" when it is set.
+                    var text = Arg("text").Split('\n');
+                    var url = ArgOr("url", "");
+                    var lines = text.Select((line, i) => new ActionLine(line, i == text.Length - 1 && url.Length > 0 ? url : null)).ToList();
+                    return new ActionOutcome(new Dictionary<string, string>(), lines);
                 }
 
             default:
@@ -145,15 +179,28 @@ public sealed class ScenarioActions(
 }
 
 /// <summary>Live conditions a wait can check instead of an event.</summary>
-public sealed class ConditionEvaluator(IMonitoringService monitoring) : IConditionEvaluator
+public sealed class ConditionEvaluator(IMonitoringService monitoring, IGitHubService github) : IConditionEvaluator
 {
+    /// <summary>Every alarm is OK.</summary>
     public const string AlarmsOk = "alarms-ok";
 
-    public IReadOnlySet<string> Names { get; } = new HashSet<string>(StringComparer.Ordinal) { AlarmsOk };
+    /// <summary>The load balancer reports at least <see cref="TrafficThreshold"/> requests a minute on production.</summary>
+    public const string ProdTraffic = "prod-traffic";
 
-    public async Task<bool> EvaluateAsync(string name, CancellationToken ct) => name switch
+    /// <summary>The PR in the subject (pr#N) can't merge without a review, e.g. a code owner's.</summary>
+    public const string ReviewRequired = "review-required";
+
+    /// <summary>Requests a minute that only the load generator makes (normal load is about 300).</summary>
+    public const double TrafficThreshold = 100;
+
+    public IReadOnlySet<string> Names { get; } = new HashSet<string>(StringComparer.Ordinal) { AlarmsOk, ProdTraffic, ReviewRequired };
+
+    public async Task<bool> EvaluateAsync(string name, string? subject, CancellationToken ct) => name switch
     {
         AlarmsOk => (await monitoring.GetAlarmsAsync(ct)).All(a => a.State == "OK"),
+        ProdTraffic => (await monitoring.GetTrafficAsync(ct)).Any(t => t.Environment == "prod" && t.LatestRequests >= TrafficThreshold),
+        ReviewRequired => subject is not null && Matching.NumberIn(subject) is { } n
+            && (await github.GetReviewStateAsync(int.Parse(n, System.Globalization.CultureInfo.InvariantCulture), ct)).ReviewRequired,
         _ => throw new InvalidOperationException($"Unknown condition '{name}'."),
     };
 }

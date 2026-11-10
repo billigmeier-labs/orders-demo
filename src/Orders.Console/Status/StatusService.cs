@@ -16,6 +16,7 @@ public sealed record StatusSnapshot(
     Panel<EnvironmentHealth> Staging,
     Panel<IReadOnlyList<AlarmState>> Alarms,
     Panel<IReadOnlyList<LogLine>> Errors,
+    Panel<IReadOnlyList<EnvironmentTraffic>> Traffic,
     Panel<GitHubActivity> GitHub,
     Panel<IReadOnlyList<DeployRecord>> Deploys,
     Panel<CostSummary> Cost,
@@ -46,6 +47,7 @@ public sealed class StatusService(
     public const string StagingPanel = "staging";
     public const string AlarmsPanel = "alarms";
     public const string ErrorsPanel = "errors";
+    public const string TrafficPanel = "traffic";
     public const string GitHubPanel = "github";
     public const string DeploysPanel = "deploys";
     public const string CostPanel = "cost";
@@ -58,6 +60,7 @@ public sealed class StatusService(
         [StagingPanel] = TimeSpan.FromSeconds(10),
         [AlarmsPanel] = TimeSpan.FromSeconds(10),
         [ErrorsPanel] = TimeSpan.FromSeconds(20),
+        [TrafficPanel] = TimeSpan.FromSeconds(30),
         [GitHubPanel] = TimeSpan.FromSeconds(15),
         [DeploysPanel] = TimeSpan.FromSeconds(15),
         [CostPanel] = TimeSpan.FromHours(1),
@@ -75,16 +78,20 @@ public sealed class StatusService(
         var staging = Read(StagingPanel, c => probe.CheckAsync("staging", c), ct);
         var alarms = Read(AlarmsPanel, monitoring.GetAlarmsAsync, ct);
         var errors = Read(ErrorsPanel, monitoring.GetRecentErrorsAsync, ct);
+        var traffic = Read(TrafficPanel, monitoring.GetTrafficAsync, ct);
         var gh = Read(GitHubPanel, github.GetActivityAsync, ct);
         var deploys = Read(DeploysPanel, deployments.GetRecentDeploysAsync, ct);
         var costs = Read(CostPanel, cost.GetCostAsync, ct);
         var flagList = Read(FlagsPanel, flags.GetFlagsAsync, ct);
         var loadStatus = Read(LoadPanel, load.GetStatusAsync, ct);
-        await Task.WhenAll(prod, staging, alarms, errors, gh, deploys, costs, flagList, loadStatus);
+        await Task.WhenAll(prod, staging, alarms, errors, traffic, gh, deploys, costs, flagList, loadStatus);
         return new StatusSnapshot(
-            prod.Result, staging.Result, alarms.Result, errors.Result, gh.Result, deploys.Result,
+            prod.Result, staging.Result, alarms.Result, errors.Result, traffic.Result, gh.Result, deploys.Result,
             costs.Result, flagList.Result, loadStatus.Result, events.Latest(15), sources.All());
     }
+
+    /// <summary>Production and staging traffic, cached like the Status panel (the Tour's live-traffic step shows it too).</summary>
+    public Task<Panel<IReadOnlyList<EnvironmentTraffic>>> GetTrafficAsync(CancellationToken ct) => Read(TrafficPanel, monitoring.GetTrafficAsync, ct);
 
     private async Task<Panel<T>> Read<T>(string name, Func<CancellationToken, Task<T>> read, CancellationToken ct)
     {

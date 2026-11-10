@@ -35,10 +35,22 @@ public sealed class MatchingAndCatalogTests
     {
         var dir = Path.Combine(AppContext.BaseDirectory, "Scenarios", "Definitions");
         var defs = ScenarioCatalog.LoadDirectory(dir);
-        var catalog = new ScenarioCatalog(defs, ScenarioActions.KnownKinds, new HashSet<string> { ConditionEvaluator.AlarmsOk });
+        var catalog = new ScenarioCatalog(defs, ScenarioActions.KnownKinds, new HashSet<string> { ConditionEvaluator.AlarmsOk, ConditionEvaluator.ProdTraffic, ConditionEvaluator.ReviewRequired });
 
         Assert.Equal("tour", catalog.Tour.Id);
-        Assert.Equal(["issue", "triage", "agent", "checks", "queue", "deploy", "monitor"], catalog.Tour.Steps.Select(s => s.Stage));
+        Assert.Equal(["issue", "triage", "agent", "checks", "preview", "queue", "staging", "production", "traffic", "monitor"], catalog.Tour.Steps.Select(s => s.Stage));
+        Assert.Equal(Orders.Console.Content.TourContent.Stages.Select(s => s.Id), catalog.Tour.Steps.Select(s => s.Stage));
+        // Every stage has its "Where this is running" map and an explainer.
+        Assert.All(Orders.Console.Content.TourContent.Stages, s =>
+        {
+            Assert.True(Orders.Console.Content.TourContent.Where.ContainsKey(s.Id), s.Id);
+            Assert.NotNull(Orders.Console.Content.Explainers.Find(s.Id));
+        });
+        // Deploy waits stay keyed to the scenario's own PR.
+        Assert.All(catalog.All.SelectMany(s => s.Steps).SelectMany(s => s.Wait).Where(w => w.Kind == "deploy.succeeded"),
+            w => Assert.Contains("#{pr}", w.DetailContains));
+        Assert.All(catalog.All.SelectMany(s => s.Steps).Select(s => s.Explain ?? s.Stage).OfType<string>(),
+            id => Assert.NotNull(Orders.Console.Content.Explainers.Find(id)));
         Assert.Equal(
             ["bad-deploy", "incident", "guardrails", "risky-change", "mutation", "scoreboard"],
             catalog.Library.Select(s => s.Id));

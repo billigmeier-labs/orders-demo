@@ -22,8 +22,16 @@
                         <div class="env-detail">@env.Detail</div>
                         <div class="kv"><span>Version</span><strong data-testid="env-version">@(env.Version ?? "unknown")</strong></div>
                         <div class="kv"><span>Commit</span><span class="mono">@(env.Commit ?? "unknown")</span></div>
-                        <div class="kv"><span>Response</span><span>@(env.Latency is { } l ? $"{(int)l.TotalMilliseconds} ms" : "n/a")</span></div>
+                        <div class="kv"><span>Health check</span><span>@(env.Latency is { } l ? $"{(int)l.TotalMilliseconds} ms" : "n/a")</span></div>
                         <a class="small" href="@env.Url" target="_blank" rel="noopener">@env.Url.Replace("https://", "")</a>
+                        @if (Model.Traffic.Value?.FirstOrDefault(t => t.Environment == env.Environment) is { } traffic)
+                        {
+                            <partial name="_Traffic" model="traffic" />
+                        }
+                        else if (Model.Traffic.Error is { } trafficError)
+                        {
+                            <span class="error small" data-testid="traffic-error">Traffic: @trafficError</span>
+                        }
                     </div>
                 }
                 else
@@ -53,12 +61,17 @@
     </section>
 
     <section class="card" data-panel="deploys" aria-label="Recent deploys">
-        <div class="card-head"><h2 class="card-title">Recent deploys</h2><partial name="_Explain" model='("deploy", "How do deploys work?")' /></div>
+        <div class="card-head"><h2 class="card-title">Deploys and rollbacks</h2><partial name="_Explain" model='("rollback", "How do rollbacks work?")' /></div>
         @if (Model.Deploys.Value is { } deploys)
         {
+            var rollbacks = deploys.Where(d => d.State.Contains("roll", StringComparison.Ordinal)).ToList();
             @if (deploys.Count == 0) { <p class="muted">No deploys yet.</p> }
+            <p class="small" data-testid="rollback-count" data-rollbacks="@rollbacks.Count">
+                @if (rollbacks.Count == 0) { <span class="muted">No rollbacks in this list.</span> }
+                else { <span class="pill pill-bad small">@rollbacks.Count rolled back</span> <span class="muted">latest @Fmt.Time(rollbacks[0].At) on @rollbacks[0].Environment</span> }
+            </p>
             <ul class="list">
-                @foreach (var d in deploys.Take(6))
+                @foreach (var d in deploys.Take(8))
                 {
                     <li class="list-row" data-deploy-state="@d.State">
                         <span class="pill @(d.State is "succeeded" or "completed" ? "pill-ok" : d.State.Contains("roll") || d.State == "failed" ? "pill-bad" : "pill-warn")">@d.State</span>
@@ -104,25 +117,44 @@
         <div class="card-head"><h2 class="card-title">GitHub activity</h2><partial name="_Explain" model='("github-actions", "What is GitHub Actions?")' /></div>
         @if (Model.GitHub.Value is { } gh)
         {
-            <div class="sub-head">Open issues: <strong data-testid="open-issues">@gh.OpenIssues</strong></div>
-            <div class="chips">
-                @foreach (var l in gh.OpenIssuesByLabel)
+            <div class="sub-head">Open issues: <strong data-testid="open-issues">@gh.OpenIssues</strong>, by triage label</div>
+            <div class="chips" data-testid="triage-labels">
+                @foreach (var l in gh.ByTriageLabel)
                 {
-                    <span class="chip" data-label="@l.Label">@l.Label <strong>@l.Count</strong></span>
+                    <span class="chip" data-label="@l.Label" data-triage-label="true">@l.Label <strong>@l.Count</strong></span>
                 }
+                @if (gh.ByTriageLabel.Count == 0) { <span class="muted small">None triaged yet.</span> }
             </div>
+            @if (gh.ByOtherLabel.Count > 0)
+            {
+                <div class="chips">
+                    <span class="muted small">Other labels:</span>
+                    @foreach (var l in gh.ByOtherLabel)
+                    {
+                        <span class="chip" data-label="@l.Label">@l.Label <strong>@l.Count</strong></span>
+                    }
+                </div>
+            }
             <div class="two-col">
                 <div>
-                    <div class="sub-head">Agent pull requests</div>
-                    <ul class="list">
-                        @foreach (var p in gh.AgentPulls)
+                    @{ var inFlight = gh.AgentPullsInFlight ?? gh.AgentPulls.Where(p => p.State == "open").ToList(); }
+                    <div class="sub-head">Agent PRs in flight: <strong data-testid="agent-in-flight">@inFlight.Count</strong></div>
+                    <ul class="list" data-testid="agent-prs">
+                        @foreach (var p in inFlight)
                         {
-                            <li class="list-row" data-pr="@p.Number">
-                                <span class="pill @(p.State == "merged" ? "pill-ok" : p.State == "open" ? "pill-info" : "pill-muted")">@p.State</span>
+                            <li class="list-row" data-pr="@p.Number" data-pr-state="open">
+                                <span class="pill pill-info">open</span>
+                                <span class="grow"><a href="@p.Url" target="_blank" rel="noopener">#@p.Number @p.Title</a> <span class="muted small">@Fmt.Ago(p.CreatedAt, now)</span></span>
+                            </li>
+                        }
+                        @if (inFlight.Count == 0) { <li class="muted">None right now.</li> }
+                        @foreach (var p in gh.AgentPulls.Where(p => p.State != "open").Take(3))
+                        {
+                            <li class="list-row" data-pr="@p.Number" data-pr-state="@p.State">
+                                <span class="pill @(p.State == "merged" ? "pill-ok" : "pill-muted")">@p.State</span>
                                 <span class="grow"><a href="@p.Url" target="_blank" rel="noopener">#@p.Number @p.Title</a></span>
                             </li>
                         }
-                        @if (gh.AgentPulls.Count == 0) { <li class="muted">None yet.</li> }
                     </ul>
                 </div>
                 <div>
@@ -178,10 +210,22 @@
                     <span class="pill pill-muted">stopped</span>
                 }
             </p>
-            <div class="button-row">
-                <button type="button" class="btn" data-testid="load-start-normal" data-action-url="/api/load/start" data-action-body='{"scenario":"normal","durationMinutes":15}'>Normal load, 15 min</button>
-                <button type="button" class="btn" data-testid="load-start-spike" data-action-url="/api/load/start" data-action-body='{"scenario":"spike","durationMinutes":10}'>Spike, 10 min</button>
-                <button type="button" class="btn" data-testid="load-stop" data-action-url="/api/load/stop" @(load.Running ? "" : "disabled")>Stop</button>
+            <div class="load-controls">
+                <label class="minutes">Run for <input type="number" id="load-minutes" data-testid="load-minutes" data-keep-value="load-minutes" min="1" max="120" value="15" inputmode="numeric" /> minutes</label>
+                <div class="button-row">
+                    @foreach (var (scenario, label, title) in new[]
+                    {
+                        ("normal", "Normal", "Steady, realistic journeys, about 5 requests a second"),
+                        ("peak", "Peak", "Several times normal, about 25 requests a second"),
+                        ("spike", "Spike", "Normal with a sudden 60-second burst, then back"),
+                        ("soak", "Soak", "Normal traffic for a long time, to surface leaks"),
+                    })
+                    {
+                        <button type="button" class="btn" data-testid="load-start-@scenario" title="@title" data-action-url="/api/load/start"
+                                data-action-body='{"scenario":"@scenario"}' data-minutes-input="load-minutes">@label</button>
+                    }
+                    <button type="button" class="btn" data-testid="load-stop" data-action-url="/api/load/stop" @(load.Running ? "" : "disabled")>Stop</button>
+                </div>
             </div>
         }
         else { <p class="error" data-testid="panel-error">@Model.Load.Error</p> }

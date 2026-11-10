@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace Orders.Console.Status;
 
 /// <summary>
-/// Turns one raw log line (the API's JSON log format, see Orders.Api Infrastructure/Logging.cs) into a short
+/// Turns one raw log line (the API's Serilog compact JSON, see Orders.Api Infrastructure/Logging.cs, or the older
+/// Microsoft JSON console format) into a short
 /// summary that fits on one line of a projector: request, exception type and the first line of its message,
 /// e.g. <c>/api/search — PostgresException 42601: syntax error in tsquery</c>. Lines that are not JSON, or
 /// lack those fields, fall back to the Message field and then to the raw line, truncated.
@@ -38,7 +39,9 @@ public static class LogSummary
             var method = Find(root, "RequestMethod") ?? Find(root, "Method");
             var request = path is null ? null : method is null ? path : $"{method} {path}";
 
-            var problem = Exception(String(root, "Exception")) ?? Nonempty(FirstLine(String(root, "Message") ?? ""));
+            var exception = String(root, "@x") ?? String(root, "Exception");
+            var message = String(root, "@m") ?? String(root, "Message") ?? String(root, "@mt");
+            var problem = Exception(exception) ?? Nonempty(FirstLine(message ?? ""));
             var summary = (request, problem) switch
             {
                 (not null, not null) => $"{request} — {problem}",

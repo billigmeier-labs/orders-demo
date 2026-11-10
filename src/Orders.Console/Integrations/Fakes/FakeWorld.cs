@@ -1,5 +1,6 @@
 using System.Globalization;
 using Orders.Console.Domain;
+using Orders.Console.Status;
 
 namespace Orders.Console.Integrations.Fakes;
 
@@ -12,10 +13,13 @@ namespace Orders.Console.Integrations.Fakes;
 /// </summary>
 public sealed class FakeWorld :
     IGitHubService, IEventSource, IMonitoringService, IDeploymentService, ICostService,
-    IFeatureFlagService, ILoadGenerator, IEnvironmentProbe
+    IFeatureFlagService, ILoadGenerator, IEnvironmentProbe, IDemoRuns
 {
     public const string Automation = "orders-demo-automation";
     public const string CannedBugBranch = "demo/canned-bug";
+    public const string GuardrailsBranch = "demo/guardrails";
+    public const string DemoRun = "7";
+    public const string MetricsBucket = "orders-demo-metrics-fake";
     public const string ErrorAlarm = "orders-prod-5xx-rate";
     public const string FaultFlag = "searchV2";
 
@@ -34,6 +38,7 @@ public sealed class FakeWorld :
     private readonly Dictionary<string, (bool Enabled, string Description)> _flags = new(StringComparer.Ordinal);
     private readonly List<ConsoleEvent> _events = [];
     private readonly List<(DateTimeOffset Due, long Seq, Action Act)> _schedule = [];
+    private readonly Dictionary<string, RunSnapshotFile> _snapshots = new(StringComparer.Ordinal);
     private long _seq;
     private int _next = 140;
     private long _runId = 9_100_000;
@@ -91,6 +96,9 @@ public sealed class FakeWorld :
 
         var pull = AddPull(pr.Title, pr.Body, pr.Head, Automation, issue: null);
         pull.Bad = pr.Head == CannedBugBranch;
+        // The guardrails branch skips a test and edits .github/workflows/ci.yml.
+        pull.Guarded = pr.Head == GuardrailsBranch;
+        pull.ReviewRequired = pull.Guarded;
         After(1, () => Checks(pull));
         return new PullRequestRef(pull.Number, PullUrl(pull.Number));
     });
@@ -117,10 +125,11 @@ public sealed class FakeWorld :
         var byLabel = open.SelectMany(i => i.Labels).GroupBy(l => l)
             .Select(g => new LabelCount(g.Key, g.Count())).OrderByDescending(l => l.Count).ThenBy(l => l.Label, StringComparer.Ordinal).ToList();
         var agentPulls = _pulls.Where(p => p.Author == _agent).OrderByDescending(p => p.CreatedAt).Take(6).Select(Summary).ToList();
+        var inFlight = _pulls.Where(p => p.Author == _agent && p.State == "open").OrderByDescending(p => p.CreatedAt).Select(Summary).ToList();
         var latest = LatestWorkflows
             .Select(w => _runs.Where(r => r.Workflow == w).MaxBy(r => r.UpdatedAt))
             .OfType<WorkflowRunSummary>().ToList();
-        return new GitHubActivity(byLabel, open.Count, agentPulls, latest);
+        return new GitHubActivity(byLabel, open.Count, agentPulls, latest, inFlight);
     });
 
     public Task<IReadOnlyList<IssueWithPulls>> ListIssuesAsync(string label, CancellationToken ct, string state = "open") => Locked<IReadOnlyList<IssueWithPulls>>(() =>
@@ -138,17 +147,55 @@ public sealed class FakeWorld :
         var ci = _runs.Where(r => r.Workflow == "ci" && r.Duration is not null).Select(r => r.Duration!.Value).ToList();
         var merged = _pulls.Where(p => p.MergedAt is not null).ToList();
         var agentMerged = merged.Where(p => p.Author == _agent).ToList();
+        var deploys = _runs.Where(r => r.Workflow == "deploy").ToList();
+        var recentDeploys = deploys.Where(r => r.StartedAt >= Now.AddDays(-30)).ToList();
+        // Each CI job's share of a run: the slowest (integration) sets the time, the rest run alongside it.
+        var jobs = new (string Name, double Share)[]
+        {
+            ("What changed", 0.08), ("Format and lint", 0.35), ("Build and unit tests", 0.62), ("Integration tests", 0.94),
+            ("Security scans", 0.71), ("PR rules", 0.12), ("Release image", 0.55), ("ci-ok", 0.03),
+        };
         return new DeliveryStats(
             ci,
             merged.Select(p => p.MergedAt!.Value - p.CreatedAt).ToList(),
             agentMerged.Count,
             agentMerged.Count(p => !p.ChangesRequested),
-            _runs.Where(r => r.Workflow == "deploy").ToList(),
+            deploys,
             // Every failed fake deploy is a prod rollback (the bad-deploy scenario).
-            _runs.Count(r => r.Workflow == "deploy" && r.Conclusion == "failure" && r.StartedAt >= Now.AddDays(-30)));
+            recentDeploys.Count(r => r.Conclusion == "failure"))
+        {
+            CiJobDurations = jobs.ToDictionary(j => j.Name, j => (IReadOnlyList<TimeSpan>)ci.Select(d => d * j.Share).ToList(), StringComparer.Ordinal),
+            PullSizes = merged.Select(p => p.Size).ToList(),
+            MergeQueueWaits = merged.Select(p => TimeSpan.FromSeconds(260 + (p.Number % 7 * 41))).ToList(),
+            HumanReviewTimes = [TimeSpan.FromMinutes(6), TimeSpan.FromMinutes(14), TimeSpan.FromMinutes(4)],
+            MergeToProduction = merged.Select(p => TimeSpan.FromSeconds(540 + (p.Number % 5 * 37))).ToList(),
+            ProdDeploys = recentDeploys.Count,
+            ProdDeployFailures = recentDeploys.Count(r => r.Conclusion == "failure"),
+            FlakyTests = _issues.Count(i => i.Open && i.Labels.Contains("flaky")),
+            MutationScore = 71.4,
+        };
     });
 
-    // ---- AWS-side fakes ----
+    public Task<PullReviewState> GetReviewStateAsync(int number, CancellationToken ct) => Locked(() =>
+    {
+        var pull = _pulls.FirstOrDefault(p => p.Number == number) ?? throw new InvalidOperationException($"No pull request #{number}.");
+        return new PullReviewState(number, pull.ReviewRequired ? "REVIEW_REQUIRED" : null, pull.ReviewRequired ? "BLOCKED" : "CLEAN");
+    });
+
+    // ---- demo runs ----
+
+    public Task<string?> GetCurrentRunAsync(CancellationToken ct) => Task.FromResult<string?>(DemoRun);
+
+    public Task<SavedSnapshot> SaveAsync(string run, string json, CancellationToken ct) => Locked(() =>
+    {
+        _snapshots[run] = new RunSnapshotFile(run, Now, json);
+        return new SavedSnapshot($"s3://{MetricsBucket}/runs/{run}.json", $"https://us-east-1.console.aws.amazon.com/s3/object/{MetricsBucket}?region=us-east-1&prefix=runs/{run}.json");
+    });
+
+    public Task<IReadOnlyList<RunSnapshotFile>> ListAsync(CancellationToken ct) => Locked<IReadOnlyList<RunSnapshotFile>>(() =>
+        _snapshots.Values.OrderByDescending(s => s.SavedAt).ToList());
+
+    // ---- AWS-side fakes ----    // ---- AWS-side fakes ----
 
     public Task<EnvironmentHealth> CheckAsync(string environment, CancellationToken ct) => Locked(() =>
     {
@@ -179,6 +226,43 @@ public sealed class FakeWorld :
         return lines.OrderByDescending(l => l.At).ToList();
     });
 
+    public Task<IReadOnlyList<EnvironmentTraffic>> GetTrafficAsync(CancellationToken ct) => Locked<IReadOnlyList<EnvironmentTraffic>>(() =>
+    {
+        var now = Now;
+        var end = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, TimeSpan.Zero);
+        var alarm = _alarms.Values.Any(a => a.State == "ALARM");
+        var slow = _flags.GetValueOrDefault("faultSlowSearch").Enabled;
+        EnvironmentTraffic Env(string env, double baseline)
+        {
+            var minutes = new List<TrafficPoint>();
+            for (var m = 15; m >= 1; m--)
+            {
+                var at = end.AddMinutes(-m);
+                // The latest minute shows load one simulation step after it starts (the real ALB is a minute or two behind).
+                var loaded = env == "prod" && _load.Running && _load.StartedAt <= (m == 1 ? now - _step : at);
+                var requests = loaded ? LoadPerMinute(_load.Scenario) : baseline;
+                requests += (at.Minute * 7 % 5) - 2;
+                var errorShare = env == "prod" && alarm ? 0.14 : 0.002;
+                var p95 = slow && env == "prod" ? 2100 : env == "prod" && alarm ? 380 : 48 + (at.Minute % 4 * 3);
+                minutes.Add(new TrafficPoint(at, Math.Max(0, requests), Math.Round(Math.Max(0, requests) * errorShare), TimeSpan.FromMilliseconds(p95)));
+            }
+
+            var total = minutes.Sum(p => p.Requests);
+            return new EnvironmentTraffic(env, total / minutes.Count, total > 0 ? minutes.Sum(p => p.Errors5xx) / total : 0, minutes[^1].P95Latency, minutes);
+        }
+
+        return [Env("prod", 24), Env("staging", 6)];
+    });
+
+    private static double LoadPerMinute(string? scenario) => scenario switch
+    {
+        "peak" => 1500,
+        "spike" => 600,
+        _ => 300,
+    };
+
+    public Task<decimal> GetRunCostAsync(string run, CancellationToken ct) => Task.FromResult(run == DemoRun ? 3.42m : 4.18m);
+
     private const string SearchException =
         "Npgsql.PostgresException (0x80004005): 42601: syntax error in tsquery: \"alan turing:*\"\n" +
         "   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)\n" +
@@ -188,22 +272,36 @@ public sealed class FakeWorld :
         "   at Orders.Api.Features.Search.SearchEndpoints.SearchAsync(String q, OrdersDbContext db, CancellationToken ct)\n" +
         "  Exception data:\n    Severity: ERROR\n    SqlState: 42601\n    MessageText: syntax error in tsquery: \"alan turing:*\"";
 
-    /// <summary>A log line in the API's JSON format (Orders.Api Infrastructure/Logging.cs).</summary>
-    private string LogJson(DateTimeOffset at, string level, string category, string message, string? exception) =>
-        System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+    /// <summary>A log line in the API's Serilog compact JSON format (Orders.Api Infrastructure/Logging.cs).</summary>
+    private string LogJson(DateTimeOffset at, string level, string category, string message, string? exception)
+    {
+        var line = new Dictionary<string, object?>
         {
-            ["Timestamp"] = at.ToString("O", CultureInfo.InvariantCulture),
-            ["LogLevel"] = level,
-            ["Category"] = category,
-            ["EventId"] = exception is null ? 0 : 1,
-            ["Message"] = message,
-            ["Exception"] = exception,
-            ["AppVersion"] = Version,
-            ["AppCommit"] = _commit,
-            ["AppEnvironment"] = "prod",
-            ["TraceId"] = "4bf92f3577b34da6a3ce929d0e0e4736",
-            ["Scopes"] = new object[] { new Dictionary<string, string> { ["RequestId"] = "0HN8V1K2Q3R4S:00000001", ["RequestPath"] = "/api/search" } },
-        });
+            ["@t"] = at.ToString("O", CultureInfo.InvariantCulture),
+            ["@m"] = message,
+        };
+        if (level != "Information")
+        {
+            line["@l"] = level;
+        }
+
+        if (exception is not null)
+        {
+            line["@x"] = exception;
+        }
+
+        line["SourceContext"] = category;
+        line["RequestId"] = "0HN8V1K2Q3R4S:00000001";
+        line["RequestPath"] = "/api/search";
+        line["Journey"] = "search";
+        line["Flags"] = _flags.Where(f => KnownFlags.Descriptions.ContainsKey(f.Key))
+            .ToDictionary(f => f.Key, f => f.Value.Enabled ? (f.Key.StartsWith("fault", StringComparison.Ordinal) ? "on 20%" : "on") : "off");
+        line["AppVersion"] = Version;
+        line["AppCommit"] = _commit;
+        line["AppEnvironment"] = "prod";
+        line["TraceId"] = "4bf92f3577b34da6a3ce929d0e0e4736";
+        return System.Text.Json.JsonSerializer.Serialize(line);
+    }
 
     public Task<IReadOnlyList<DeployRecord>> GetRecentDeploysAsync(CancellationToken ct) =>
         Locked<IReadOnlyList<DeployRecord>>(() => _deploys.OrderByDescending(d => d.At).Take(8).ToList());
@@ -335,6 +433,17 @@ public sealed class FakeWorld :
 
         var subject = ConsoleEvent.PullSubject(pull.Number);
         Emit(EventKinds.PreviewUp, subject, $"pr-{pull.Number}.demo.joshb.app", $"https://pr-{pull.Number}.demo.joshb.app");
+        if (pull.Guarded)
+        {
+            // PR rules sees the newly skipped test; the AI review flags the CI edit; nothing merges.
+            AddRun("ci", "failure", pull.Title, pull.Head, TimeSpan.FromSeconds(241));
+            AddRun("ai-review", "failure", pull.Title, pull.Head, TimeSpan.FromSeconds(88));
+            Emit(EventKinds.CheckCompleted, subject, "PR rules: failure", RunUrl(_runId - 1));
+            Emit(EventKinds.CheckCompleted, subject, "ci-ok: failure", RunUrl(_runId - 1));
+            Emit(EventKinds.CheckCompleted, subject, "ai-review: failure", RunUrl(_runId));
+            return;
+        }
+
         AddRun("ci", "success", pull.Title, pull.Head, TimeSpan.FromSeconds(372));
         AddRun("ai-review", "success", pull.Title, pull.Head, TimeSpan.FromSeconds(95));
         Emit(EventKinds.CheckCompleted, subject, "ci-ok: success", RunUrl(_runId - 1));
@@ -365,33 +474,40 @@ public sealed class FakeWorld :
     private void DeployStart(FakePull pull)
     {
         var sha = Sha(pull.Number);
-        _deploys.Add(new DeployRecord("staging", $"1.4.{_patch + 1}", "succeeded", Now, null, sha));
-        Emit(EventKinds.DeployStarted, "prod", $"{sha}: {pull.Title} (#{pull.Number})", RunUrl(++_runId));
-        if (pull.Bad)
-        {
-            After(1, () => FireAlarm(ErrorAlarm, "5xx rate 22% over 1 minute (threshold 2%)"));
-            After(2, () =>
-            {
-                AddRun("deploy", "failure", pull.Title, "main", TimeSpan.FromSeconds(540));
-                _deploys.Add(new DeployRecord("prod", $"1.4.{_patch + 1}", "rolled back", Now, null, sha));
-                Emit(EventKinds.DeployRolledBack, "prod", $"{sha} rolled back to {Version} ({_commit})", RunUrl(_runId));
-            });
-            After(3, ClearAlarms);
-            return;
-        }
-
+        var detail = $"main: {pull.Title} (#{pull.Number})";
+        var run = RunUrl(++_runId);
+        Emit(EventKinds.DeployStarted, "staging", detail, run);
         After(1, () =>
         {
-            _patch++;
-            _commit = sha;
-            AddRun("deploy", "success", pull.Title, "main", TimeSpan.FromSeconds(486));
-            _deploys.Add(new DeployRecord("prod", Version, "succeeded", Now, null, sha));
-            Emit(EventKinds.DeploySucceeded, "prod", $"{sha}: {pull.Title} (#{pull.Number}) is live as {Version}", RunUrl(_runId));
-            if (pull.FixesIncident)
+            _deploys.Add(new DeployRecord("staging", $"1.4.{_patch + 1}", "succeeded", Now, null, sha));
+            Emit(EventKinds.DeploySucceeded, "staging", detail, run);
+            Emit(EventKinds.DeployStarted, "prod", detail, run);
+            if (pull.Bad)
             {
-                _faultFixed = true;
-                After(1, ClearAlarms);
+                After(1, () => FireAlarm(ErrorAlarm, "5xx rate 22% over 1 minute (threshold 2%)"));
+                After(2, () =>
+                {
+                    AddRun("deploy", "failure", pull.Title, "main", TimeSpan.FromSeconds(540));
+                    _deploys.Add(new DeployRecord("prod", $"1.4.{_patch + 1}", "rolled back", Now, null, sha));
+                    Emit(EventKinds.DeployRolledBack, "prod", $"{sha} rolled back to {Version} ({_commit})", run);
+                });
+                After(3, ClearAlarms);
+                return;
             }
+
+            After(1, () =>
+            {
+                _patch++;
+                _commit = sha;
+                AddRun("deploy", "success", pull.Title, "main", TimeSpan.FromSeconds(486));
+                _deploys.Add(new DeployRecord("prod", Version, "succeeded", Now, null, sha));
+                Emit(EventKinds.DeploySucceeded, "prod", $"{detail} is live as {Version}", run);
+                if (pull.FixesIncident)
+                {
+                    _faultFixed = true;
+                    After(1, ClearAlarms);
+                }
+            });
         });
     }
 
@@ -557,8 +673,26 @@ public sealed class FakeWorld :
             if (h.MergedAgo is { } merged)
             {
                 Old(merged, EventKinds.PrMerged, ConsoleEvent.PullSubject(h.Pull), "merged by the merge queue", PullUrl(h.Pull));
-                Old(merged - 9, EventKinds.DeploySucceeded, "prod", $"{Sha(h.Pull)}: deployed", RunUrl(_runId));
+                Old(merged - 5, EventKinds.DeploySucceeded, "staging", $"main: {h.PrTitle} (#{h.Pull})", RunUrl(_runId));
+                Old(merged - 9, EventKinds.DeploySucceeded, "prod", $"main: {h.PrTitle} (#{h.Pull})", RunUrl(_runId));
             }
+        }
+
+        // A flaky test someone quarantined, and the scoreboards of two earlier demo runs.
+        var flaky = new FakeIssue(138, "Flaky: OrderTests.Create_ConcurrentOrders_OneGets409 fails about 1 in 30 runs", "Quarantined with [Fact(Skip)] in #139.", "jbilligmeier", now.AddDays(-1));
+        flaky.Labels.AddRange(["flaky", "risk:low", "difficulty:medium"]);
+        _issues.Add(flaky);
+        foreach (var (run, daysAgo, ciP90, ciOk, cost) in new[] { ("5", 9, "6 min 2 s", false, 4.91m), ("6", 3, "4 min 41 s", true, 4.18m) })
+        {
+            var board = new Scoreboard(
+            [
+                new ScoreRow("ci-p90", "CI on a PR, p90", ciP90, "", "Under 5 min", ciOk),
+                new ScoreRow("pr-to-merge", "PR open to merged, median", "1 h 12 min", "", "Same day", true),
+                new ScoreRow("change-failure", "Change failure rate", "1 of 9 (11%)", "", "Under 10%", false),
+                new ScoreRow("run-cost", "Cost of this demo run", ScoreboardService.Money(cost), "", null, null),
+            ], now.AddDays(-daysAgo))
+            { Run = run };
+            _snapshots[run] = new RunSnapshotFile(run, board.At, System.Text.Json.JsonSerializer.Serialize(board, ScoreboardService.Json));
         }
 
         _pulls.Add(new FakePull(134, "feat: add index on orders.created_at", "Closes #133\n\nAdds an EF Core migration.", "agent/133-created-at-index", _agent, now.AddMinutes(-300)) { Issue = 133, ReviewRequired = true });
@@ -625,5 +759,10 @@ public sealed class FakeWorld :
         public bool ReviewRequired { get; set; }
 
         public bool ChangesRequested { get; init; }
+
+        public bool Guarded { get; set; }
+
+        /// <summary>Changed lines; small, like the agents' PRs.</summary>
+        public int Size => 40 + (Number * 37 % 260);
     }
 }

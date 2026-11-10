@@ -27,7 +27,8 @@ public sealed record StepDefinition
 {
     public required string Id { get; init; }
 
-    /// <summary>Lifecycle stage (issue, triage, agent, checks, queue, deploy, monitor) for the Tour.</summary>
+    /// <summary>Lifecycle stage for the Tour (Content/TourContent.cs: issue, triage, agent, checks, preview, queue,
+    /// staging, production, traffic, monitor); other scenarios use it for the stage name and explainer.</summary>
     public string? Stage { get; init; }
 
     public required string Title { get; init; }
@@ -36,6 +37,9 @@ public sealed record StepDefinition
 
     /// <summary>Explainer opened by "What is ...?" on this step. Defaults to the stage.</summary>
     public string? Explain { get; init; }
+
+    /// <summary>A command to show the audience in a terminal box (for things the console can't do itself, like teardown).</summary>
+    public string? Command { get; init; }
 
     /// <summary>What the presenter clicks. When null the step starts waiting as soon as it is reached.</summary>
     public ActionDefinition? Action { get; init; }
@@ -60,13 +64,20 @@ public sealed record ActionDefinition
 
 /// <summary>
 /// Matches an event (<see cref="Kind"/>, optional <see cref="Subject"/> and <see cref="DetailContains"/>)
-/// or a named live <see cref="Condition"/> such as <c>alarms-ok</c>.
+/// or a named live <see cref="Condition"/> such as <c>alarms-ok</c> (for a condition, <see cref="Subject"/>
+/// is its argument, e.g. <c>pr#{pr}</c> for <c>review-required</c>).
 /// </summary>
 public sealed record WaitCondition
 {
     public string? Kind { get; init; }
 
     public string? Subject { get; init; }
+
+    /// <summary>
+    /// Match events since the run started rather than since the previous step: for things that happen alongside
+    /// earlier steps (a PR's preview can be up before its checks finish). Only for conditions about this run's issue or PR.
+    /// </summary>
+    public bool SinceRunStart { get; init; }
 
     public IReadOnlyList<string> DetailContains { get; init; } = [];
 

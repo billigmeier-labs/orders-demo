@@ -5,7 +5,7 @@ const zones: Record<string, string[]> = {
   GitHub: ['Repository', 'Issues and pull requests', 'Actions workflows', 'Merge queue', 'Claude GitHub App', 'Dependabot'],
   AWS: [
     'ECS cluster: orders-demo', 'Load balancer', 'ECR', 'RDS PostgreSQL', 'AppConfig', 'CloudWatch and X-Ray', 'EventBridge',
-    'IAM roles', 'Route 53 and ACM', 'Terraform state and OIDC provider', 'Cost Explorer',
+    'IAM roles', 'Route 53 and ACM', 'Terraform state and OIDC provider', 'Cost Explorer', 'Scoreboard snapshots',
   ],
   'Outside services': ['Claude', 'Google sign-in', '1Password'],
 };

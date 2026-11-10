@@ -17,6 +17,9 @@ public static class ConsoleApi
 {
     public const string ActionHeader = "X-Console-Action";
 
+    /// <summary>The load generator's scenarios (src/Orders.LoadGenerator/LoadPlan.cs).</summary>
+    public static readonly IReadOnlyList<string> LoadScenarios = ["normal", "peak", "spike", "soak"];
+
     public static void MapConsoleApi(this WebApplication app)
     {
         var api = app.MapGroup("/api");
@@ -63,7 +66,12 @@ public static class ConsoleApi
 
         post.MapPost("/load/start", async (LoadRequest body, ILoadGenerator load, StatusService status, CancellationToken ct) =>
         {
-            var scenario = string.IsNullOrWhiteSpace(body.Scenario) ? "normal" : body.Scenario;
+            var scenario = string.IsNullOrWhiteSpace(body.Scenario) ? "normal" : body.Scenario.Trim().ToLowerInvariant();
+            if (!LoadScenarios.Contains(scenario))
+            {
+                return Results.Problem($"Unknown load scenario '{scenario}'. Use one of {string.Join(", ", LoadScenarios)}.", statusCode: StatusCodes.Status400BadRequest);
+            }
+
             var minutes = Math.Clamp(body.DurationMinutes ?? 15, 1, 120);
             await load.StartAsync(scenario, minutes, ct);
             status.Invalidate(StatusService.LoadPanel);

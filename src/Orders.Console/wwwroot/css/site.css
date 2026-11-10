@@ -183,3 +183,19 @@ span.component-name { cursor: default; }
 
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 10px; max-width: min(640px, 90vw); z-index: 20; font-size: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
 .toast.error { background: var(--bad-ink); }
+
+/* Traffic, scoreboard */
+.traffic { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.06); }
+.spark { width: 100%; height: 32px; margin-top: 4px; }
+.spark-bar { fill: var(--accent-line); } .spark-err { fill: var(--bad); }
+.traffic-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.traffic-card { background: var(--bg); border-radius: 12px; padding: 12px 14px; }
+.score { width: 100%; border-collapse: collapse; font-size: 14px; }
+.score th, .score td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line-3); vertical-align: top; }
+.score th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.score td.value { font-family: var(--display); font-weight: 600; white-space: nowrap; }
+.score-wrap { overflow-x: auto; }
+.load-controls { display: flex; flex-direction: column; gap: 10px; }
+.minutes { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.minutes input { width: 72px; font: inherit; padding: 6px 8px; border: 1.5px solid var(--line-2); border-radius: 8px; min-height: 36px; }
+.cmd { font-family: var(--mono); background: #16181D; color: #F6F6F3; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
