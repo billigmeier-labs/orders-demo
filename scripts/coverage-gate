@@ -4,7 +4,7 @@
 #   scripts/coverage-gate <base-ref> [coverage-dir]
 #   COVERAGE_HEAD=<ref> scripts/coverage-gate <base-ref>   # judge <base-ref>..<ref> instead of the working tree
 #
-# Reads the lcov files the test run wrote (`just test-all` puts them in artifacts/coverage), compares them
+# Reads the lcov files coverlet.MTP wrote (`just test-all` puts one per test project in artifacts/coverage), compares them
 # with `git diff <base-ref>` (committed and uncommitted changes, plus new untracked files) and checks:
 #   - changedLines: % of changed executable lines under src/ that tests run
 #   - overallLines: % of all measured lines that tests run (a floor, so coverage can't quietly erode)

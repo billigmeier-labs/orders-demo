@@ -3,6 +3,10 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
+    <!-- `dotnet test` runs in Microsoft.Testing.Platform mode (global.json); xunit.v3 runs the tests in-process. -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <!-- One lcov file per test project in the shared results directory (coverage-gate merges them) -->
+    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --coverlet-file-prefix $(MSBuildProjectName)</TestingPlatformCommandLineArguments>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -11,6 +15,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- Line coverage (lcov) for the changed-lines gate when a run turns coverlet on (just test, just test-all) -->
+    <PackageReference Include="coverlet.MTP" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- What coverage measures, for every test project (coverlet.MTP reads it next to the test assembly). -->
+    <None Include="$(MSBuildThisFileDirectory)testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

@@ -5,7 +5,7 @@
 
 ## Decision
 
-Tests collect line coverage with coverlet (lcov). `scripts/coverage-gate` fails a PR when less than
+Tests collect line coverage with coverlet (coverlet.MTP, lcov; `tests/testconfig.json` says what is measured). `scripts/coverage-gate` fails a PR when less than
 `changedLines`% of the executable lines it adds or edits under `src/` are run by any test, or when overall coverage
 falls below `overallLines`%. Both numbers live in `coverage-thresholds.json` (80 and 80 to start), which CODEOWNERS
 protects and PR rules refuse to see lowered.

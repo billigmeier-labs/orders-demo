@@ -191,8 +191,8 @@ for file in coverage-thresholds.json stryker-config.json; do
         fi
     done <<<"$base_numbers"
 done
-if ! git diff --quiet "${diff_range[@]}" -- tests/coverage.runsettings 2>/dev/null; then
-    echo "  note: tests/coverage.runsettings changed (what is measured); CODEOWNERS makes a human review it."
+if ! git diff --quiet "${diff_range[@]}" -- tests/testconfig.json 2>/dev/null; then
+    echo "  note: tests/testconfig.json changed (what is measured); CODEOWNERS makes a human review it."
 fi
 [ "$lowered" = 1 ] || echo "  ok"
 

@@ -16,10 +16,12 @@ e2e_port := "8088"
 console_url := "https://console.demo.joshb.app"
 # Where the API finds the dev Postgres when dotnet runs natively (the devcontainer sets host.docker.internal)
 dev_db_host := env("DEV_DB_HOST", "localhost")
+# `dotnet test` runs in Microsoft.Testing.Platform mode (global.json), so its options are xUnit's and the platform's.
 # Tests tagged [Trait("Category", "Quarantine")] are flaky and left out of every required run (AGENTS.md).
-test_filter := "Category!=Quarantine"
+test_filter := "--filter-not-trait 'Category=Quarantine'"
 coverage_dir := "artifacts/coverage"
-coverage_args := "--settings tests/coverage.runsettings --collect 'XPlat Code Coverage' --results-directory " + coverage_dir
+# coverlet.MTP writes one lcov file per test project; tests/testconfig.json says what is measured.
+coverage_args := "--coverlet --results-directory " + coverage_dir
 gitleaks_image := "zricethezav/gitleaks:v8.24.3"
 trivy_image := "aquasec/trivy:0.76.1"
 api_image := "orders-api:ci"
@@ -112,12 +114,12 @@ build:
 # Unit tests with coverage (fast, no Docker)
 test:
     rm -rf {{ coverage_dir }}
-    {{ dotnet }} test tests/Orders.UnitTests -c {{ configuration }} --filter "{{ test_filter }}" {{ coverage_args }}
+    {{ dotnet }} test --project tests/Orders.UnitTests -c {{ configuration }} {{ test_filter }} {{ coverage_args }}
 
 # Unit + integration tests with coverage (needs Docker)
 test-all:
     rm -rf {{ coverage_dir }}
-    {{ dotnet }} test Orders.slnx -c {{ configuration }} --filter "{{ test_filter }}" {{ coverage_args }}
+    {{ dotnet }} test --solution Orders.slnx -c {{ configuration }} {{ test_filter }} {{ coverage_args }}
 
 # Every test, quarantined ones too, `runs` times; TRX results in artifacts/test-runs (the nightly flaky-test hunt)
 test-repeat runs="5":
@@ -127,8 +129,8 @@ test-repeat runs="5":
     {{ dotnet }} build Orders.slnx -c {{ configuration }} -p:RestoreLockedMode=true
     for i in $(seq 1 {{ runs }}); do
         echo "== Run $i of {{ runs }}"
-        {{ dotnet }} test tests/Orders.UnitTests -c {{ configuration }} --no-build --logger "trx;LogFileName=unit-$i.trx" --results-directory artifacts/test-runs || true
-        {{ dotnet }} test tests/Orders.IntegrationTests -c {{ configuration }} --no-build --logger "trx;LogFileName=integration-$i.trx" --results-directory artifacts/test-runs || true
+        {{ dotnet }} test --project tests/Orders.UnitTests -c {{ configuration }} --no-build --results-directory artifacts/test-runs --report-xunit-trx --report-xunit-trx-filename unit-$i.trx || true
+        {{ dotnet }} test --project tests/Orders.IntegrationTests -c {{ configuration }} --no-build --results-directory artifacts/test-runs --report-xunit-trx --report-xunit-trx-filename integration-$i.trx || true
     done
     # Failures are judged across runs (a test that always fails isn't flaky, it's broken): see scripts/flaky-report.
     scripts/flaky-report artifacts/test-runs
