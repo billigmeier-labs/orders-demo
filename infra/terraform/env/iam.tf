@@ -173,6 +173,7 @@ data "aws_iam_policy_document" "console" {
       "ecs:DescribeTaskDefinition",
       "ecs:DescribeTasks",
       "ecs:ListServiceDeployments",
+      "ecs:DescribeServiceRevisions",
       "ecs:ListServices",
       "ecs:ListTasks",
       "logs:FilterLogEvents",
