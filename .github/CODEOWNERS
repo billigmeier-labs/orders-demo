@@ -18,6 +18,10 @@
 /Directory.Build.props                      @jbilligmeier
 /global.json                                @jbilligmeier
 /stryker-config.json                        @jbilligmeier
+/coverage-thresholds.json                   @jbilligmeier
+/tests/coverage.runsettings                 @jbilligmeier
+/.trivyignore.yaml                          @jbilligmeier
+/.devcontainer/                             @jbilligmeier
 
 # Sign-in and access control
 /src/Orders.Console/Auth/                   @jbilligmeier
