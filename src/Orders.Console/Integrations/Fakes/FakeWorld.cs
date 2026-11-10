@@ -679,7 +679,7 @@ public sealed class FakeWorld :
         }
 
         // A flaky test someone quarantined, and the scoreboards of two earlier demo runs.
-        var flaky = new FakeIssue(138, "Flaky: OrderTests.Create_ConcurrentOrders_OneGets409 fails about 1 in 30 runs", "Quarantined with [Fact(Skip)] in #139.", "jbilligmeier", now.AddDays(-1));
+        var flaky = new FakeIssue(138, "Flaky: OrderTests.Create_ConcurrentOrders_OneGets409 fails about 1 in 30 runs", "Quarantined with the Quarantine trait in #139.", "jbilligmeier", now.AddDays(-1));
         flaky.Labels.AddRange(["flaky", "risk:low", "difficulty:medium"]);
         _issues.Add(flaky);
         foreach (var (run, daysAgo, ciP90, ciOk, cost) in new[] { ("5", 9, "6 min 2 s", false, 4.91m), ("6", 3, "4 min 41 s", true, 4.18m) })
