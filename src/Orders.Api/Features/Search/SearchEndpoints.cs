@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.FeatureManagement;
 using Orders.Api.Data;
 using Orders.Api.Features.Orders;
 using Orders.Api.Features.Products;
@@ -25,7 +26,7 @@ internal static class SearchEndpoints
     /// With the searchV2 flag on, <see cref="SearchV2"/> answers instead (ranked, word-prefix matching).
     /// </summary>
     private static async Task<Results<Ok<SearchResponse>, ValidationProblem>> Search(
-        [Required, StringLength(100)] string q, OrdersDbContext db, IFeatureFlags flags, FaultInjector faults, CancellationToken ct)
+        [Required, StringLength(100)] string q, OrdersDbContext db, IFeatureManager features, FaultInjector faults, CancellationToken ct)
     {
         var term = q.Trim().ToLowerInvariant();
         if (term.Length == 0)
@@ -35,7 +36,7 @@ internal static class SearchEndpoints
 
         await faults.MaybeSlowSearchAsync(ct);
 
-        var result = flags.IsEnabled(Flags.SearchV2)
+        var result = await features.IsEnabledAsync(Flags.SearchV2)
             ? await SearchV2.SearchAsync(db, term, ct)
             : await SearchV1Async(db, term, ct);
         return TypedResults.Ok(result);

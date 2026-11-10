@@ -12,6 +12,9 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.14" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.FeatureManagement" Version="4.8.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.20.1" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup Label="Console">
     <PackageVersion Include="AWSSDK.AppConfig" Version="4.0.101.22" />
@@ -19,6 +22,8 @@
     <PackageVersion Include="AWSSDK.CloudWatchLogs" Version="4.0.108.1" />
     <PackageVersion Include="AWSSDK.CostExplorer" Version="4.0.101.9" />
     <PackageVersion Include="AWSSDK.ECS" Version="4.0.110.2" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.11" />
+    <PackageVersion Include="AWSSDK.SimpleSystemsManagement" Version="4.0.105" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
   </ItemGroup>
   <ItemGroup Label="Load generator">

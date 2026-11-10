@@ -22,17 +22,23 @@ internal readonly record struct CallResult(int Status, TimeSpan Elapsed, string?
     public bool Failed => Status is 0 or >= 500;
 }
 
-/// <summary>The orders API as the journeys use it. Every call is timed and counted in <see cref="Stats"/>.</summary>
+/// <summary>
+/// The orders API as the journeys use it. Every call is timed and counted in <see cref="LoadStats"/>, and carries
+/// <c>X-Journey: &lt;journey&gt;</c> so the API's logs say which simulated user journey a request belongs to.
+/// </summary>
 internal sealed class OrdersApi(HttpClient http, LoadStats stats)
 {
+    public const string JourneyHeader = "X-Journey";
+
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
-    public async Task<(CallResult Result, T? Body)> GetAsync<T>(string endpoint, string url, CancellationToken ct)
+    public async Task<(CallResult Result, T? Body)> GetAsync<T>(string journey, string endpoint, string url, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
         try
         {
-            using var response = await http.GetAsync(new Uri(url, UriKind.Relative), ct);
+            using var request = Request(HttpMethod.Get, url, journey);
+            using var response = await http.SendAsync(request, ct);
             var body = response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<T>(Json, ct) : default;
             return (stats.Record(endpoint, (int)response.StatusCode, timer.Elapsed), body);
         }
@@ -42,12 +48,14 @@ internal sealed class OrdersApi(HttpClient http, LoadStats stats)
         }
     }
 
-    public async Task<(CallResult Result, T? Body)> PostAsync<T>(string endpoint, string url, object body, CancellationToken ct)
+    public async Task<(CallResult Result, T? Body)> PostAsync<T>(string journey, string endpoint, string url, object body, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
         try
         {
-            using var response = await http.PostAsJsonAsync(new Uri(url, UriKind.Relative), body, Json, ct);
+            using var request = Request(HttpMethod.Post, url, journey);
+            request.Content = JsonContent.Create(body, options: Json);
+            using var response = await http.SendAsync(request, ct);
             var result = response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<T>(Json, ct) : default;
             return (stats.Record(endpoint, (int)response.StatusCode, timer.Elapsed), result);
         }
@@ -56,11 +64,21 @@ internal sealed class OrdersApi(HttpClient http, LoadStats stats)
             return (stats.Record(endpoint, 0, timer.Elapsed, ex.GetType().Name), default);
         }
     }
+
+    internal static HttpRequestMessage Request(HttpMethod method, string url, string journey)
+    {
+        var request = new HttpRequestMessage(method, new Uri(url, UriKind.Relative));
+        request.Headers.Add(JourneyHeader, journey);
+        return request;
+    }
 }
 
 /// <summary>Customers, products and orders the journeys pick from, fetched before the load starts.</summary>
 internal sealed class Catalog
 {
+    /// <summary>The journey name for requests made before the load starts (catalog and restock).</summary>
+    public const string Setup = "setup";
+
     private readonly ConcurrentQueue<Guid> _created = new();
 
     public required IReadOnlyList<Customer> Customers { get; init; }
@@ -82,9 +100,9 @@ internal sealed class Catalog
 
     public static async Task<Catalog> LoadAsync(OrdersApi api, CancellationToken ct)
     {
-        var (customersResult, customers) = await api.GetAsync<List<Customer>>("setup", "api/customers", ct);
-        var (productsResult, products) = await api.GetAsync<List<Product>>("setup", "api/products", ct);
-        var (ordersResult, orders) = await api.GetAsync<Page<OrderSummary>>("setup", "api/orders?pageSize=100", ct);
+        var (customersResult, customers) = await api.GetAsync<List<Customer>>(Setup, "setup", "api/customers", ct);
+        var (productsResult, products) = await api.GetAsync<List<Product>>(Setup, "setup", "api/products", ct);
+        var (ordersResult, orders) = await api.GetAsync<Page<OrderSummary>>(Setup, "setup", "api/orders?pageSize=100", ct);
         if (customersResult.Status != (int)HttpStatusCode.OK || productsResult.Status != (int)HttpStatusCode.OK || ordersResult.Status != (int)HttpStatusCode.OK)
         {
             throw new InvalidOperationException(

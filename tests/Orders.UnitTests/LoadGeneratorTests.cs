@@ -130,4 +130,38 @@ public class LoadGeneratorTests
         Assert.Contains("failed (5xx or no response) 2 = 50.00%", summary, StringComparison.Ordinal);
         Assert.Contains("GET /search", summary, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Journeys_SendTheirNameInXJourney()
+    {
+        var handler = new RecordingHandler();
+        var api = new OrdersApi(new HttpClient(handler) { BaseAddress = new Uri("http://api/") }, new LoadStats());
+        var catalog = new Catalog
+        {
+            Customers = [new Customer(Guid.NewGuid(), "Ada Lovelace")],
+            Products = [new Product(Guid.NewGuid(), "SKU-0001", "Classic Backpack", 10)],
+            Orders = [],
+        };
+        var journeys = new Journeys(api, catalog, new Random(1));
+
+        await journeys.SearchAsync(TestContext.Current.CancellationToken);
+        await journeys.CreateOrderAsync(TestContext.Current.CancellationToken);
+        await Restock.RunAsync(api, [new Product(Guid.NewGuid(), "SKU-0002", "Kettle", 1)], _ => { }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("GET", Journeys.Search), ("POST", Journeys.CreateOrder), ("POST", Catalog.Setup)],
+            handler.Seen);
+        Assert.Contains(LoadPlan.Journeys, j => j.Name == Journeys.Search);
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public List<(string Method, string Journey)> Seen { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Seen.Add((request.Method.Method, string.Join(",", request.Headers.GetValues(OrdersApi.JourneyHeader))));
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
+        }
+    }
 }

@@ -1,3 +1,5 @@
+using Microsoft.FeatureManagement;
+
 namespace Orders.Api.Infrastructure;
 
 /// <summary>Thrown on purpose by <see cref="FaultInjector"/>; the exception handler turns it into a 500.</summary>
@@ -8,51 +10,39 @@ public sealed class InjectedFaultException(string flag) : Exception($"Injected f
 
 /// <summary>
 /// Demo faults driven by feature flags with a <c>percent</c> attribute: <see cref="Flags.FaultFailOrders"/>
-/// fails order creates, <see cref="Flags.FaultSlowSearch"/> slows searches. Every fault that fires logs a
-/// <c>FaultInjected</c> warning with the flag and percent, so it is obvious in the logs what was on purpose.
+/// fails order creates, <see cref="Flags.FaultSlowSearch"/> slows searches. Whether a fault fires is up to
+/// Microsoft.FeatureManagement (<see cref="PercentFilter"/> turns the percent into a share of calls). Every
+/// fault that fires logs a <c>FaultInjected</c> warning with the flag and percent, so it is obvious in the
+/// logs what was on purpose.
 /// </summary>
-internal sealed partial class FaultInjector(IFeatureFlags flags, ILogger<FaultInjector> logger, Func<double> roll)
+internal sealed partial class FaultInjector(IFeatureManager features, IFeatureFlags flags, ILogger<FaultInjector> logger)
 {
     /// <summary>Percent used when a fault flag is on but has no percent attribute.</summary>
     public const double DefaultPercent = 20;
 
     public static readonly TimeSpan SlowSearchDelay = TimeSpan.FromSeconds(2);
 
-    public FaultInjector(IFeatureFlags flags, ILogger<FaultInjector> logger)
-#pragma warning disable CA5394 // Not used for security.
-        : this(flags, logger, () => Random.Shared.NextDouble() * 100)
-#pragma warning restore CA5394
-    {
-    }
-
     /// <summary>Throws <see cref="InjectedFaultException"/> for <c>percent</c>% of calls while faultFailOrders is on.</summary>
-    public void MaybeFailOrder()
+    public async Task MaybeFailOrderAsync()
     {
-        if (ShouldFire(Flags.FaultFailOrders, out var percent))
+        if (await features.IsEnabledAsync(Flags.FaultFailOrders))
         {
-            LogFaultInjected(Flags.FaultFailOrders, percent, "fail order create with 500");
+            LogFaultInjected(Flags.FaultFailOrders, PercentOf(Flags.FaultFailOrders), "fail order create with 500");
             throw new InjectedFaultException(Flags.FaultFailOrders);
         }
     }
 
     /// <summary>Waits <see cref="SlowSearchDelay"/> for <c>percent</c>% of calls while faultSlowSearch is on.</summary>
-    public Task MaybeSlowSearchAsync(CancellationToken ct)
+    public async Task MaybeSlowSearchAsync(CancellationToken ct)
     {
-        if (!ShouldFire(Flags.FaultSlowSearch, out var percent))
+        if (await features.IsEnabledAsync(Flags.FaultSlowSearch))
         {
-            return Task.CompletedTask;
+            LogFaultInjected(Flags.FaultSlowSearch, PercentOf(Flags.FaultSlowSearch), "delay search by 2 s");
+            await Task.Delay(SlowSearchDelay, ct);
         }
-
-        LogFaultInjected(Flags.FaultSlowSearch, percent, "delay search by 2 s");
-        return Task.Delay(SlowSearchDelay, ct);
     }
 
-    internal bool ShouldFire(string flag, out double percent)
-    {
-        var state = flags.GetFlag(flag);
-        percent = Math.Clamp(state.Number("percent", DefaultPercent), 0, 100);
-        return state.Enabled && percent > 0 && roll() < percent;
-    }
+    private double PercentOf(string flag) => FlagFeatureDefinitionProvider.Percent(flag, flags.GetFlag(flag)) ?? 100;
 
     [LoggerMessage(EventId = 200, EventName = "FaultInjected", Level = LogLevel.Warning,
         Message = "FaultInjected: {Flag} at {Percent}% fired ({Effect})")]

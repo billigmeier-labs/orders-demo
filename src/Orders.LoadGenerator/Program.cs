@@ -41,11 +41,11 @@ foreach (var phase in LoadPlan.Phases(settings.Scenario, settings.Duration))
 var journeys = new Journeys(api, catalog, Random.Shared);
 Func<CancellationToken, Task<IReadOnlyList<CallResult>>> Run(string name) => name switch
 {
-    "browse-products" => journeys.BrowseProductsAsync,
-    "search" => journeys.SearchAsync,
-    "view-orders" => journeys.ViewOrdersAsync,
-    "create-order" => journeys.CreateOrderAsync,
-    "advance-order" => journeys.AdvanceOrderAsync,
+    Journeys.Browse => journeys.BrowseProductsAsync,
+    Journeys.Search => journeys.SearchAsync,
+    Journeys.ViewOrders => journeys.ViewOrdersAsync,
+    Journeys.CreateOrder => journeys.CreateOrderAsync,
+    Journeys.AdvanceOrder => journeys.AdvanceOrderAsync,
     _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
 };
 

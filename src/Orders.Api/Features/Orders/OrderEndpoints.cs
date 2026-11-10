@@ -61,7 +61,7 @@ internal static class OrderEndpoints
     private static async Task<Results<Created<OrderResponse>, ValidationProblem, ProblemHttpResult>> Create(
         CreateOrderRequest request, OrdersDbContext db, TimeProvider clock, FaultInjector faults, CancellationToken ct)
     {
-        faults.MaybeFailOrder();
+        await faults.MaybeFailOrderAsync();
 
         var customer = await db.Customers.FindAsync([request.CustomerId], ct);
         if (customer is null)

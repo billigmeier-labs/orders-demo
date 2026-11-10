@@ -1,167 +1,152 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Logging.Console;
-using Microsoft.Extensions.Options;
 using Orders.Api.Features.Platform;
+using Serilog;
+using Serilog.Context;
+using Serilog.Core;
+using Serilog.Events;
+using Serilog.Formatting.Compact;
 
 namespace Orders.Api.Infrastructure;
 
-internal sealed class AppJsonFormatterOptions : ConsoleFormatterOptions
-{
-    public string AppVersion { get; set; } = string.Empty;
-    public string AppCommit { get; set; } = string.Empty;
-    public string AppEnvironment { get; set; } = string.Empty;
-}
-
 /// <summary>
-/// One JSON object per line, like the built-in JSON console formatter, plus <c>AppVersion</c>, <c>AppCommit</c>
-/// and <c>AppEnvironment</c> on every line (startup included) and the trace id when there is one, so CloudWatch
-/// Logs Insights can filter by release and follow a request.
+/// Serilog, writing one compact JSON object per line outside Development (plain text in a developer's terminal).
+/// Every line carries <c>AppVersion</c>, <c>AppCommit</c> and <c>AppEnvironment</c>; during a request also
+/// <c>RequestId</c>, <c>Journey</c> (the load generator's <c>X-Journey</c> header), <c>Flags</c> (every flag's value)
+/// and <c>TraceId</c>/<c>SpanId</c>, so CloudWatch Logs Insights can filter by release, journey or flag and follow one request.
 /// </summary>
-internal sealed class AppJsonFormatter : ConsoleFormatter, IDisposable
-{
-    public const string FormatterName = "app-json";
-
-    private readonly IDisposable? _reload;
-    private AppJsonFormatterOptions _options;
-
-    public AppJsonFormatter(IOptionsMonitor<AppJsonFormatterOptions> options)
-        : base(FormatterName)
-    {
-        _options = options.CurrentValue;
-        _reload = options.OnChange(o => _options = o);
-    }
-
-    public void Dispose() => _reload?.Dispose();
-
-    public override void Write<TState>(in LogEntry<TState> logEntry, IExternalScopeProvider? scopeProvider, TextWriter textWriter)
-    {
-        var message = logEntry.Formatter?.Invoke(logEntry.State, logEntry.Exception);
-        if (message is null && logEntry.Exception is null)
-        {
-            return;
-        }
-
-        var options = _options;
-        var buffer = new ArrayBufferWriter<byte>(1024);
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("Timestamp", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-            writer.WriteString("LogLevel", logEntry.LogLevel.ToString());
-            writer.WriteString("Category", logEntry.Category);
-            writer.WriteNumber("EventId", logEntry.EventId.Id);
-            if (logEntry.EventId.Name is { } eventName)
-            {
-                writer.WriteString("EventName", eventName);
-            }
-
-            writer.WriteString("Message", message);
-            if (logEntry.Exception is { } exception)
-            {
-                writer.WriteString("Exception", exception.ToString());
-            }
-
-            writer.WriteString("AppVersion", options.AppVersion);
-            writer.WriteString("AppCommit", options.AppCommit);
-            writer.WriteString("AppEnvironment", options.AppEnvironment);
-            if (Activity.Current is { } activity)
-            {
-                writer.WriteString("TraceId", activity.TraceId.ToHexString());
-                writer.WriteString("SpanId", activity.SpanId.ToHexString());
-            }
-
-            if (logEntry.State is IReadOnlyList<KeyValuePair<string, object?>> state)
-            {
-                writer.WriteStartObject("State");
-                foreach (var (key, value) in state)
-                {
-                    WriteValue(writer, key == "{OriginalFormat}" ? "OriginalFormat" : key, value);
-                }
-
-                writer.WriteEndObject();
-            }
-
-            if (options.IncludeScopes && scopeProvider is not null)
-            {
-                writer.WriteStartArray("Scopes");
-                scopeProvider.ForEachScope(
-                    static (scope, w) =>
-                    {
-                        if (scope is IEnumerable<KeyValuePair<string, object?>> pairs)
-                        {
-                            w.WriteStartObject();
-                            foreach (var (key, value) in pairs)
-                            {
-                                WriteValue(w, key, value);
-                            }
-
-                            w.WriteEndObject();
-                        }
-                        else
-                        {
-                            w.WriteStringValue(Convert.ToString(scope, CultureInfo.InvariantCulture));
-                        }
-                    },
-                    writer);
-                writer.WriteEndArray();
-            }
-
-            writer.WriteEndObject();
-        }
-
-        textWriter.Write(Encoding.UTF8.GetString(buffer.WrittenSpan));
-        textWriter.Write(Environment.NewLine);
-    }
-
-    private static void WriteValue(Utf8JsonWriter writer, string key, object? value)
-    {
-        switch (value)
-        {
-            case null:
-                writer.WriteNull(key);
-                break;
-            case bool b:
-                writer.WriteBoolean(key, b);
-                break;
-            case int or long or short or byte or uint or ulong or ushort or sbyte:
-                writer.WriteNumber(key, Convert.ToInt64(value, CultureInfo.InvariantCulture));
-                break;
-            case double d when double.IsFinite(d):
-                writer.WriteNumber(key, d);
-                break;
-            case float f when float.IsFinite(f):
-                writer.WriteNumber(key, f);
-                break;
-            case decimal m:
-                writer.WriteNumber(key, m);
-                break;
-            default:
-                writer.WriteString(key, Convert.ToString(value, CultureInfo.InvariantCulture));
-                break;
-        }
-    }
-}
-
+/// <remarks>
+/// Field names are Serilog's compact format: <c>@t</c> time, <c>@m</c> rendered message, <c>@mt</c> template,
+/// <c>@l</c> level (left out for Information), <c>@x</c> exception with its stack; everything else is a property.
+/// Query strings are never logged: they are user input, and the incident agent reads these logs.
+/// </remarks>
 internal static class LoggingSetup
 {
-    /// <summary>JSON console logs (<see cref="AppJsonFormatter"/>) carrying the app version, commit and environment.</summary>
-    public static ILoggingBuilder AddAppJsonConsole(this ILoggingBuilder logging, AppInfo info)
+    public const string JourneyHeader = "X-Journey";
+    public const int MaxJourneyLength = 40;
+
+    public static WebApplicationBuilder AddAppLogging(this WebApplicationBuilder builder, AppInfo info)
     {
-        logging.ClearProviders();
-        logging.AddConsole(options => options.FormatterName = AppJsonFormatter.FormatterName);
-        logging.AddConsoleFormatter<AppJsonFormatter, AppJsonFormatterOptions>(options =>
+        var json = !builder.Environment.IsDevelopment();
+        builder.Services.AddSerilog(
+            (services, logger) =>
+            {
+                Configure(logger, info).ReadFrom.Services(services);
+                if (json)
+                {
+                    logger.WriteTo.Console(JsonFormatter);
+                }
+                else
+                {
+                    logger.WriteTo.Console(formatProvider: CultureInfo.InvariantCulture);
+                }
+            },
+            preserveStaticLogger: true);
+        return builder;
+    }
+
+    /// <summary>One JSON object per line, message rendered (<c>@m</c>) so a person can read it as is.</summary>
+    internal static readonly RenderedCompactJsonFormatter JsonFormatter = new();
+
+    /// <summary>Levels and enrichers. Sinks are added by the caller; <c>ReadFrom.Services</c> lets tests add one too.</summary>
+    internal static LoggerConfiguration Configure(LoggerConfiguration logger, AppInfo info) =>
+        logger
+            .MinimumLevel.Information()
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+            // EF Core logs a failed command three times; the exception handler's one line with the stack is enough.
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LevelAlias.Off)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Query", LevelAlias.Off)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Update", LevelAlias.Off)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty("AppVersion", info.Version)
+            .Enrich.WithProperty("AppCommit", info.Commit)
+            .Enrich.WithProperty("AppEnvironment", info.Environment)
+            .Enrich.With<TraceEnricher>();
+
+    /// <summary>
+    /// Request context on every line logged during the request, then one Serilog summary line per request
+    /// (method, path without the query string, route, status, duration). Health checks are not logged.
+    /// </summary>
+    public static IApplicationBuilder UseAppRequestLogging(this IApplicationBuilder app)
+    {
+        app.UseMiddleware<RequestLogContextMiddleware>();
+        app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health"), branch => branch.UseSerilogRequestLogging(options =>
         {
-            options.IncludeScopes = true;
-            options.AppVersion = info.Version;
-            options.AppCommit = info.Commit;
-            options.AppEnvironment = info.Environment;
-        });
-        return logging;
+            // The host's logger, not Serilog's static Log.Logger (left alone so test hosts don't share one).
+            options.Logger = branch.ApplicationServices.GetRequiredService<Serilog.ILogger>();
+            options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0} ms";
+            options.IncludeQueryInRequestPath = false;
+            options.EnrichDiagnosticContext = (diagnostics, context) =>
+            {
+                if (context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: { } route })
+                {
+                    diagnostics.Set("Route", route);
+                }
+            };
+        }));
+        return app;
+    }
+
+    /// <summary>The X-Journey header as a short safe token (letters, digits, '-', '_', '.'), or "none".</summary>
+    internal static string Journey(string? header)
+    {
+        if (string.IsNullOrWhiteSpace(header))
+        {
+            return "none";
+        }
+
+        var trimmed = header.Trim();
+        return trimmed.Length <= MaxJourneyLength && trimmed.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
+            ? trimmed.ToLowerInvariant()
+            : "invalid";
+    }
+
+    /// <summary>Every flag as "on", "off" or "on 20%" (flags that are on for a share of calls).</summary>
+    internal static Dictionary<string, string> FlagValues(IFeatureFlags flags) =>
+        Flags.All.ToDictionary(name => name, name =>
+        {
+            var flag = flags.GetFlag(name);
+            if (!flag.Enabled)
+            {
+                return "off";
+            }
+
+            return FlagFeatureDefinitionProvider.Percent(name, flag) is { } percent
+                ? string.Create(CultureInfo.InvariantCulture, $"on {percent}%")
+                : "on";
+        }, StringComparer.Ordinal);
+}
+
+/// <summary>Pushes RequestId, Journey and Flags for the rest of the request (see <see cref="LoggingSetup"/>).</summary>
+internal sealed class RequestLogContextMiddleware(RequestDelegate next, IFeatureFlags flags)
+{
+    public async Task InvokeAsync(HttpContext context)
+    {
+        using (LogContext.PushProperty("RequestId", context.TraceIdentifier))
+        using (LogContext.PushProperty("Journey", LoggingSetup.Journey(context.Request.Headers[LoggingSetup.JourneyHeader])))
+        using (LogContext.PushProperty("Flags", LoggingSetup.FlagValues(flags), destructureObjects: true))
+        {
+            await next(context);
+        }
+    }
+}
+
+/// <summary>TraceId and SpanId as ordinary properties (compact JSON also has them as @tr/@sp) for Logs Insights queries.</summary>
+internal sealed class TraceEnricher : ILogEventEnricher
+{
+    public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
+    {
+        var traceId = logEvent.TraceId?.ToHexString() ?? Activity.Current?.TraceId.ToHexString();
+        var spanId = logEvent.SpanId?.ToHexString() ?? Activity.Current?.SpanId.ToHexString();
+        if (traceId is not null && traceId != default(ActivityTraceId).ToHexString())
+        {
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("TraceId", traceId));
+            if (spanId is not null)
+            {
+                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("SpanId", spanId));
+            }
+        }
     }
 }

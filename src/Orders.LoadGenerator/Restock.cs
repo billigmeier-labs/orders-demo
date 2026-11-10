@@ -21,7 +21,7 @@ internal static class Restock
                 continue;
             }
 
-            var (result, _) = await api.PostAsync<object>("setup", $"api/products/{product.Id}/restock", new { quantity }, ct);
+            var (result, _) = await api.PostAsync<object>(Catalog.Setup, "setup", $"api/products/{product.Id}/restock", new { quantity }, ct);
             if (result.Status == 200)
             {
                 restocked++;
