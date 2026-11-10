@@ -83,7 +83,10 @@ jobs:
         run: |
           names=(subnets vpc-id https-listener-arn preview/security-group preview/execution-role preview/task-role
             preview/log-group preview/db-host preview/db-username preview/db-password-ref demo-run)
-          params=$(aws ssm get-parameters --names "${names[@]/#//orders-demo/}" --query 'Parameters[].[Name,Value]' --output json)
+          # GetParameters takes at most 10 names per call.
+          full=("${names[@]/#//orders-demo/}")
+          params=$( { aws ssm get-parameters --names "${full[@]:0:10}" --query 'Parameters[].[Name,Value]' --output json
+                      if [ "${#full[@]}" -gt 10 ]; then aws ssm get-parameters --names "${full[@]:10}" --query 'Parameters[].[Name,Value]' --output json; fi; } | jq -s 'add')
           for n in "${names[@]}"; do
             v=$(jq -r --arg n "/orders-demo/$n" '.[] | select(.[0] == $n) | .[1]' <<<"$params")
             if [ -z "$v" ]; then echo "::error::Missing SSM parameter /orders-demo/$n"; exit 1; fi
