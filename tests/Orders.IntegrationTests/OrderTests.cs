@@ -253,11 +253,6 @@ public class OrderTests(ApiFixture fixture)
     private async Task<ProductResponse> GetProductAsync(Guid id) =>
         await (await _client.Get($"/api/products/{id}")).ReadAsync<ProductResponse>();
 
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
     /// <summary>Compares orders by value; records compare lists by reference.</summary>
     private sealed class OrderComparer : IEqualityComparer<OrderResponse>
     {

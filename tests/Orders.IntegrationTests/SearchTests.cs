@@ -1,4 +1,8 @@
 using System.Net;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Orders.Api.Features.Search;
 using Orders.Api.Infrastructure;
 
@@ -156,6 +160,35 @@ public class SearchTests(ApiFixture fixture)
 
         Assert.Empty(middle.Products);
         Assert.Equal([product.Id], prefix.Products.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task Search_OrdersWithEqualCreatedAt_AreOrderedByIdDescending()
+    {
+        await using var factory = fixture.Factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddSingleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.UtcNow))));
+        var client = factory.CreateClient();
+        var marker = Marker("ot");
+        var customer = await client.CreateCustomerAsync($"Tied {marker}");
+        var product = await client.CreateProductAsync();
+        var created = new List<Guid>();
+        for (var i = 0; i < 4; i++)
+        {
+            created.Add((await client.CreateOrderAsync(customer.Id, (product.Id, 1))).Id);
+        }
+
+        var result = await (await client.Get($"/api/search?q={marker}")).ReadAsync<SearchResponse>();
+
+        Assert.Equal(created.OrderByDescending(id => id), result.Orders.Select(o => o.Id));
+    }
+
+    [Fact]
+    public void Search_EndpointIsTaggedSearch()
+    {
+        var endpoints = fixture.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>();
+        var search = Assert.Single(endpoints, e => e.RoutePattern.RawText == "/api/search");
+
+        Assert.Equal(["Search"], search.Metadata.GetMetadata<ITagsMetadata>()?.Tags);
     }
 
     [Theory]
