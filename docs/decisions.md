@@ -21,3 +21,4 @@ record's shape: decision, then why); anything here can be revisited by a later r
 | 14 | 2026-11-10 | [Coverage gate on changed lines](adr/0014-coverage-gate-on-changed-lines.md) |
 | 15 | 2026-11-10 | [Agent run limits: a FIFO queue, a cost cap, two strikes](adr/0015-agent-run-limits.md) |
 | 16 | 2026-11-10 | [Flaky tests are found nightly and quarantined, never retried](adr/0016-flaky-tests-quarantine.md) |
+| 17 | 2026-11-10 | [Previews log in to the non-prod database as its master user (known limit)](adr/0017-previews-share-the-nonprod-login.md) |
