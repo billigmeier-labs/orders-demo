@@ -29,12 +29,6 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Automation app token
-        id: app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ secrets.AUTOMATION_APP_ID }}
-          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
       - name: Merge queue reuses the PR's review
         if: github.event_name == 'merge_group'
         run: echo "This change was reviewed on its PR before it could enter the queue."
@@ -45,6 +39,7 @@ jobs:
         run: |
           labels=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name] | join(",")')
           echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          # A fork PR gets no secrets and a read-only token: only the human path (an admin's override) can pass it.
           fork=${{ github.event.pull_request.head.repo.full_name != github.repository }}
           echo "fork=$fork" >> "$GITHUB_OUTPUT"
 
@@ -85,28 +80,63 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The tier comes from the base branch's CODEOWNERS and the base branch's script, so a PR can't lower its own tier.
+      # This job holds the automation app token and the Anthropic key, so it never runs anything the PR changed:
+      # every script comes from the base branch (copied to $RUNNER_TEMP/base); the PR checkout is only read.
+      # The tier also uses the base branch's CODEOWNERS, so a PR can't lower its own tier.
+      - name: Scripts from the base branch
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/base"
+          for f in scripts/risk-tier .github/scripts/label-pr.sh; do
+            if ! git show "$BASE:$f" > "$RUNNER_TEMP/base/$(basename "$f")"; then
+              echo "::error::$f isn't on the base branch ($BASE). This job runs only the base branch's scripts; land the script on main first."
+              exit 1
+            fi
+          done
+          # Claude Code reads project settings (hooks, MCP servers) from the working tree: use the base branch's, not the PR's.
+          for f in .claude .mcp.json; do
+            rm -rf "$f"
+            git cat-file -e "$BASE:$f" 2>/dev/null && git checkout "$BASE" -- "$f"
+          done
+          true
+
       - name: Risk tier from CODEOWNERS
         id: tier
         if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          # (Falls back to the PR's copy only on the PR that first adds the script.)
-          git show "$BASE:scripts/risk-tier" > "$RUNNER_TEMP/risk-tier" 2>/dev/null || cp scripts/risk-tier "$RUNNER_TEMP/risk-tier"
-          tier=$(bash "$RUNNER_TEMP/risk-tier" "$BASE" HEAD)
+          tier=$(bash "$RUNNER_TEMP/base/risk-tier" "$BASE" HEAD)
           echo "tier=$tier" >> "$GITHUB_OUTPUT"
 
       - name: Label the risk tier and author
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.state.outputs.fork != 'true'
         env:
           TIER: ${{ steps.tier.outputs.tier }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: bash .github/scripts/label-pr.sh "$TIER" "$AUTHOR"
+        run: bash "$RUNNER_TEMP/base/label-pr.sh" "$TIER" "$AUTHOR"
+
+      # A fork PR's token can't edit labels; the admin who overrode it sets the risk label by hand.
+      - name: Fork PR labels are set by hand
+        if: github.event_name == 'pull_request' && steps.state.outputs.fork == 'true'
+        env:
+          TIER: ${{ steps.tier.outputs.tier }}
+        run: echo "::notice::Fork PR passed by an admin override. Its risk tier is $TIER; add the risk:$TIER label by hand (a fork PR's token can't edit labels)."
+
+      # Only when Claude reviews (never for forks or overrides), so a missing secret can't fail the human path.
+      - name: Automation app token
+        id: app
+        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true' && steps.state.outputs.fork != 'true'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_KEY }}
 
       - name: Claude reviews
         id: review
-        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true'
+        if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true' && steps.state.outputs.fork != 'true'
         uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -149,7 +179,7 @@ jobs:
           verdict=$(jq -r .verdict <<<"$RESULT")
           if [ "$(jq -r .risk <<<"$RESULT")" = high ] && [ "$TIER" != high ]; then
             echo "The review judged this PR high risk: $(jq -r '.risk_reason // ""' <<<"$RESULT")"
-            bash .github/scripts/label-pr.sh high "$AUTHOR"
+            bash "$RUNNER_TEMP/base/label-pr.sh" high "$AUTHOR"
             TIER=high
           fi
           {
