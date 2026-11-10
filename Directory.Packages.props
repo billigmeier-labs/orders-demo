@@ -20,7 +20,7 @@
     <PackageVersion Include="AWSSDK.CloudWatch" Version="4.0.107.5" />
     <PackageVersion Include="AWSSDK.CloudWatchLogs" Version="4.0.108.1" />
     <PackageVersion Include="AWSSDK.CostExplorer" Version="4.0.101.9" />
-    <PackageVersion Include="AWSSDK.ECS" Version="4.0.110.2" />
+    <PackageVersion Include="AWSSDK.ECS" Version="4.0.111" />
     <PackageVersion Include="AWSSDK.S3" Version="4.0.104.11" />
     <PackageVersion Include="AWSSDK.SimpleSystemsManagement" Version="4.0.105" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />

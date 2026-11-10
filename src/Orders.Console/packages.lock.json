@@ -41,11 +41,11 @@
       },
       "AWSSDK.ECS": {
         "type": "Direct",
-        "requested": "[4.0.110.2, )",
-        "resolved": "4.0.110.2",
-        "contentHash": "PsFE1Xuvr/q0GbWT5t8RoeRbu6lTilwGlRyPzFNxwprmOvPCP7j3CbwfN8DdaMwLYBXJUm+K10/2JM8eT8DGng==",
+        "requested": "[4.0.111, )",
+        "resolved": "4.0.111",
+        "contentHash": "zK/ZlBYlVM7jFVS4KTo7h0BphDm6he8OMA5OADQwrdT+U1xTHusX+zkhI1auRZNZAk+lZmFxkxcpMuHzbkA59Q==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.20, 5.0.0)"
         }
       },
       "AWSSDK.S3": {
@@ -77,8 +77,8 @@
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "4.0.102.19",
-        "contentHash": "Hb6P2ui6y0U+UNUjcC4ASFFoTLzCijhMzfOCXfoFTXq/o0YWQsO1oSH1NG2GQ9dlIT693xeeih0yAcfeL1dphg=="
+        "resolved": "4.0.102.20",
+        "contentHash": "SFmeUUVuXRpaUjaZ4jm7LsKK0dit5qm5K682MUCAR0OPhnqqvoeEfj271KnB5YQVMJ6nSpuUnOQrweihkG83/g=="
       },
       "AWSSDK.Extensions.CborProtocol": {
         "type": "Transitive",
