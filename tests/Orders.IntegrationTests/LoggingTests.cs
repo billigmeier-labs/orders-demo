@@ -65,6 +65,7 @@ public class LoggingTests(ApiFixture fixture)
         var error = await _sink.WaitForAsync(l => l.RootElement.TryGetProperty("@x", out _));
         Assert.Contains("InjectedFaultException", error.RootElement.GetProperty("@x").GetString(), StringComparison.Ordinal);
         Assert.Equal("create-order", error.RootElement.GetProperty("Journey").GetString());
+        Assert.Equal("/api/orders", error.RootElement.GetProperty("RequestPath").GetString());
         Assert.Single(_sink.Lines, l => l.Contains("\"@x\"", StringComparison.Ordinal));
         await _sink.WaitForAsync(l => l.RootElement.TryGetProperty("StatusCode", out var s) && s.GetInt32() == 500);
     }

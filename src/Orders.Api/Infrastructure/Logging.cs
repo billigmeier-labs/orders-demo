@@ -119,12 +119,13 @@ internal static class LoggingSetup
         }, StringComparer.Ordinal);
 }
 
-/// <summary>Pushes RequestId, Journey and Flags for the rest of the request (see <see cref="LoggingSetup"/>).</summary>
+/// <summary>Pushes RequestId, RequestPath (never the query string), Journey and Flags for the rest of the request (see <see cref="LoggingSetup"/>).</summary>
 internal sealed class RequestLogContextMiddleware(RequestDelegate next, IFeatureFlags flags)
 {
     public async Task InvokeAsync(HttpContext context)
     {
         using (LogContext.PushProperty("RequestId", context.TraceIdentifier))
+        using (LogContext.PushProperty("RequestPath", context.Request.Path.Value))
         using (LogContext.PushProperty("Journey", LoggingSetup.Journey(context.Request.Headers[LoggingSetup.JourneyHeader])))
         using (LogContext.PushProperty("Flags", LoggingSetup.FlagValues(flags), destructureObjects: true))
         {
