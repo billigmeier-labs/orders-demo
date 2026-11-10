@@ -34,6 +34,30 @@ public class CustomerTests(ApiFixture fixture)
         Assert.Equal(404, problem.Status);
     }
 
+    [Fact]
+    public async Task Get_Unknown_NamesTheCustomerAndId()
+    {
+        var id = Guid.NewGuid();
+
+        var problem = await (await _client.Get($"/api/customers/{id}")).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Customer not found.", problem.Title);
+        Assert.Equal($"No customer has id {id}.", problem.Detail);
+    }
+
+    [Fact]
+    public async Task List_ReturnsCustomersOrderedByName()
+    {
+        var prefix = $"Order-{Guid.NewGuid():N}";
+        var b = await _client.CreateCustomerAsync($"{prefix}-b");
+        var c = await _client.CreateCustomerAsync($"{prefix}-c");
+        var a = await _client.CreateCustomerAsync($"{prefix}-a");
+
+        var all = await (await _client.Get("/api/customers")).ReadAsync<List<CustomerResponse>>();
+
+        Assert.Equal([a.Id, b.Id, c.Id], all.Where(x => x.Name.StartsWith(prefix, StringComparison.Ordinal)).Select(x => x.Id));
+    }
+
     [Theory]
     [InlineData("", "a@example.com", "Name")]
     [InlineData("Ada", "not-an-email", "Email")]
@@ -76,8 +100,15 @@ public class CustomerTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task ListOrders_UnknownCustomer_Returns404Problem() =>
-        await (await _client.Get($"/api/customers/{Guid.NewGuid()}/orders")).ReadProblemAsync(HttpStatusCode.NotFound);
+    public async Task ListOrders_UnknownCustomer_Returns404Problem()
+    {
+        var id = Guid.NewGuid();
+
+        var problem = await (await _client.Get($"/api/customers/{id}/orders")).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Customer not found.", problem.Title);
+        Assert.Equal($"No customer has id {id}.", problem.Detail);
+    }
 
     [Theory]
     [InlineData("?pageSize=101")]
@@ -99,7 +130,9 @@ public class CustomerTests(ApiFixture fixture)
         var email = $"{Guid.NewGuid():N}@example.com";
         await (await _client.Post("/api/customers", new { name = "First", email })).ReadAsync<CustomerResponse>(HttpStatusCode.Created);
 
-        await (await _client.Post("/api/customers", new { name = "Second", email = email.ToUpperInvariant() }))
+        var problem = await (await _client.Post("/api/customers", new { name = "Second", email = email.ToUpperInvariant() }))
             .ReadProblemAsync(HttpStatusCode.Conflict);
+
+        Assert.Equal($"A customer with email {email} already exists.", problem.Detail);
     }
 }
