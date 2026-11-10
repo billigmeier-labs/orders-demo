@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: Full commit SHA to deploy (default the head of the branch)
+        description: Full commit SHA on main to deploy (default the head of the branch; it must be on main)
         type: string
         required: false
 
@@ -53,6 +53,20 @@ jobs:
         with:
           ref: ${{ steps.sha.outputs.sha }}
           fetch-depth: 0
+
+      # Only commits on main ship: a manual run can't deploy a branch or PR commit (its image may exist from the
+      # merge queue or a preview, but it was never merged).
+      - name: The commit is on main
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error title=Not on main::$SHA isn't on main. Deploy only deploys merged commits: pick a SHA from main's history (git log origin/main), or leave sha empty to deploy main's head."
+            exit 1
+          fi
+          echo "$SHA is on main."
 
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
