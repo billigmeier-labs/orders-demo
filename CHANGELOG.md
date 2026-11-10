@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.1.1](https://github.com/billigmeier-labs/orders-demo/compare/v0.1.0...v0.1.1) (2026-11-10)
+
+
+### Features
+
+* add low-stock products endpoint ([#73](https://github.com/billigmeier-labs/orders-demo/issues/73)) ([5b5795d](https://github.com/billigmeier-labs/orders-demo/commit/5b5795de6fafa1d209b3876f975b03fa7c1862d5))
+* build out the app and demo console from the spec ([#60](https://github.com/billigmeier-labs/orders-demo/issues/60)) ([48ba1fc](https://github.com/billigmeier-labs/orders-demo/commit/48ba1fc3e9f4559f61d780f8bad9e14ea9e8e17c))
+* **demo:** guardrails canned branch recipe, part of the reset ([ac21e27](https://github.com/billigmeier-labs/orders-demo/commit/ac21e27e584e98715f51d842e43ae99552c0da1b))
+* **infra:** per-run tags, metrics bucket, alarms and dashboards per environment, EMF metrics ([c6444f3](https://github.com/billigmeier-labs/orders-demo/commit/c6444f329d817315545c87d275c5039c2a8eab26))
+* **infra:** unattended just env up and down with a leftover check ([4515cfe](https://github.com/billigmeier-labs/orders-demo/commit/4515cfe9bca2ccc48b9e34b0dff0abc23f3385df))
+* just load start/stop on ECS, just prod pause/resume; docs for env lifecycle ([42fc887](https://github.com/billigmeier-labs/orders-demo/commit/42fc887c4197782ae014b94d68f21091f1a2ce0c))
+* **pr-rules:** flag new coverage exclusions under src/ and skipped Playwright specs ([3d6908e](https://github.com/billigmeier-labs/orders-demo/commit/3d6908e073b9f7326d742841f05ae5d6c42cb958))
+* **preview:** drop pr_&lt;N&gt; on close and in the reaper; tag previews with demo-run ([956583b](https://github.com/billigmeier-labs/orders-demo/commit/956583bbabab498c9a07d25e84b153cc2757f44b))
+
+
+### Bug Fixes
+
+* **console:** a PR needs the code owner when it touches a code-owned path, even if GitHub shows no review decision ([bdaba6c](https://github.com/billigmeier-labs/orders-demo/commit/bdaba6c8a55a9f8f03c109fe9cf73c5d85b9e454))
+* **console:** accurate AppConfig path, ECR repositories, repository secrets and the canned guardrails PR ([feef068](https://github.com/billigmeier-labs/orders-demo/commit/feef0684d89296a947f27525eced9358bf1e433c))
+* **infra:** console may read ECS service revisions for the deploy list ([e3b0eb5](https://github.com/billigmeier-labs/orders-demo/commit/e3b0eb56576d506f6ac615a58948f2fa323df1ac))
+* **infra:** env down chunks ECR deletes without jq internals ([382975a](https://github.com/billigmeier-labs/orders-demo/commit/382975a82ed8c1469aa699e2b4a5cd8abef41684))
+* **infra:** the leftover check uses real API calls; AWS's tagging index is only reported (it lags by hours) ([3d63d7b](https://github.com/billigmeier-labs/orders-demo/commit/3d63d7b74451de1b6197619e1d15b39c733855d8))
+* **preview:** look up SSM settings in batches of 10 ([94d507e](https://github.com/billigmeier-labs/orders-demo/commit/94d507e9ca107b5e4df82376f1bb43d16237a187))
+
+
+### Performance
+
+* **deploy:** skip unchanged migrations, poll faster; just rollback skips the bake ([ccac15d](https://github.com/billigmeier-labs/orders-demo/commit/ccac15d68be716c03eb5073d63ab4f4e4491f2aa))
+
+
+### Documentation
+
+* ADR for the Claude app permissions known limit ([52599ce](https://github.com/billigmeier-labs/orders-demo/commit/52599ce99fb4d98ea5849b27e31bb6ca7b325217))
+* ADR for the preview database login known limit ([eec762c](https://github.com/billigmeier-labs/orders-demo/commit/eec762ca7582964662887e72deedf9d139535327))
+* **console:** the Architecture card mentions the Projects board ([a35ef1f](https://github.com/billigmeier-labs/orders-demo/commit/a35ef1fb3609d2f4c4e75335d2f50f0bb79c1aa3))
+* the admin bypass on main is intentional (ADR 0001, AGENTS.md) ([00c86a4](https://github.com/billigmeier-labs/orders-demo/commit/00c86a4011e57e717fbcb235eddd7b0bfeae15fd))
+
 ## 0.1.0 (2026-11-10)
 
 
