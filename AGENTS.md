@@ -38,7 +38,7 @@ A demo of an agent-first delivery workflow: an orders API in .NET 10, deployed t
 Every PR gets a `risk:low` or `risk:high` label from the AI review (and `agent` when the agent opened it).
 
 - **high**: the PR touches a path in `.github/CODEOWNERS`, or the review judges it could lose data, change auth or break clients. A human must approve it.
-  The owned paths: the pipeline and rules (`.github/`, `AGENTS.md`, `justfile`, `demo.just`, `scripts/`, `lefthook.yml`, `.devcontainer/`, `.gitleaksignore`, `.trivyignore.yaml`), infrastructure and data (`infra/`, `src/Orders.Api/Data/Migrations/`), build settings and test thresholds (`Directory.Build.props`, `global.json`, `stryker-config.json`, `coverage-thresholds.json`, `tests/coverage.runsettings`), and sign-in (`src/Orders.Console/Auth/`).
+  The owned paths: the pipeline and rules (`.github/`, `AGENTS.md`, `justfile`, `demo.just`, `scripts/`, `lefthook.yml`, `.devcontainer/`, `.gitleaksignore`, `.trivyignore.yaml`), infrastructure and data (`infra/`, `src/Orders.Api/Data/Migrations/`), build settings and test thresholds (`Directory.Build.props`, `global.json`, `stryker-config.json`, `coverage-thresholds.json`, `tests/testconfig.json`), and sign-in (`src/Orders.Console/Auth/`).
 - **low**: everything else. It merges on green checks, no human needed.
 
 Issues carry the same tier (the task form asks for it; triage can raise it, never lower it).

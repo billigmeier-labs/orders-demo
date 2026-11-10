@@ -1,0 +1,12 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[Orders.*]*",
+      "exclude": "[Orders.*Tests]*",
+      "excludeByFile": "**/Data/Migrations/*.cs",
+      "excludeByAttribute": "Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute",
+      "format": "lcov",
+      "skipAutoProps": true
+    }
+  }
+}

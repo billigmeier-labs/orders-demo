@@ -20,7 +20,7 @@
 /global.json                                @jbilligmeier
 /stryker-config.json                        @jbilligmeier
 /coverage-thresholds.json                   @jbilligmeier
-/tests/coverage.runsettings                 @jbilligmeier
+/tests/testconfig.json                      @jbilligmeier
 /.trivyignore.yaml                          @jbilligmeier
 /.devcontainer/                             @jbilligmeier
 

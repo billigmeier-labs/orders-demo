@@ -12,6 +12,7 @@ dir=${1:?usage: flaky-report <dir>}
 mapfile -t trx < <(find "$dir" -name '*.trx' | sort)
 [ "${#trx[@]}" -gt 0 ] || { echo "No .trx files in $dir" >&2; exit 2; }
 
+# xUnit's TRX report is one long line: put each element on its own line first.
 # Theory cases share one entry: Namespace.Class.Method(args) -> Namespace.Class.Method
 awk '
     function attr(s, name,   r) { r = name "=\"[^\"]*\""; if (match(s, r)) return substr(s, RSTART + length(name) + 2, RLENGTH - length(name) - 3); return "" }
@@ -28,7 +29,7 @@ awk '
         want = ""
     }
     END { for (t in seen) print t "\t" pass[t] + 0 "\t" fail[t] + 0 "\t" msg[t] }
-' "${trx[@]}" | sort > "$dir/all.tsv"
+' < <(for f in "${trx[@]}"; do sed 's/></>\n</g' "$f"; echo; done) | sort > "$dir/all.tsv"
 
 awk -F'\t' '$2 > 0 && $3 > 0' "$dir/all.tsv" > "$dir/flaky.tsv"
 awk -F'\t' '$2 == 0 && $3 > 0' "$dir/all.tsv" > "$dir/broken.tsv"
