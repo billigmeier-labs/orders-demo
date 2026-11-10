@@ -127,7 +127,7 @@ jobs:
             Paths in .github/CODEOWNERS are already high; you can only raise a PR to high, never lower it.
           claude_args: >-
             --model claude-sonnet-5-5
-            --max-turns 25
+            --max-turns 45
             --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(gh pr view:*),Bash(gh issue view:*)"
             --json-schema '{"type":"object","required":["verdict","risk","summary","blocking","comments"],"properties":{"verdict":{"enum":["pass","block"]},"risk":{"enum":["low","high"]},"risk_reason":{"type":"string"},"summary":{"type":"string"},"blocking":{"type":"array","items":{"type":"object","required":["file","category","problem","fix"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"category":{"enum":["bug","security","untested","not-the-issue"]},"problem":{"type":"string"},"fix":{"type":"string"}}}},"comments":{"type":"array","items":{"type":"string"}}}}'
 
@@ -140,6 +140,12 @@ jobs:
           TIER: ${{ steps.tier.outputs.tier }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
+          # No structured result (e.g. the review ran out of turns on a very large diff) is not a block: say so,
+          # don't label the PR, and let a re-run or a smaller PR fix it.
+          if [ -z "$RESULT" ] || [ "$(jq -r '.verdict // empty' <<<"$RESULT" 2>/dev/null)" = "" ]; then
+            echo "::error::The AI review didn't return a verdict (it may have run out of turns on a large diff). Re-run the job, or split the PR (aim for under 400 changed lines)."
+            exit 1
+          fi
           verdict=$(jq -r .verdict <<<"$RESULT")
           if [ "$(jq -r .risk <<<"$RESULT")" = high ] && [ "$TIER" != high ]; then
             echo "The review judged this PR high risk: $(jq -r '.risk_reason // ""' <<<"$RESULT")"

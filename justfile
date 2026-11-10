@@ -64,8 +64,9 @@ db:
         *) docker run -d --name {{ db_container }} -p {{ db_port }}:5432 -v orders-dev-db:/var/lib/postgresql/data \
                -e POSTGRES_USER=orders -e POSTGRES_PASSWORD=orders -e POSTGRES_DB=orders {{ postgres_image }} >/dev/null ;;
     esac
-    for _ in $(seq 1 60); do docker exec {{ db_container }} pg_isready -U orders -q 2>/dev/null && break; sleep 1; done
-    docker exec {{ db_container }} pg_isready -U orders -q || { docker logs {{ db_container }} | tail -20; echo "Postgres didn't start." >&2; exit 1; }
+    for _ in $(seq 1 60); do docker exec {{ db_container }} pg_isready -h 127.0.0.1 -U orders -q 2>/dev/null && break; sleep 1; done
+    # Over TCP: during first-time init a temporary server answers on the Unix socket only, then restarts.
+    docker exec {{ db_container }} pg_isready -h 127.0.0.1 -U orders -q || { docker logs {{ db_container }} | tail -20; echo "Postgres didn't start." >&2; exit 1; }
     echo "Postgres is up on :{{ db_port }}."
 
 # Delete the dev database and its data (the next `just setup` recreates and seeds it)
