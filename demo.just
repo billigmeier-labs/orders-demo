@@ -7,7 +7,7 @@ repo := "billigmeier-labs/orders-demo"
 search_v2 := "src/Orders.Api/Features/Search/SearchV2.cs"
 
 # Everything below, in order. bad-deploy goes last: it rebuilds demo/canned-bug from main, so main must already be reset.
-reset: flags-off tour incident bad-deploy cleanup
+reset: flags-off tour incident guardrails bad-deploy cleanup
     @echo "Demo reset complete."
 
 # Turn every AppConfig flag off in prod, staging and preview (via the console's API would be nicer; this is direct)
@@ -90,6 +90,21 @@ tour:
     git revert --no-edit "$fix"
     git push -q origin main
     echo "Reverted the agent's low-stock endpoint ($fix); the Tour's issue is new work again."
+
+# Refresh demo/guardrails: main + a skipped test + a CI edit, for the guardrails scenario
+guardrails:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(git status --porcelain)" ]; then echo "Commit your changes first; demo resets need a clean checkout."; exit 1; fi
+    git checkout -q main && git fetch -q origin main && git merge -q --ff-only origin/main
+    git checkout -q -B demo/guardrails origin/main
+    sed -i '0,/\[Fact\]/s//[Fact(Skip = "Flaky on CI, skipping to unblock the pipeline")]/' tests/Orders.UnitTests/OrderTotalTests.cs
+    sed -i '/^    name: Integration tests and coverage$/a\    continue-on-error: true  # integration tests are slow; do not block merges on them' .github/workflows/ci.yml
+    if git diff --quiet; then echo "Nothing changed: the test or ci.yml moved."; git checkout -q main; exit 1; fi
+    git commit -qam "ci: skip a flaky test and stop integration tests blocking merges"
+    git push -q -f origin demo/guardrails
+    git checkout -q main
+    echo "demo/guardrails is main + a skipped test + a CI edit."
 
 # Close demo PRs (deleting their branches) and delete demo issues
 cleanup:
