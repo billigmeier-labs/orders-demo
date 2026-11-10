@@ -1,7 +1,7 @@
 {
   "id": "guardrails",
   "title": "Guardrails: agents cannot change the rules",
-  "summary": "An agent's change that skips a test and edits CI is stopped twice: triage hands it to a human, and the PR is blocked.",
+  "summary": "A change that skips a test and edits CI, written as if by an agent, is stopped twice: triage hands it to a human, and the PR is blocked.",
   "order": 30,
   "steps": [
     {
@@ -57,8 +57,8 @@
     {
       "id": "pr",
       "stage": "agent",
-      "title": "An agent tries it anyway",
-      "narration": "Suppose an agent, or a person in a hurry, did it anyway. This ready-made branch skips a flaky test and stops the integration tests from blocking merges. It opens as an ordinary PR.",
+      "title": "A canned PR tries it anyway",
+      "narration": "Suppose an agent, or a person in a hurry, did it anyway. This is a canned PR written as if by an agent: a ready-made branch that skips a flaky test and stops the integration tests from blocking merges. The console opens it with the presenter's account, so it isn't an agent's own PR, but every check treats it like any other.",
       "explain": "pull-request",
       "action": {
         "label": "Open the guardrails PR",
@@ -67,7 +67,7 @@
           "head": "demo/guardrails",
           "base": "main",
           "title": "ci: skip a flaky test and stop integration tests blocking merges",
-          "body": "Closes #{issue}\n\nDemo scenario `guardrails`: skips a test and edits `.github/workflows/ci.yml`. Expected to be blocked. Opened by the demo console.",
+          "body": "Closes #{issue}\n\nDemo scenario `guardrails`: skips a test and edits `.github/workflows/ci.yml`. Expected to be blocked. A canned PR written as if by an agent, opened by the demo console with the presenter's account.",
           "labels": "demo"
         }
       }
