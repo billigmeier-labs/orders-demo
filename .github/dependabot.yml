@@ -1,3 +1,5 @@
+# Weekly dependency updates, one PR per ecosystem and kind: patch updates are grouped on their own so they can
+# merge by themselves (dependabot-auto-merge.yml) without waiting on a minor or major bump that needs a look.
 version: 2
 updates:
   - package-ecosystem: nuget
@@ -5,16 +7,44 @@ updates:
     schedule:
       interval: weekly
     groups:
+      nuget-patch:
+        patterns: ["*"]
+        update-types: [patch]
       nuget:
         patterns: ["*"]
+        update-types: [minor, major]
     commit-message:
       prefix: chore
+
+  # Base images in the Dockerfiles, and the SDK image the devcontainer and CI build in (.devcontainer/Dockerfile).
+  - package-ecosystem: docker
+    directories:
+      - /.devcontainer
+      - /src/Orders.Api
+      - /src/Orders.Console
+      - /src/Orders.LoadGenerator
+    schedule:
+      interval: weekly
+    groups:
+      docker-patch:
+        patterns: ["*"]
+        update-types: [patch]
+      docker:
+        patterns: ["*"]
+        update-types: [minor, major]
+    commit-message:
+      prefix: chore
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     groups:
+      actions-patch:
+        patterns: ["*"]
+        update-types: [patch]
       actions:
         patterns: ["*"]
+        update-types: [minor, major]
     commit-message:
       prefix: ci
