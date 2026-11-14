@@ -5,6 +5,7 @@ A small orders API in .NET 10 (minimal APIs, EF Core, PostgreSQL), used to demo 
 - [AGENTS.md](AGENTS.md): how to work in this repo (people and agents)
 - [docs/contracts.md](docs/contracts.md): endpoints, names and configuration
 - [docs/adr/](docs/adr/): one record per decision ([index](docs/decisions.md))
+- [docs/runbook.md](docs/runbook.md): running a demo, before, during and after
 
 ## Run it
 
