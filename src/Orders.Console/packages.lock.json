@@ -4,66 +4,66 @@
     "net10.0": {
       "AWSSDK.AppConfig": {
         "type": "Direct",
-        "requested": "[4.0.101.22, )",
-        "resolved": "4.0.101.22",
-        "contentHash": "iVKmc/f50xQF6wuzwGDa8BMsZ1XlcKXIJE7PrqVna80HdKBSmLgeqNFPoin/GepxpVZgR1xFBZobtPIjPCw17g==",
+        "requested": "[4.1.0, )",
+        "resolved": "4.1.0",
+        "contentHash": "ga0D/FtUIwQmXiF73DWzymZWAePsbR4uw+hYVx6kouGiuiqbqco8oFd/YwI6UtoKGih6EkIxB6Prr5Bkwn9Y+w==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.CloudWatch": {
         "type": "Direct",
-        "requested": "[4.0.107.5, )",
-        "resolved": "4.0.107.5",
-        "contentHash": "2xgRgbeL0fyY+BO7+d6ZxVs5I3ReCs3Kc12ZbMVb0dqsl9UAokohe3xelAyH+gAkvsb9wIbSp5DsQy2m7U7hOg==",
+        "requested": "[4.1.1, )",
+        "resolved": "4.1.1",
+        "contentHash": "SuShiwUF9pFqNDYA1n+ggO0HbwvM02vi1d3VqPf8eb5aDZh3jP6YrOhNC/ofB9DFGGkG8NyOyyH+NTxd0uv/1w==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)",
-          "AWSSDK.Extensions.CborProtocol": "[4.0.100.25, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)",
+          "AWSSDK.Extensions.CborProtocol": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.CloudWatchLogs": {
         "type": "Direct",
-        "requested": "[4.0.108.1, )",
-        "resolved": "4.0.108.1",
-        "contentHash": "fEKFzyWUlbsWFC9ac/wLSlZ88KdbsjlzfOV6Z3v8L8xBgQFAkYZ6S68EzKmzJDsFAa9mbPDTBYOUuOZL7qDrKQ==",
+        "requested": "[4.1.0, )",
+        "resolved": "4.1.0",
+        "contentHash": "vFlUltWnYCR++8LuwPOLICX09DFFpcY9ldekGgjt36jxU699r8emLk+Ra18PatExX+qRLsfqQ7KV9V6CtKnDOQ==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.CostExplorer": {
         "type": "Direct",
-        "requested": "[4.0.101.9, )",
-        "resolved": "4.0.101.9",
-        "contentHash": "5p6HPhYnbxF6/8rNfC/0ypIP1q1gJmQGG0HvoEKVNKwCySKss6NzqcjzuV/m1flmdHJlN83S0WptIii5FBFPWw==",
+        "requested": "[4.1.0, )",
+        "resolved": "4.1.0",
+        "contentHash": "eP1kYPaUJClI5W7utAmkwXOuvMpvq18yNHR1zS5tj6AD76bbODLHZAwqEgypFcR2mJ27TfHoPp6F7B+x6MSkAw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.ECS": {
         "type": "Direct",
-        "requested": "[4.0.111, )",
-        "resolved": "4.0.111",
-        "contentHash": "zK/ZlBYlVM7jFVS4KTo7h0BphDm6he8OMA5OADQwrdT+U1xTHusX+zkhI1auRZNZAk+lZmFxkxcpMuHzbkA59Q==",
+        "requested": "[4.1.0, )",
+        "resolved": "4.1.0",
+        "contentHash": "IWL4v1Ke6Kms47yW3K9jLs6OflI5ljla+87P32mUsmkdniLY4gjm4U8z41cC2CiUrXHk3cFHvBKkU+q/+Ac1xw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.20, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.S3": {
         "type": "Direct",
-        "requested": "[4.0.104.11, )",
-        "resolved": "4.0.104.11",
-        "contentHash": "leP2ZC3gVaNHXZleKOMHmedex6fTrr6u1ZQFuezIGjT01oPwP0j6YI00jlPwlakTC0Uo5a0eOOY2Q/eYzsU9wg==",
+        "requested": "[4.1.0, )",
+        "resolved": "4.1.0",
+        "contentHash": "uV//Txuga5jW6wIE5UXi6RaqAvc0eg76i7vmUDgK2H4yOtrSG4BxF+IdXYOu4sbPG/L6q/k2UbK5L6ptysj9oA==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.SimpleSystemsManagement": {
         "type": "Direct",
-        "requested": "[4.0.105, )",
-        "resolved": "4.0.105",
-        "contentHash": "ARyYdLn8cgmC2rUXGr10qRcItmPBmuESacIgWQpDZNntxCoStEXpn9TxRKHyjZAXtOiEw71yDP01vzd6hPu6gA==",
+        "requested": "[4.1.1, )",
+        "resolved": "4.1.1",
+        "contentHash": "9Bw+MLynyQa/lZPGyA2UtcBDM7wr+ggv/aM116+2vKXjGJzJQX+Q7dVNjDpS50AWmExhPDVDDsAnfWep0xKKZQ==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.19, 5.0.0)"
+          "AWSSDK.Core": "[4.1.0.1, 5.0.0)"
         }
       },
       "Microsoft.AspNetCore.Authentication.OpenIdConnect": {
@@ -77,16 +77,26 @@
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "4.0.102.20",
-        "contentHash": "SFmeUUVuXRpaUjaZ4jm7LsKK0dit5qm5K682MUCAR0OPhnqqvoeEfj271KnB5YQVMJ6nSpuUnOQrweihkG83/g=="
+        "resolved": "4.1.0.1",
+        "contentHash": "uihRnwZ5cljEk1g+SV6Bj7esrdZTS05sV5oKpKzAzja79hqqvfi8r6rP9UNt+cUvsT3VHu8YfKuK1fgGEIcs9Q==",
+        "dependencies": {
+          "AWSSDK.Extensions.Numerics": "[4.1.0, 5.0.0)",
+          "System.IO.Hashing": "11.0.0"
+        }
       },
       "AWSSDK.Extensions.CborProtocol": {
         "type": "Transitive",
-        "resolved": "4.0.100.25",
-        "contentHash": "PHM8U0MOjH7tQ/5XfQjn3jc2jmoCSs4QNKNiiYRViXoL6dKfBa18Xwoxthpbkz4MnJd0sTkZ1gGf3tpp3oPlMQ==",
+        "resolved": "4.1.0",
+        "contentHash": "9+fPrnpO+cESoGzHIO3feMoQttZ8RB/DFy3ZtF6jR4LvyQ0jqHl8P4Id2o9rQWcFyuxpbrElUEQWh4Fm5uCizA==",
         "dependencies": {
-          "AWSSDK.Core": "4.0.102.19"
+          "AWSSDK.Core": "4.1.0",
+          "System.Formats.Cbor": "11.0.0"
         }
+      },
+      "AWSSDK.Extensions.Numerics": {
+        "type": "Transitive",
+        "resolved": "4.1.0",
+        "contentHash": "hhoiXT1aUyVgIiQbQoqG3L1EEneqXDh2GKyH5izUlO6Rzi9GAAi8S6mlLiVwow23+EGg77zHjdmUi+ia3RSUTg=="
       },
       "Microsoft.Bcl.Cryptography": {
         "type": "Transitive",
@@ -140,6 +150,11 @@
           "Microsoft.IdentityModel.Logging": "8.19.2"
         }
       },
+      "System.Formats.Cbor": {
+        "type": "Transitive",
+        "resolved": "11.0.0",
+        "contentHash": "2ULEPU67LRt4YVwBnCk1OhjsJspIBzg1JlDkN2hnZm9im3fC9bSbVQorLraOIcLMlA6/8eWQG1fjTpurHkIFZw=="
+      },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "Transitive",
         "resolved": "8.19.2",
@@ -148,6 +163,11 @@
           "Microsoft.IdentityModel.JsonWebTokens": "8.19.2",
           "Microsoft.IdentityModel.Tokens": "8.19.2"
         }
+      },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "11.0.0",
+        "contentHash": "U+Bv2qCYt6eONi+arSP0QIp4uTO6os6uceBsqiAwruZ+Wo2HrRhO/0tj38M9URJtS+4DhAtT3ka2TGNFYsnhyQ=="
       }
     },
     "net10.0/linux-arm64": {},
