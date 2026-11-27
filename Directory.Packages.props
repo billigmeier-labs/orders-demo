@@ -33,6 +33,8 @@
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <!-- Pinned above AWSSDK.Extensions.CborProtocol's 9.0.5 (GHSA-vmv3-wvjp-wqpj); drop once the AWS SDK requires a patched version. -->
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.15" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
