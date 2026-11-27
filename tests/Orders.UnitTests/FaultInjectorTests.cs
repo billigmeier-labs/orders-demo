@@ -29,6 +29,7 @@ public class FaultInjectorTests
         var ex = await Assert.ThrowsAsync<InjectedFaultException>(() => Faults(29.9).MaybeFailOrderAsync());
 
         Assert.Equal(Flags.FaultFailOrders, ex.Flag);
+        Assert.Equal($"Injected fault: {Flags.FaultFailOrders} is on.", ex.Message);
         var entry = Assert.Single(_logger.Entries);
         Assert.Equal(LogLevel.Warning, entry.Level);
         Assert.Equal("FaultInjected", entry.EventId.Name);
