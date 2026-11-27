@@ -82,6 +82,19 @@ public class StockTests
         Assert.Equal(1, product.Stock);
     }
 
+    [Fact]
+    public void TryAddLine_NotPending_ThrowsAndKeepsStock()
+    {
+        var product = TestData.Product(stock: 10);
+        var order = TestData.Order(OrderStatus.Paid);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => order.TryAddLine(product, 1));
+
+        Assert.Equal("Lines can only be added to a pending order.", ex.Message);
+        Assert.Empty(order.Lines);
+        Assert.Equal(10, product.Stock);
+    }
+
     [Theory]
     [InlineData(OrderStatus.Pending)]
     [InlineData(OrderStatus.Paid)]
