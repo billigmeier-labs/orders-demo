@@ -12,10 +12,10 @@ region := "us-east-1"
 _load_token := '''
 if [[ -z "${TF_VAR_github_dispatch_token:-}" ]]; then
   if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-    OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/op/service-account-token)"
+    OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.op-agent-token)"
     export OP_SERVICE_ACCOUNT_TOKEN
   fi
-  TF_VAR_github_dispatch_token="$(op read "op://Infra/orders-demo-automation/credential")"
+  TF_VAR_github_dispatch_token="$(op read "op://Service - Agent Orders Demo/orders-demo-automation/credential")"
   export TF_VAR_github_dispatch_token
 fi
 '''
@@ -112,14 +112,14 @@ secrets:
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-      OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/op/service-account-token)"
+      OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.op-agent-token)"
       export OP_SERVICE_ACCOUNT_TOKEN
     fi
     arn="$(terraform -chdir={{ tf }}/env output -raw console_secret_arn)"
     jq -n \
-      --arg gh "$(op read "op://Infra/orders-demo-automation/credential")" \
-      --arg id "$(op read "op://Infra/google-console-oauth/username")" \
-      --arg secret "$(op read "op://Infra/google-console-oauth/credential")" \
+      --arg gh "$(op read "op://Service - Agent Orders Demo/orders-demo-automation/credential")" \
+      --arg id "$(op read "op://Service - Agent Orders Demo/google-console-oauth/username")" \
+      --arg secret "$(op read "op://Service - Agent Orders Demo/google-console-oauth/credential")" \
       --arg verify "$(tr -d '[:space:]' < ~/.config/op/orders-demo-console-token)" \
       '{GITHUB_TOKEN: $gh, CONSOLE_VERIFICATION_TOKEN: $verify, GOOGLE_CLIENT_ID: $id, GOOGLE_CLIENT_SECRET: $secret}' \
       | aws secretsmanager put-secret-value --region {{ region }} --secret-id "$arn" \

@@ -32,8 +32,9 @@ From the repo root:
 | `just rollback [prod\|staging]` | Previous release, no bake, in about two minutes (below). |
 
 `up` and `plan` read the alarm-dispatch GitHub token with
-`op read "op://Infra/orders-demo-automation/credential"` into `TF_VAR_github_dispatch_token`
-(using `OP_SERVICE_ACCOUNT_TOKEN`, or `~/.config/op/service-account-token` if unset). `up` and `down` also
+`op read "op://Service - Agent Orders Demo/orders-demo-automation/credential"` into `TF_VAR_github_dispatch_token`
+(using `OP_SERVICE_ACCOUNT_TOKEN`, or the short-lived agent token in `~/.op-agent-token` if unset; on atlas Josh makes
+one with `just op-agent-read 8h "Service - Agent Orders Demo"` in `~/projects-personal/home`). `up` and `down` also
 need `gh` signed in with rights to run workflows and close PRs and issues. `TF_VAR_demo_run` comes from SSM.
 
 ## How deploys work

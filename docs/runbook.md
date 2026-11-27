@@ -8,7 +8,8 @@ For whoever presents or maintains the demo. Commands are in [infra/README.md](..
 1. **Anthropic credit.** The Claude Code action (agents, triage, AI review) bills the `ANTHROPIC_API_KEY`
    organization's *purchased* credit. A promotional credit there covers the API and Agent SDK but not Claude Code,
    so CI fails with "Credit balance is too low" even while the promo shows a balance. Top up before a demo.
-2. **Credentials** (1Password vault `Infra`):
+2. **Credentials** (1Password vault `Service - Agent Orders Demo`; `just env up` and `just env secrets` read it with
+   the token in `~/.op-agent-token`, see [infra/README.md](../infra/README.md)):
    - `anthropic-orders-demo`: the repo secret `ANTHROPIC_API_KEY` (also a Dependabot secret).
    - `orders-automation-app`: the `orders-automation` GitHub App (App ID 5681201), as repo and Dependabot
      secrets `AUTOMATION_APP_ID` / `AUTOMATION_APP_KEY`. The PEM is stored on one line; rebuild the newlines when
