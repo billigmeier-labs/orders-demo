@@ -137,7 +137,7 @@ jobs:
       - name: Claude reviews
         id: review
         if: github.event_name == 'pull_request' && steps.override.outputs.active != 'true' && steps.state.outputs.fork != 'true'
-        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Agent and Dependabot PRs are opened by bots; they're reviewed like everyone else's.
