@@ -13,6 +13,10 @@ updates:
       nuget:
         patterns: ["*"]
         update-types: [minor, major]
+    ignore:
+      # 5.1 refuses `project` with `solution` (stryker-config.json); 5.0 works on .NET 11. Remove when the config moves.
+      - dependency-name: dotnet-stryker
+        versions: [">= 5.1.0"]
     commit-message:
       prefix: chore
 
