@@ -81,7 +81,7 @@ jobs:
         id: just1
         continue-on-error: true  # GitHub release downloads sometimes 504
       - if: steps.just1.outcome == 'failure'
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         with:
           tool: just
 
@@ -110,7 +110,7 @@ jobs:
 
       - name: Claude works the issue
         id: work
-        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.
@@ -168,7 +168,7 @@ jobs:
         id: just2
         continue-on-error: true  # GitHub release downloads sometimes 504
       - if: steps.just2.outcome == 'failure'
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         with:
           tool: just
       # Only the latest AI review comment (posted by github-actions[bot]) is handed to the agent; other PR comments
@@ -182,7 +182,7 @@ jobs:
             --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- ai-review -->")))] | last | .body // ""' > .agent-review.md
           [ -s .agent-review.md ] || { echo "::error::No AI review comment found."; exit 1; }
 
-      - uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1
+      - uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Our automation app labels issues and opens incident/mutation issues, so it starts these runs.
