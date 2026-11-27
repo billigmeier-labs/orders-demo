@@ -20,6 +20,9 @@ public class FakeAppConfigData : DispatchProxy
     /// <summary>Called with the poll count after each poll is answered.</summary>
     public Action<int>? OnPoll { get; set; }
 
+    /// <summary>When set, every poll fails with a cancellation, as when the host stops during a request.</summary>
+    public bool CancelPolls { get; set; }
+
     public static (IAmazonAppConfigData Client, FakeAppConfigData Fake) Create()
     {
         var client = Create<IAmazonAppConfigData, FakeAppConfigData>();
@@ -37,6 +40,11 @@ public class FakeAppConfigData : DispatchProxy
                 Polls.Add((GetLatestConfigurationRequest)args![0]!);
                 var response = Responses.Dequeue();
                 OnPoll?.Invoke(Polls.Count);
+                if (CancelPolls)
+                {
+                    return Task.FromException<GetLatestConfigurationResponse>(new OperationCanceledException());
+                }
+
                 return response is null
                     ? Task.FromException<GetLatestConfigurationResponse>(new InvalidOperationException("AppConfig is down"))
                     : Task.FromResult(response);
@@ -154,6 +162,27 @@ public class AppConfigPollerReuseTests
 
 public class AppConfigPollerFailureTests
 {
+    [Fact]
+    public async Task StopDuringARequest_EndsQuietlyWithoutAWarning()
+    {
+        var (client, fake) = FakeAppConfigData.Create();
+        fake.Responses.Enqueue(null);
+        fake.CancelPolls = true;
+        var flags = new AppConfigFeatureFlags();
+        var logger = new CapturingLogger<AppConfigPoller>();
+        using var poller = new AppConfigPoller(client, AppConfigPollerTests.Settings, flags, logger);
+        Task? stopping = null;
+        fake.OnPoll = _ => stopping = poller.StopAsync(TestContext.Current.CancellationToken);
+
+        await poller.StartAsync(TestContext.Current.CancellationToken);
+        await poller.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        await stopping!;
+
+        Assert.True(poller.ExecuteTask.IsCompletedSuccessfully);
+        Assert.Single(fake.Polls);
+        Assert.Empty(logger.Entries);
+    }
+
     [Fact]
     public async Task FailedPoll_KeepsOldFlagsLogsAWarningAndStartsAFreshSession()
     {
