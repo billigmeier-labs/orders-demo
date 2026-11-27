@@ -1,7 +1,11 @@
+using System.Data.Common;
 using System.Net;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using Orders.Api.Data;
 using Orders.Api.Features.Products;
 
 namespace Orders.IntegrationTests;
@@ -205,6 +209,41 @@ public class ProductTests(ApiFixture fixture)
 
         Assert.Equal("Product not found.", problem.Title);
         Assert.Equal($"No product has id {id}.", problem.Detail);
+    }
+
+    [Fact]
+    public async Task Restock_ProductDeletedAfterUpdate_ProblemNamesProductAndId()
+    {
+        var connectionString = fixture.ConnectionString("orders_tests");
+        await using var factory = fixture.Factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.ConfigureDbContext<OrdersDbContext>(o => o.AddInterceptors(new DeleteProductAfterRestock(connectionString)))));
+        var client = factory.CreateClient();
+        var product = await client.CreateProductAsync();
+
+        var problem = await (await client.Post($"/api/products/{product.Id}/restock", new { quantity = 5 })).ReadProblemAsync(HttpStatusCode.NotFound);
+
+        Assert.Equal("Product not found.", problem.Title);
+        Assert.Equal($"No product has id {product.Id}.", problem.Detail);
+    }
+
+    /// <summary>Simulates another request deleting the product between the restock UPDATE and the read-back.</summary>
+    private sealed class DeleteProductAfterRestock(string connectionString) : DbCommandInterceptor
+    {
+        public override async ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command, CommandExecutedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("UPDATE \"Products\"", StringComparison.Ordinal))
+            {
+                var id = command.Parameters.Cast<DbParameter>().Select(p => p.Value).OfType<Guid>().Single();
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync(cancellationToken);
+                await using var delete = new NpgsqlCommand("DELETE FROM \"Products\" WHERE \"Id\" = @id", connection);
+                delete.Parameters.AddWithValue("id", id);
+                await delete.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            return result;
+        }
     }
 
     [Fact]
