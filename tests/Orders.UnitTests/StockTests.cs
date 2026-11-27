@@ -58,6 +58,27 @@ public class StockTests
         Assert.Throws<ArgumentOutOfRangeException>(() => TestData.Product().TryRemoveStock(quantity));
 
     [Fact]
+    public void AddStock_AddsToStock()
+    {
+        var product = TestData.Product(stock: 5);
+
+        product.AddStock(3);
+
+        Assert.Equal(8, product.Stock);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void AddStock_NonPositiveQuantity_ThrowsAndKeepsStock(int quantity)
+    {
+        var product = TestData.Product(stock: 5);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => product.AddStock(quantity));
+        Assert.Equal(5, product.Stock);
+    }
+
+    [Fact]
     public void NewProduct_NegativeStock_Throws() =>
         Assert.Throws<ArgumentOutOfRangeException>(() => TestData.Product(stock: -1));
 
