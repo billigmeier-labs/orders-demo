@@ -4,7 +4,7 @@ Rules for any coding agent (and person) working in this repo. Read this and `doc
 
 ## What this repo is
 
-A demo of an agent-first delivery workflow: an orders API in .NET 10, deployed to AWS, where AI agents pick up issues, open PRs, and ship through automated checks. Names and shapes live in `docs/contracts.md`; decisions in `docs/adr/` (indexed in `docs/decisions.md`).
+A demo of an agent-first delivery workflow: an orders API in .NET 11, deployed to AWS, where AI agents pick up issues, open PRs, and ship through automated checks. Names and shapes live in `docs/contracts.md`; decisions in `docs/adr/` (indexed in `docs/decisions.md`).
 
 ## Commands (always use these, never ad-hoc equivalents)
 

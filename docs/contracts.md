@@ -7,7 +7,7 @@ The names and shapes every part of this repo agrees on. Change them here first, 
 | Path | What |
 | --- | --- |
 | `Orders.slnx` | The solution |
-| `src/Orders.Api` | ASP.NET Core (.NET 10) orders API |
+| `src/Orders.Api` | ASP.NET Core (.NET 11) orders API |
 | `src/Orders.Console` | Demo console (ASP.NET Core): Status, Present (Tour and scenarios), Architecture |
 | `src/Orders.LoadGenerator` | NBomber load scenarios (`just load start <scenario> --minutes <N>` on ECS, `just load local <scenario> <minutes>` here) |
 | `tests/Orders.UnitTests` | xUnit, no I/O |

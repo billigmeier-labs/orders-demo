@@ -1,6 +1,6 @@
 # orders-demo
 
-A small orders API in .NET 10 (minimal APIs, EF Core, PostgreSQL), used to demo an agent-first delivery workflow: AI agents pick up issues, open PRs and ship through automated checks.
+A small orders API in .NET 11 (minimal APIs, EF Core, PostgreSQL), used to demo an agent-first delivery workflow: AI agents pick up issues, open PRs and ship through automated checks.
 
 - [AGENTS.md](AGENTS.md): how to work in this repo (people and agents)
 - [docs/contracts.md](docs/contracts.md): endpoints, names and configuration

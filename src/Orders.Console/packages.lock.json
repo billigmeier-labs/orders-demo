@@ -1,92 +1,101 @@
 {
   "version": 2,
   "dependencies": {
-    "net10.0": {
+    "net11.0": {
       "AWSSDK.AppConfig": {
         "type": "Direct",
-        "requested": "[4.0.101.23, )",
-        "resolved": "4.0.101.23",
-        "contentHash": "dezN4+yFo+Mm8DYSXgmgawJcAksJZXzAU7bBU6++j0joFlKj/kZ3AeoYhMSMRnBsnaC8LgewIUKdw74yrB1TIw==",
+        "requested": "[4.1.0.2, )",
+        "resolved": "4.1.0.2",
+        "contentHash": "kJCUI5jtqqDkS0AHcGTABEkYGARDHotXOvrAITvWNPrtRwIb1NLRSMKjm5Mi2TRORHwp1fZbRRIB3Z1b77pL3Q==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.1, 5.0.0)"
         }
       },
       "AWSSDK.CloudWatch": {
         "type": "Direct",
-        "requested": "[4.0.107.6, )",
-        "resolved": "4.0.107.6",
-        "contentHash": "kOkFtvCudzEM8M7V6vdGxWOQ3FkifBzWt4SqxnxOC6uSUU+KN/VVBQJz/4pXJFuIBGHHnl22ZvM44FH2ict/5w==",
+        "requested": "[4.1.1.2, )",
+        "resolved": "4.1.1.2",
+        "contentHash": "74o7hSP2+S3gn/o+5jpmxNRQtJ980HbqZL/CZmoCftHlpWO5i2SKw0uSuVXhmVLCt/EUrhXJbZxqFOjk1dRhgA==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)",
-          "AWSSDK.Extensions.CborProtocol": "[4.0.100.26, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.1, 5.0.0)",
+          "AWSSDK.Extensions.CborProtocol": "[4.1.0.2, 5.0.0)"
         }
       },
       "AWSSDK.CloudWatchLogs": {
         "type": "Direct",
-        "requested": "[4.0.108.2, )",
-        "resolved": "4.0.108.2",
-        "contentHash": "cjRksPpkgz8pemz4ngta74RrJLdoPiZTtncpuqsDpoyuybb/ZOe8sVh1PK3QGyhe9oXror2qwLl0hKOVuF1WkA==",
+        "requested": "[4.1.0.2, )",
+        "resolved": "4.1.0.2",
+        "contentHash": "6moUgVXCK02HQ5PDg4qCnGAC3+PR2AhWzGdbTYdt/FEAjI+3v1RoSCyrqroynbdoonwormMMFLEW0Yv6SrpkLw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.1, 5.0.0)"
         }
       },
       "AWSSDK.CostExplorer": {
         "type": "Direct",
-        "requested": "[4.0.101.10, )",
-        "resolved": "4.0.101.10",
-        "contentHash": "pcw4v/MSyIU64XZ7OxDAxkPZBEISgMVLaT+chxjt/iEUAiEEWeOQzIpjG6gqvfZqr1i9f3qftAKq67+5nQ3irQ==",
+        "requested": "[4.1.1, )",
+        "resolved": "4.1.1",
+        "contentHash": "/m9IcJMADAoVEd0bJBCugr7E3Az8DpxD4rMxmPYfsf/VFYfsr9KhubzSIL+1oUIzCB5bsjF6MTXXS4QI656Xxw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.2, 5.0.0)"
         }
       },
       "AWSSDK.ECS": {
         "type": "Direct",
-        "requested": "[4.0.111.1, )",
-        "resolved": "4.0.111.1",
-        "contentHash": "Zr1iGD+CkG3thE1XZkjmF33NEG49TsjoDJ3irkbx4zDb6JlZpdAPHkeXARwTYABg2iQxgjSXhM17LgdlaDtORQ==",
+        "requested": "[4.1.1.1, )",
+        "resolved": "4.1.1.1",
+        "contentHash": "1WE41p1HojT6F8Fw+DcGsByHMl9eD4x79sfoZk4u3l043BaiuaI3I8/8uY70jYVXuHjZWDG6mGF5jpNZP/zgyQ==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.1, 5.0.0)"
         }
       },
       "AWSSDK.S3": {
         "type": "Direct",
-        "requested": "[4.0.104.12, )",
-        "resolved": "4.0.104.12",
-        "contentHash": "z4rPjjQoPDuWtxk2utbO/I+xNEqA+ac7/cDjwd4KvFrYHfwatJ1IVwjQ7ukaSlSnqY5e9+Q6YHtu87LBJNj+SQ==",
+        "requested": "[4.1.2, )",
+        "resolved": "4.1.2",
+        "contentHash": "vGRpeXIxK7uRRHzVIrp2dYDri4wwlerUutG8TG7jHMolb3hX6Zu6VVDZpmwB8AlTIZ9BKLIV+V4Oi4xEsamZsQ==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.1, 5.0.0)"
         }
       },
       "AWSSDK.SimpleSystemsManagement": {
         "type": "Direct",
-        "requested": "[4.0.105.1, )",
-        "resolved": "4.0.105.1",
-        "contentHash": "2LBKzeNhXa7eW+UTW/O768rSfapSOwgzuSl6BipWTXJlTttQENAXDi/wK3PZbQf1O82Q6wAlkaIJ1gaDejlJzg==",
+        "requested": "[4.1.2, )",
+        "resolved": "4.1.2",
+        "contentHash": "za0Kh8UuHiY/8UY6vvToetrq2GpaM6zNVp6wrTsH6HGlrFxwz1OFX7/7weDn+FAczV4dbd2dw0pcDUUu1hIMXA==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.103, 5.0.0)"
+          "AWSSDK.Core": "[4.1.1.2, 5.0.0)"
         }
       },
       "Microsoft.AspNetCore.Authentication.OpenIdConnect": {
         "type": "Direct",
-        "requested": "[10.0.15, )",
-        "resolved": "10.0.15",
-        "contentHash": "e+YnssZ13Vs9wMi4Jvw+nA46oh+0I3bZKASmASHX4x2IQh4Ns9ilcNw30YC1lnyMLF6mIF4Fe7U0Mn0WJbr3Hg==",
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "fXRbqkMfaylLtMpEh4ZQQDE9IZtHcf9hXRbScll7MRECpfE1l85kcd/YrVV/WcHJyDqCw/MiU7Mzh7uKrcSX4w==",
         "dependencies": {
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.19.2"
         }
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "4.0.103",
-        "contentHash": "DCOotOZU/uuGTJHyhdzDaISArck4hYC6Y9OzZM8/PI+G4AhtNaD1hszFG1Giwdpod0Sn7gxxlx6xUfcPKNeQ8Q=="
+        "resolved": "4.1.1.2",
+        "contentHash": "RETCWprYHiCwwL6mgLnhCF/w7gwpHaGVIKU+Th+xDs0yzs2b7rgz09nicLT5+k0qm7OJxze6fqiU4ZdmC3tu5A==",
+        "dependencies": {
+          "AWSSDK.Extensions.Numerics": "[4.1.0, 5.0.0)",
+          "System.IO.Hashing": "11.0.0"
+        }
       },
       "AWSSDK.Extensions.CborProtocol": {
         "type": "Transitive",
-        "resolved": "4.0.100.26",
-        "contentHash": "gaz3C30wHSI982HqX8oNQbO7Ptsg4A3bPLDMGPHzmI9rL2519X3riML+AGDzoIQzlz1ZCHwwleHQaOtAkG1LUA==",
+        "resolved": "4.1.0.2",
+        "contentHash": "gyRY7PIeChytcB090K1t6gIQUfrvnH2as4x2K0Ki99j8b5QqRrg9M06JHa9R+tP9jyyJzAEcLEKLAttNP7qlgg==",
         "dependencies": {
-          "AWSSDK.Core": "4.0.103"
+          "AWSSDK.Core": "4.1.1.1"
         }
+      },
+      "AWSSDK.Extensions.Numerics": {
+        "type": "Transitive",
+        "resolved": "4.1.0",
+        "contentHash": "hhoiXT1aUyVgIiQbQoqG3L1EEneqXDh2GKyH5izUlO6Rzi9GAAi8S6mlLiVwow23+EGg77zHjdmUi+ia3RSUTg=="
       },
       "Microsoft.Bcl.Cryptography": {
         "type": "Transitive",
@@ -148,9 +157,14 @@
           "Microsoft.IdentityModel.JsonWebTokens": "8.19.2",
           "Microsoft.IdentityModel.Tokens": "8.19.2"
         }
+      },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "11.0.0",
+        "contentHash": "U+Bv2qCYt6eONi+arSP0QIp4uTO6os6uceBsqiAwruZ+Wo2HrRhO/0tj38M9URJtS+4DhAtT3ka2TGNFYsnhyQ=="
       }
     },
-    "net10.0/linux-arm64": {},
-    "net10.0/linux-x64": {}
+    "net11.0/linux-arm64": {},
+    "net11.0/linux-x64": {}
   }
 }

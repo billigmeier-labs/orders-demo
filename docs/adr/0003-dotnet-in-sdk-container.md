@@ -5,7 +5,7 @@
 
 ## Decision
 
-.NET builds on atlas run in the `mcr.microsoft.com/dotnet/sdk:10.0` container.
+.NET builds on atlas run in the `mcr.microsoft.com/dotnet/sdk:11.0` container (10.0 until 2026-11-27).
 
 ## Why
 

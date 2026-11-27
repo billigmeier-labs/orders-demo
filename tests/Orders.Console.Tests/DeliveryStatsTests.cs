@@ -241,7 +241,7 @@ public sealed class DeliveryStatsTests
     public void Human_review_time_ignores_bots_and_the_author_and_starts_at_the_latest_request()
     {
         var created = new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.Zero);
-        var timeline = System.Text.Json.JsonDocument.Parse("""
+        var timeline = System.Text.Json.JsonElement.Parse("""
             [
               { "event": "review_requested", "created_at": "2026-11-08T10:01:00Z", "requested_reviewer": { "login": "jbilligmeier", "type": "User" } },
               { "event": "ready_for_review", "created_at": "2026-11-08T10:20:00Z" },
@@ -249,7 +249,7 @@ public sealed class DeliveryStatsTests
               { "event": "reviewed", "state": "approved", "submitted_at": "2026-11-08T10:22:00Z", "user": { "login": "dependabot[bot]", "type": "Bot" } },
               { "event": "reviewed", "state": "changes_requested", "submitted_at": "2026-11-08T10:26:00Z", "user": { "login": "jbilligmeier", "type": "User" } }
             ]
-            """).RootElement.EnumerateArray().ToList();
+            """).EnumerateArray().ToList();
 
         var facts = Timeline.Facts(timeline, created, created.AddHours(1), "author");
 

@@ -3,7 +3,7 @@
 # Build from the repo root:  docker build -f src/Orders.Api/Dockerfile .
 # The SDK stage runs on the build machine and cross-compiles for TARGETARCH (amd64 or arm64).
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 ARG TARGETARCH
 WORKDIR /src
 ENV DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
@@ -20,7 +20,7 @@ RUN dotnet publish src/Orders.Api -c Release -a "$TARGETARCH" --no-restore --no-
         --target-runtime "linux-$(echo "$TARGETARCH" | sed 's/amd64/x64/')" --self-contained \
         --output /app/efbundle
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 COPY --from=build /app ./
 USER $APP_UID

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net10.0": {
+    "net11.0": {
       "NBomber": {
         "type": "Direct",
         "requested": "[6.7.1, )",
@@ -98,10 +98,7 @@
       "HdrHistogram": {
         "type": "Transitive",
         "resolved": "2.5.0",
-        "contentHash": "RE1wG9tbQJDnfgKnBYiR8DNIPC3a9oZeUqDOQmpxcH/xBOqU7T6R20YVndKtk6STglQyGaZCRnWue8WcAo87OA==",
-        "dependencies": {
-          "NETStandard.Library": "1.6.1"
-        }
+        "contentHash": "RE1wG9tbQJDnfgKnBYiR8DNIPC3a9oZeUqDOQmpxcH/xBOqU7T6R20YVndKtk6STglQyGaZCRnWue8WcAo87OA=="
       },
       "IcedTasks": {
         "type": "Transitive",
@@ -137,27 +134,12 @@
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
         "resolved": "9.0.7",
-        "contentHash": "oxGR51+w5cXm5B9gU6XwpAB2sTiyPSmZm7hjvv0rzRnmL5o/KZzE103AuQj7sK26OBupjVzU/bZxDWvvU4nhEg==",
-        "dependencies": {
-          "Microsoft.Extensions.Configuration.Abstractions": "9.0.7",
-          "Microsoft.Extensions.Primitives": "9.0.7"
-        }
-      },
-      "Microsoft.Extensions.Configuration.Abstractions": {
-        "type": "Transitive",
-        "resolved": "9.0.7",
-        "contentHash": "lut/kiVvNsQ120VERMUYSFhpXPpKjjql+giy03LesASPBBcC0o6+aoFdzJH9GaYpFTQ3fGVhVjKjvJDoAW5/IQ==",
-        "dependencies": {
-          "Microsoft.Extensions.Primitives": "9.0.7"
-        }
+        "contentHash": "oxGR51+w5cXm5B9gU6XwpAB2sTiyPSmZm7hjvv0rzRnmL5o/KZzE103AuQj7sK26OBupjVzU/bZxDWvvU4nhEg=="
       },
       "Microsoft.Extensions.Configuration.Binder": {
         "type": "Transitive",
         "resolved": "9.0.7",
-        "contentHash": "ExY+zXHhU4o9KC2alp3ZdLWyVWVRSn5INqax5ABk+HEOHlAHzomhJ7ek9HHliyOMiVGoYWYaMFOGr9q59mSAGA==",
-        "dependencies": {
-          "Microsoft.Extensions.Configuration.Abstractions": "9.0.7"
-        }
+        "contentHash": "ExY+zXHhU4o9KC2alp3ZdLWyVWVRSn5INqax5ABk+HEOHlAHzomhJ7ek9HHliyOMiVGoYWYaMFOGr9q59mSAGA=="
       },
       "Microsoft.Extensions.Configuration.FileExtensions": {
         "type": "Transitive",
@@ -165,10 +147,7 @@
         "contentHash": "3LVg32iMfR9ENeegXAo73L+877iOcQauLJsXlKZNVSsLA/HbPgClZdeMGdjLSkaidYw3l02XbXTlOdGYNgu91Q==",
         "dependencies": {
           "Microsoft.Extensions.Configuration": "9.0.7",
-          "Microsoft.Extensions.Configuration.Abstractions": "9.0.7",
-          "Microsoft.Extensions.FileProviders.Abstractions": "9.0.7",
-          "Microsoft.Extensions.FileProviders.Physical": "9.0.7",
-          "Microsoft.Extensions.Primitives": "9.0.7"
+          "Microsoft.Extensions.FileProviders.Physical": "9.0.7"
         }
       },
       "Microsoft.Extensions.Configuration.Json": {
@@ -177,9 +156,7 @@
         "contentHash": "3HQV326liEInT9UKEc+k73f1ECwNhvDS/DJAe5WvtMKDJTJqTH2ujrUC2ZlK/j6pXyPbV9f0Ku8JB20JveGImg==",
         "dependencies": {
           "Microsoft.Extensions.Configuration": "9.0.7",
-          "Microsoft.Extensions.Configuration.Abstractions": "9.0.7",
-          "Microsoft.Extensions.Configuration.FileExtensions": "9.0.7",
-          "Microsoft.Extensions.FileProviders.Abstractions": "9.0.7"
+          "Microsoft.Extensions.Configuration.FileExtensions": "9.0.7"
         }
       },
       "Microsoft.Extensions.DependencyModel": {
@@ -187,22 +164,12 @@
         "resolved": "9.0.0",
         "contentHash": "saxr2XzwgDU77LaQfYFXmddEDRUKHF4DaGMZkNB3qjdVSZlax3//dGJagJkKrGMIPNZs2jVFXITyCCR6UHJNdA=="
       },
-      "Microsoft.Extensions.FileProviders.Abstractions": {
-        "type": "Transitive",
-        "resolved": "9.0.7",
-        "contentHash": "y9djCca1cz/oz/J8jTxtoecNiNvaiGBJeWd7XOPxonH+FnfHqcfslJMcSr5JMinmWFyS7eh3C9L6m6oURZ5lSA==",
-        "dependencies": {
-          "Microsoft.Extensions.Primitives": "9.0.7"
-        }
-      },
       "Microsoft.Extensions.FileProviders.Physical": {
         "type": "Transitive",
         "resolved": "9.0.7",
         "contentHash": "JYEPYrb+YBpFTCdmSBrk8cg3wAi1V4so7ccq04qbhg3FQHQqgJk28L3heEOKMXcZobOBUjTnGCFJD49Ez9kG5w==",
         "dependencies": {
-          "Microsoft.Extensions.FileProviders.Abstractions": "9.0.7",
-          "Microsoft.Extensions.FileSystemGlobbing": "9.0.7",
-          "Microsoft.Extensions.Primitives": "9.0.7"
+          "Microsoft.Extensions.FileSystemGlobbing": "9.0.7"
         }
       },
       "Microsoft.Extensions.FileSystemGlobbing": {
@@ -210,20 +177,10 @@
         "resolved": "9.0.7",
         "contentHash": "5VKpTH2ME0SSs0lrtkpKgjCeHzXR5ka/H+qThPwuWi78wHubApZ/atD7w69FDt0OOM7UMV6LIbkqEQgoby4IXA=="
       },
-      "Microsoft.Extensions.Primitives": {
-        "type": "Transitive",
-        "resolved": "9.0.7",
-        "contentHash": "ti/zD9BuuO50IqlvhWQs9GHxkCmoph5BHjGiWKdg2t6Or8XoyAfRJiKag+uvd/fpASnNklfsB01WpZ4fhAe0VQ=="
-      },
       "Microsoft.NET.StringTools": {
         "type": "Transitive",
         "resolved": "17.6.3",
         "contentHash": "N0ZIanl1QCgvUumEL1laasU0a7sOE5ZwLZVTn0pAePnfhq8P7SvTjF8Axq+CnavuQkmdQpGNXQ1efZtu5kDFbA=="
-      },
-      "Microsoft.NETCore.Platforms": {
-        "type": "Transitive",
-        "resolved": "1.1.0",
-        "contentHash": "kz0PEW2lhqygehI/d6XsPCQzD7ff7gUJaVGPVETX611eadGsA3A877GdSlU0LRVMCTH/+P3o2iDTak+S08V2+A=="
       },
       "NATS.Client": {
         "type": "Transitive",
@@ -245,21 +202,10 @@
           "Serilog": "4.3.1"
         }
       },
-      "NETStandard.Library": {
-        "type": "Transitive",
-        "resolved": "1.6.1",
-        "contentHash": "WcSp3+vP+yHNgS8EV5J7pZ9IRpeDuARBPN28by8zqff1wJQXm26PVU8L3/fYLBJVU7BtDyqNVWq2KlCVvSSR4A==",
-        "dependencies": {
-          "Microsoft.NETCore.Platforms": "1.1.0"
-        }
-      },
       "OneOf": {
         "type": "Transitive",
         "resolved": "3.0.163",
-        "contentHash": "qCOglhmLghfPOoPlOR+WhF7HwEAenN+s87aBl/iGfmjqjkdtBvXg/mAGY44t8GbS0zsuJchxW3QYqYJQ3HyjLw==",
-        "dependencies": {
-          "NETStandard.Library": "1.6.1"
-        }
+        "contentHash": "qCOglhmLghfPOoPlOR+WhF7HwEAenN+s87aBl/iGfmjqjkdtBvXg/mAGY44t8GbS0zsuJchxW3QYqYJQ3HyjLw=="
       },
       "Serilog": {
         "type": "Transitive",
@@ -342,7 +288,7 @@
         }
       }
     },
-    "net10.0/linux-arm64": {},
-    "net10.0/linux-x64": {}
+    "net11.0/linux-arm64": {},
+    "net11.0/linux-x64": {}
   }
 }
